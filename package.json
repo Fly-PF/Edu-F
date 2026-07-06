@@ -1,0 +1,29 @@
+{
+  "name": "edu-f",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test:unit": "vitest"
+  },
+  "dependencies": {
+    "pinia": "^3.0.4",
+    "vue": "^3.5.38",
+    "vue-router": "^5.1.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.7",
+    "@vitejs/plugin-vue-jsx": "^5.1.5",
+    "@vue/test-utils": "^2.4.11",
+    "jsdom": "^29.1.1",
+    "vite": "^8.0.16",
+    "vite-plugin-vue-devtools": "^8.1.2",
+    "vitest": "^4.1.9"
+  },
+  "engines": {
+    "node": "^22.18.0 || >=24.12.0"
+  }
+}
