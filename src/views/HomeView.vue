@@ -1,9 +1,18 @@
 <script setup>
-import TheWelcome from '../components/TheWelcome.vue'
+import request from "@/utils/request";
+
+request
+  .post("/api/test1")
+  .then((response) => {
+    console.log("Response:", response);
+  })
+  .catch((error) => {
+    console.error("Error:", error);
+  });
 </script>
 
 <template>
   <main>
-    <TheWelcome />
+
   </main>
 </template>
