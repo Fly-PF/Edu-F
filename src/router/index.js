@@ -91,6 +91,16 @@ const pageRoutes = [
       navGroup: 'student',
     },
   },
+  {
+    path: '/admin/home',
+    name: 'admin-home',
+    component: () => import('../views/PagePlaceholder.vue'),
+    meta: {
+      title: '管理首页',
+      navLabel: '管理首页',
+      navGroup: 'admin',
+    },
+  },
 ]
 
 const router = createRouter({

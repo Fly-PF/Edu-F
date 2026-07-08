@@ -10,20 +10,32 @@ const currentRole = ref('teacher')
 const roleOptions = [
   { label: '老师', value: 'teacher' },
   { label: '学生', value: 'student' },
+  { label: '管理员', value: 'admin' },
 ]
 
-const navRoutes = computed(() =>
-  pageRoutes.filter((route) => route.meta.navGroup === 'home' || route.meta.navGroup === currentRole.value),
-)
+const navRoutes = computed(() => {
+  if (currentRole.value === 'admin') {
+    return pageRoutes.filter((route) => route.meta.navGroup === 'admin')
+  }
+
+  return pageRoutes.filter(
+    (route) => route.meta.navGroup === 'home' || route.meta.navGroup === currentRole.value,
+  )
+})
 
 watchEffect(() => {
-  if (route.meta.navGroup === 'teacher' || route.meta.navGroup === 'student') {
+  if (route.meta.navGroup === 'teacher' || route.meta.navGroup === 'student' || route.meta.navGroup === 'admin') {
     currentRole.value = route.meta.navGroup
   }
 })
 
 function selectRole(role) {
   currentRole.value = role
+
+  if (role === 'admin' && route.meta.navGroup !== 'admin') {
+    router.push('/admin/home')
+    return
+  }
 
   if (route.meta.navGroup !== 'home' && route.meta.navGroup !== role) {
     router.push('/')
@@ -141,6 +153,7 @@ function selectRole(role) {
 .role-button {
   min-width: 48px;
   height: 30px;
+  padding: 0 10px;
   border: 0;
   border-radius: 6px;
   background: transparent;
