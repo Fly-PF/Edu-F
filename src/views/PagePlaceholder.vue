@@ -1,12 +1,18 @@
 <script setup>
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
+
+const route = useRoute()
+
+const pageTitle = computed(() => route.meta.title || '页面占位')
 </script>
 
 <template>
   <main class="page-view">
     <section class="page-panel">
-      <p class="eyebrow">首页</p>
-      <h1>Edu-F 导航框架</h1>
-      <p class="description">请选择顶部身份，并通过导航进入对应页面。</p>
+      <p class="eyebrow">导航页面</p>
+      <h1>{{ pageTitle }}</h1>
+      <p class="description">当前仅搭建导航栏框架，页面内容后续按业务模块补充。</p>
     </section>
   </main>
 </template>
