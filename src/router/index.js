@@ -24,7 +24,7 @@ const pageRoutes = [
   {
     path: '/teacher/class-detail',
     name: 'teacher-class-detail',
-    component: () => import('../views/PagePlaceholder.vue'),
+    component: () => import('../views/TeacherClassDetailView.vue'),
     meta: {
       title: '老师班级详情页',
       navLabel: '老师班级详情页',
