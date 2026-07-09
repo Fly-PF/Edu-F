@@ -1,4 +1,4 @@
-<script setup>
+npm run dev<script setup>
 import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -533,17 +533,19 @@ watch(
       </section>
 
       <section class="section-panel invite-panel">
-        <div class="section-title">
+        <div class="invite-info">
           <div>
-            <h2>邀请码</h2>
+            <div class="invite-heading">
+              <h2>邀请码</h2>
+              <div class="invite-code">{{ visibleClassCode }}</div>
+            </div>
             <p>当前加入方式：{{ joinTypeMap[visibleJoinType] || '-' }}</p>
           </div>
-          <div class="section-actions">
-            <el-button @click="openInviteDialog">修改</el-button>
-            <el-button type="primary" @click="refreshInviteCode">刷新</el-button>
-          </div>
         </div>
-        <div class="invite-code">{{ visibleClassCode }}</div>
+        <div class="section-actions">
+          <el-button @click="openInviteDialog">修改</el-button>
+          <el-button type="primary" @click="refreshInviteCode">刷新</el-button>
+        </div>
       </section>
 
       <section class="section-panel">
@@ -986,23 +988,31 @@ h2 {
 }
 
 .invite-panel {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 20px;
 }
 
-.invite-panel .section-title {
-  margin-bottom: 0;
+.invite-info {
+  min-width: 0;
+}
+
+.invite-heading {
+  display: flex;
+  align-items: center;
+  gap: 36px;
+  margin-bottom: 6px;
 }
 
 .invite-code {
-  min-width: 220px;
-  padding: 16px 20px;
+  min-width: 160px;
+  padding: 10px 16px;
   border: 1px dashed #93c5fd;
   border-radius: 8px;
   background: #eff6ff;
   color: #1d4ed8;
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-align: center;
@@ -1072,8 +1082,7 @@ h2 {
 }
 
 @media (max-width: 1080px) {
-  .summary-panel,
-  .invite-panel {
+  .summary-panel {
     grid-template-columns: 1fr;
   }
 
@@ -1101,7 +1110,9 @@ h2 {
   .page-header,
   .class-loader,
   .filter-actions,
-  .section-actions {
+  .section-actions,
+  .invite-panel,
+  .invite-heading {
     align-items: stretch;
     flex-direction: column;
   }
