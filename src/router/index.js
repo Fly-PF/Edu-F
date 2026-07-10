@@ -77,7 +77,7 @@ const teacherRoutes = [
   {
     path: 'teacher/class-detail',
     name: 'teacher-class-detail',
-    component: () => import('../views/TeacherClassDetailView.vue'),
+    component: () => import('@/views/teacher/TeacherClassDetailView.vue'),
     meta: {
       title: '老师班级详情页',
       allowedRoles: ['TEACHER'],
