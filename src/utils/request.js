@@ -1,45 +1,73 @@
 import axios from 'axios'
+import { useUserStore } from '@/stores/user'
 
-// 创建 axios 实例，将来对创建出来的实例，进行自定义配置
-// 好处：不会污染原始的 axios 实例
-// 根据当前协议设置 baseURL
-const baseURL = `http://localhost:8080`  // 这里可以根据实际情况修改为你的后端接口地址
-// 创建 Axios 实例
+const baseURL = 'http://localhost:8080'
+const authExpiredCodes = [401, 403]
+
 const instance = axios.create({
-  baseURL: baseURL,
-  timeout: 5000
+  baseURL,
+  timeout: 5000,
 })
 
-// 自定义配置 - 请求/响应 拦截器
-// 添加请求拦截器
+function isLoginRequest(config) {
+  return config?.url?.includes('/user/login/')
+}
+
+function redirectToLogin() {
+  import('@/router').then(({ default: router }) => {
+    if (router.currentRoute.value.path !== '/login') {
+      router.replace('/login')
+    }
+  })
+}
+
+function handleAuthExpired(message = '登录状态已失效，请重新登录') {
+  const userStore = useUserStore()
+  userStore.clearUser()
+  redirectToLogin()
+  return Promise.reject(new Error(message))
+}
+
 instance.interceptors.request.use(
   function (config) {
-    // 在发送请求之前做些什么
-    config.headers['Content-Type'] = 'application/json' // 设置请求头
-    config.headers['Authorization'] = 'Bearer eyJhbGciOiJIUzI1NiJ9.eyJ1c2VySWQiOjEsImVtYWlsIjoic3VwZXJhZG1pbkBlZHUtcGxhdGZvcm0uY29tIiwidXNlcm5hbWUiOiJhZG1pbl9zdXBlciIsImlhdCI6MTc4MzM5NTkxMSwiZXhwIjoxNzgzNDAzMTExfQ.4JOKDzhglmRPweBpIXKs9PcKmtehsI1A88-6-QmXhdQ'
+    const userStore = useUserStore()
+
+    if (!isLoginRequest(config) && !userStore.isLoggedIn) {
+      return handleAuthExpired('请先登录')
+    }
+
+    config.headers['Content-Type'] = 'application/json'
+
+    if (!isLoginRequest(config) && userStore.token) {
+      config.headers['Authorization'] = `${userStore.token}`
+    } else {
+      delete config.headers['Authorization']
+    }
+
     return config
   },
   function (error) {
-    // 对请求错误做些什么
     return Promise.reject(error)
-  }
+  },
 )
 
-// 添加响应拦截器
 instance.interceptors.response.use(
   function (response) {
-    // 2xx 范围内的状态码都会触发该函数。
-    // 对响应数据做点什么 (默认axios会多包装一层data，需要响应拦截器中处理一下)
     const res = response.data
+
+    if (authExpiredCodes.includes(Number(res?.code))) {
+      return handleAuthExpired(res?.message)
+    }
 
     return res
   },
   function (error) {
-    // 超出 2xx 范围的状态码都会触发该函数。
-    // 对响应错误做点什么
+    if (authExpiredCodes.includes(Number(error?.response?.status))) {
+      return handleAuthExpired(error?.response?.data?.message)
+    }
+
     return Promise.reject(error)
-  }
+  },
 )
 
-// 导出配置好的实例
 export default instance
