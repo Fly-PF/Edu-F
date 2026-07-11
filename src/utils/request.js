@@ -36,7 +36,11 @@ instance.interceptors.request.use(
       return handleAuthExpired('请先登录')
     }
 
-    config.headers['Content-Type'] = 'application/json'
+    if (config.data instanceof FormData) {
+      delete config.headers['Content-Type']
+    } else if (!config.headers['Content-Type']) {
+      config.headers['Content-Type'] = 'application/json'
+    }
 
     if (!isLoginRequest(config) && userStore.token) {
       config.headers['Authorization'] = `${userStore.token}`

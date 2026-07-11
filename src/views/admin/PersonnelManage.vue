@@ -2,12 +2,14 @@
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { UploadFilled } from '@element-plus/icons-vue'
 import {
   createPersonnel,
   deletePersonnel,
   fetchPersonnelDetail,
   fetchPersonnelList,
   updatePersonnel,
+  uploadPersonnelAvatar,
   updatePersonnelStatus,
 } from '@/api/personnel'
 
@@ -31,11 +33,18 @@ const formRef = ref(null)
 const dialogVisible = ref(false)
 const dialogMode = ref('create')
 const submitLoading = ref(false)
+const avatarUploadLoading = ref(false)
+const avatarPreviewFailed = ref(false)
 const formError = ref('')
 const currentId = ref(null)
 
+const apiBaseURL = 'http://localhost:8080'
+const defaultAvatar =
+  'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160"%3E%3Crect width="160" height="160" rx="80" fill="%23eef2f7"/%3E%3Ccircle cx="80" cy="62" r="30" fill="%239aa6b2"/%3E%3Cpath d="M31 138c8-28 26-43 49-43s41 15 49 43" fill="%239aa6b2"/%3E%3C/svg%3E'
+
 const detailVisible = ref(false)
 const detailLoading = ref(false)
+const detailAvatarPreviewFailed = ref(false)
 const detailData = ref(null)
 
 const form = reactive(getDefaultForm())
@@ -48,6 +57,9 @@ const statusOptions = [
 
 const isEditMode = computed(() => dialogMode.value === 'edit')
 const dialogTitle = computed(() => (isEditMode.value ? `编辑${pageTitle.value}` : `新增${pageTitle.value}`))
+const avatarPreviewUrl = computed(() => getAvatarPreviewUrl(form.avatar))
+const detailAvatarPreviewUrl = computed(() => getAvatarImageUrl(detailData.value?.avatar, detailAvatarPreviewFailed.value))
+const canUploadAvatar = computed(() => isEditMode.value && currentId.value)
 
 const rules = computed(() => ({
   username: [
@@ -110,6 +122,7 @@ function resetForm() {
   Object.assign(form, getDefaultForm())
   currentId.value = null
   formError.value = ''
+  avatarPreviewFailed.value = false
   nextTick(() => formRef.value?.clearValidate())
 }
 
@@ -171,6 +184,80 @@ function assertResponse(res, fallbackMessage = '操作失败') {
 
 function getErrorMessage(error, fallbackMessage = '操作失败') {
   return error?.response?.data?.message || error?.message || fallbackMessage
+}
+
+function getAvatarImageUrl(avatar, hasFailed = false) {
+  const value = avatar?.trim()
+
+  if (hasFailed || !value) {
+    return defaultAvatar
+  }
+
+  if (/^(https?:)?\/\//i.test(value) || value.startsWith('data:')) {
+    return value
+  }
+
+  if (value.startsWith('/')) {
+    return `${apiBaseURL}${value}`
+  }
+
+  return `${apiBaseURL}/api/user/avatar/image?objectName=${encodeURIComponent(value)}`
+}
+
+function getAvatarPreviewUrl(avatar) {
+  return getAvatarImageUrl(avatar, avatarPreviewFailed.value)
+}
+
+function beforeAvatarUpload(file) {
+  const allowTypes = ['image/jpeg', 'image/png', 'image/webp']
+  const allowExt = /\.(jpe?g|png|webp)$/i.test(file.name)
+
+  if (!allowTypes.includes(file.type) && !allowExt) {
+    ElMessage.error('头像仅支持jpg、jpeg、png、webp格式')
+    return false
+  }
+
+  if (file.size > 5 * 1024 * 1024) {
+    ElMessage.error('头像文件不能超过5MB')
+    return false
+  }
+
+  return true
+}
+
+function getUploadedAvatarValue(data = {}) {
+  return data.avatar || data.objectName || data.object_name || data.path || data.url || ''
+}
+
+async function handleAvatarUpload({ file }) {
+  if (!canUploadAvatar.value) {
+    ElMessage.warning('请先创建用户后再编辑头像')
+    return
+  }
+
+  avatarUploadLoading.value = true
+
+  try {
+    const data = assertResponse(
+      await uploadPersonnelAvatar(currentId.value, file),
+      '头像上传失败',
+    )
+    const avatar = getUploadedAvatarValue(data)
+
+    if (!avatar) {
+      throw new Error('头像上传成功但未返回头像地址')
+    }
+
+    form.avatar = avatar
+    avatarPreviewFailed.value = false
+    formRef.value?.clearValidate('avatar')
+    ElMessage.success('头像上传成功')
+    await loadList()
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, '头像上传失败'))
+  } finally {
+    avatarUploadLoading.value = false
+  }
 }
 
 function buildListParams() {
@@ -251,12 +338,14 @@ function openCreateDialog() {
 async function openDetailDialog(row) {
   detailVisible.value = true
   detailLoading.value = true
+  detailAvatarPreviewFailed.value = false
   detailData.value = null
   try {
     detailData.value = assertResponse(
       await fetchPersonnelDetail(resource.value, row.id),
       '查询人员详情失败',
     )
+    detailAvatarPreviewFailed.value = false
   } catch (error) {
     ElMessage.error(getErrorMessage(error, '查询人员详情失败'))
     detailVisible.value = false
@@ -288,6 +377,7 @@ async function openEditDialog(row) {
       status: data.status ?? 1,
       extJsonText: JSON.stringify(data.extJson || {}, null, 2),
     })
+    avatarPreviewFailed.value = false
   } catch (error) {
     ElMessage.error(getErrorMessage(error, '查询人员详情失败'))
     dialogVisible.value = false
@@ -568,8 +658,39 @@ async function handleDelete(row) {
             </el-form-item>
           </el-col>
           <el-col :span="24">
-            <el-form-item label="头像地址" prop="avatar">
-              <el-input v-model="form.avatar" placeholder="请输入头像URL或相对资源路径" />
+            <el-form-item label="头像" prop="avatar">
+              <div class="avatar-upload-field">
+                <el-image
+                  class="avatar-preview"
+                  fit="cover"
+                  :src="avatarPreviewUrl"
+                  :preview-src-list="[avatarPreviewUrl]"
+                  preview-teleported
+                  hide-on-click-modal
+                  @error="avatarPreviewFailed = true"
+                />
+                <div class="avatar-upload-main">
+                  <div class="avatar-upload-actions">
+                    <el-upload
+                      :show-file-list="false"
+                      :before-upload="beforeAvatarUpload"
+                      :http-request="handleAvatarUpload"
+                      accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                      :disabled="!canUploadAvatar"
+                    >
+                      <el-button
+                        type="primary"
+                        :icon="UploadFilled"
+                        :loading="avatarUploadLoading"
+                        :disabled="!canUploadAvatar"
+                      >
+                        上传头像
+                      </el-button>
+                    </el-upload>
+                  </div>
+                  <div class="avatar-path-text">{{ form.avatar || '未设置头像' }}</div>
+                </div>
+              </div>
             </el-form-item>
           </el-col>
           <el-col :span="24">
@@ -598,7 +719,17 @@ async function handleDelete(row) {
           <el-descriptions-item label="账号状态">{{ formatStatus(detailData) }}</el-descriptions-item>
           <el-descriptions-item label="学段">{{ detailData.grade || '-' }}</el-descriptions-item>
           <el-descriptions-item label="学校">{{ detailData.school || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="头像地址" :span="2">{{ detailData.avatar || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="头像" :span="2">
+            <el-image
+              class="detail-avatar-image"
+              fit="cover"
+              :src="detailAvatarPreviewUrl"
+              :preview-src-list="[detailAvatarPreviewUrl]"
+              preview-teleported
+              hide-on-click-modal
+              @error="detailAvatarPreviewFailed = true"
+            />
+          </el-descriptions-item>
           <el-descriptions-item label="最后登录时间">{{ detailData.lastLoginTime || '-' }}</el-descriptions-item>
           <el-descriptions-item label="最后登录IP">{{ detailData.lastLoginIp || '-' }}</el-descriptions-item>
           <el-descriptions-item label="创建时间">{{ detailData.createTime || '-' }}</el-descriptions-item>
@@ -688,8 +819,53 @@ async function handleDelete(row) {
   width: 100%;
 }
 
+.avatar-upload-field {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+}
+
+.avatar-preview {
+  width: 72px;
+  height: 72px;
+  overflow: hidden;
+  flex: 0 0 auto;
+  border: 1px solid #dcdfe6;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.avatar-upload-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.avatar-upload-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.avatar-path-text {
+  margin-top: 8px;
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
 .detail-content {
   min-height: 180px;
+}
+
+.detail-avatar-image {
+  width: 72px;
+  height: 72px;
+  overflow: hidden;
+  border: 1px solid #dcdfe6;
+  border-radius: 8px;
+  background: #f8fafc;
 }
 
 .ext-json {

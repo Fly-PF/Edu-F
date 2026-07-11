@@ -172,6 +172,11 @@ const router = createRouter({
           component: () => import('@/views/common/PublicHomeView.vue'),
         },
         {
+          path: 'profile',
+          name: 'main-profile',
+          component: () => import('@/views/common/ProfileView.vue'),
+        },
+        {
           path: 'student',
           name: 'main-student',
           redirect: getStudentEntryPath,

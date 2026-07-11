@@ -1,11 +1,24 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { fetchUserProfile } from '@/api/user'
 import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
+
+const headerAvatarLoadFailed = ref(false)
+const defaultAvatar =
+  'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160"%3E%3Crect width="160" height="160" rx="80" fill="%23eef2f7"/%3E%3Ccircle cx="80" cy="62" r="30" fill="%239aa6b2"/%3E%3Cpath d="M31 138c8-28 26-43 49-43s41 15 49 43" fill="%239aa6b2"/%3E%3C/svg%3E'
+
+const userTypeMap = {
+  1: '学生',
+  2: '教师',
+  3: '教研人员',
+  4: '平台管理员',
+  5: '超级管理员',
+}
 
 const studentNavItems = [
   { label: '学生班级列表/加入班级页', path: '/main/student/classes', roles: ['STUDENT'] },
@@ -53,6 +66,18 @@ const activePath = computed(() => {
   return route.path
 })
 
+const headerAvatar = computed(() => {
+  if (headerAvatarLoadFailed.value || !userStore.avatar) {
+    return defaultAvatar
+  }
+
+  return userStore.avatar
+})
+
+const headerUserType = computed(() => {
+  return userTypeMap[userStore.userType] || userStore.roleName || userStore.roleCode
+})
+
 function getAdminEntryPath() {
   return userStore.roleCode === 'SUPERADMIN'
     ? '/main/admin/personnel/managers'
@@ -63,10 +88,46 @@ function handleSelect(path) {
   router.push(path)
 }
 
+function handleUserCommand(command) {
+  if (command === 'profile') {
+    router.push('/main/profile')
+    return
+  }
+
+  if (command === 'logout') {
+    handleLogout()
+  }
+}
+
 function handleLogout() {
   userStore.clearUser()
   router.replace('/login')
 }
+
+async function loadCurrentUserProfile() {
+  if (!userStore.token) {
+    return
+  }
+
+  try {
+    const res = await fetchUserProfile()
+
+    if (Number(res?.code) === 200) {
+      userStore.setProfile(res.data)
+    }
+  } catch {
+    // The request interceptor handles expired auth; keep the layout quiet for other transient failures.
+  }
+}
+
+watch(
+  () => userStore.avatar,
+  () => {
+    headerAvatarLoadFailed.value = false
+  },
+)
+
+onMounted(loadCurrentUserProfile)
 </script>
 
 <template>
@@ -92,9 +153,20 @@ function handleLogout() {
       <div class="user-box">
         <div class="user-info">
           <span class="user-name">{{ userStore.realName || userStore.username }}</span>
-          <span class="user-role">{{ userStore.roleName || userStore.roleCode }}</span>
+          <span class="user-role">{{ headerUserType }}</span>
         </div>
-        <el-button size="small" @click="handleLogout">退出</el-button>
+        <el-dropdown trigger="click" @command="handleUserCommand">
+          <button class="avatar-trigger" type="button" aria-label="用户菜单">
+            <el-avatar :size="34" :src="headerAvatar" @error="headerAvatarLoadFailed = true" />
+            <span class="avatar-arrow">&gt;</span>
+          </button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="profile">个人中心</el-dropdown-item>
+              <el-dropdown-item command="logout" divided>退出</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
       </div>
     </el-header>
 
@@ -155,7 +227,7 @@ function handleLogout() {
 .user-box {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
 }
 
 .user-info {
@@ -175,6 +247,38 @@ function handleLogout() {
   margin-top: 4px;
   color: #6b7280;
   font-size: 12px;
+}
+
+.avatar-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 6px 3px 3px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
+}
+
+.avatar-trigger:hover,
+.avatar-trigger:focus-visible {
+  border-color: #dbeafe;
+  background: #eff6ff;
+  color: #2563eb;
+  outline: none;
+}
+
+.avatar-arrow {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .main-content {

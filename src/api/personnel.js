@@ -47,6 +47,17 @@ export function updatePersonnel(resource, id, data) {
   })
 }
 
+export function uploadPersonnelAvatar(userId, file) {
+  const formData = new FormData()
+  formData.append('file', file)
+
+  return request({
+    url: `/api/user/avatar/upload/${userId}`,
+    method: 'post',
+    data: formData,
+  })
+}
+
 export function updatePersonnelStatus(resource, id, status) {
   return request({
     url: `${getResourcePath(resource)}/${id}/status`,

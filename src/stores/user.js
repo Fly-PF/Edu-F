@@ -9,6 +9,8 @@ export const useUserStore = defineStore(
     const realName = ref('')
     const roleCode = ref('')
     const roleName = ref('')
+    const userType = ref('')
+    const avatar = ref('')
     const token = ref('')
 
     const isLoggedIn = computed(() => Boolean(token.value && username.value))
@@ -19,6 +21,8 @@ export const useUserStore = defineStore(
       realName: realName.value,
       roleCode: roleCode.value,
       roleName: roleName.value,
+      userType: userType.value,
+      avatar: avatar.value,
       token: token.value,
     }))
 
@@ -28,7 +32,16 @@ export const useUserStore = defineStore(
       realName.value = userInfo.realName ?? userInfo.real_name ?? ''
       roleCode.value = userInfo.roleCode ?? userInfo.role_code ?? ''
       roleName.value = userInfo.roleName ?? userInfo.role_name ?? ''
+      userType.value = userInfo.userType ?? userInfo.user_type ?? ''
+      avatar.value = userInfo.avatar ?? ''
       token.value = userInfo.token ?? ''
+    }
+
+    function setProfile(userInfo = {}) {
+      username.value = userInfo.username ?? username.value
+      realName.value = userInfo.realName ?? userInfo.real_name ?? realName.value
+      userType.value = userInfo.userType ?? userInfo.user_type ?? userType.value
+      avatar.value = userInfo.avatar ?? avatar.value
     }
 
     function clearUser() {
@@ -37,6 +50,8 @@ export const useUserStore = defineStore(
       realName.value = ''
       roleCode.value = ''
       roleName.value = ''
+      userType.value = ''
+      avatar.value = ''
       token.value = ''
     }
 
@@ -54,11 +69,14 @@ export const useUserStore = defineStore(
       realName,
       roleCode,
       roleName,
+      userType,
+      avatar,
       roleCodes,
       token,
       isLoggedIn,
       currentUser,
       setUser,
+      setProfile,
       clearUser,
       hasAnyRole,
     }
