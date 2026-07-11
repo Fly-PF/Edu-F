@@ -24,14 +24,12 @@ const studentNavItems = [
   { label: '学生班级列表/加入班级页', path: '/main/student/classes', roles: ['STUDENT'] },
   { label: '学生班级详情页', path: '/main/student/class-detail', roles: ['STUDENT'] },
   { label: '学生课程详情/课程学习页', path: '/main/student/course-study', roles: ['STUDENT'] },
-  { label: '学生平台公开课程页', path: '/main/student/platform-courses', roles: ['STUDENT'] },
 ]
 
 const teacherNavItems = [
   { label: '老师班级列表/班级管理页', path: '/main/teacher/classes', roles: ['TEACHER'] },
   { label: '老师班级详情页', path: '/main/teacher/class-detail', roles: ['TEACHER'] },
-  { label: '老师课程列表/课程管理页', path: '/main/teacher/courses', roles: ['TEACHER'] },
-  { label: '老师课程详情/章节资源管理页', path: '/main/teacher/course-resources', roles: ['TEACHER'] },
+  { label: '课程管理', path: '/main/teacher/courses', roles: ['TEACHER'] },
 ]
 
 const navItems = computed(() => {
@@ -39,6 +37,11 @@ const navItems = computed(() => {
     {
       label: '首页',
       path: '/main/home',
+      roles: [],
+    },
+    {
+      label: '课程列表',
+      path: '/main/courses',
       roles: [],
     },
   ]
@@ -61,6 +64,14 @@ const navItems = computed(() => {
 const activePath = computed(() => {
   if (route.path.startsWith('/main/admin')) {
     return getAdminEntryPath()
+  }
+
+  if (route.name === 'teacher-course-resources') {
+    return '/main/teacher/courses'
+  }
+
+  if (route.name === 'student-platform-courses' || route.name === 'course-learn') {
+    return '/main/courses'
   }
 
   return route.path

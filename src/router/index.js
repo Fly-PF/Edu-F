@@ -134,7 +134,7 @@ const studentRoutes = [
   {
     path: 'student/platform-courses',
     name: 'student-platform-courses',
-    component: () => import('@/views/student/StudentPlatformCourses.vue'),
+    redirect: '/main/courses',
     meta: {
       title: '学生平台公开课程页',
       allowedRoles: ['STUDENT'],
@@ -175,6 +175,22 @@ const router = createRouter({
           path: 'profile',
           name: 'main-profile',
           component: () => import('@/views/common/ProfileView.vue'),
+        },
+        {
+          path: 'courses',
+          name: 'course-list',
+          component: () => import('@/views/student/StudentPlatformCourses.vue'),
+          meta: {
+            title: '课程列表',
+          },
+        },
+        {
+          path: 'courses/:courseId/learn',
+          name: 'course-learn',
+          component: () => import('@/views/student/StudentCourseStudy.vue'),
+          meta: {
+            title: '课程学习',
+          },
         },
         {
           path: 'student',
