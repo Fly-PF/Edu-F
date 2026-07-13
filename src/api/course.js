@@ -76,7 +76,7 @@ export function updateCourse(courseId, data) {
   return resolve(request.put(`/api/teacher/courses/${courseId}`, data))
 }
 
-export function deleteDraftCourse(courseId) {
+export function deleteCourse(courseId) {
   return resolve(request.delete(`/api/teacher/courses/${courseId}`))
 }
 

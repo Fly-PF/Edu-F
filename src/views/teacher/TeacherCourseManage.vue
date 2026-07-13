@@ -17,7 +17,7 @@ import {
 } from '@element-plus/icons-vue'
 import {
   createCourse,
-  deleteDraftCourse,
+  deleteCourse,
   getCourseChapters,
   listTeacherCourses,
   publishCourse,
@@ -219,7 +219,7 @@ async function handleDelete(course) {
       confirmButtonText: '删除',
       cancelButtonText: '取消',
     })
-    await deleteDraftCourse(course.id)
+    await deleteCourse(course.id)
     ElMessage.success('课程草稿已删除')
     await loadCourses()
   } catch (error) {
