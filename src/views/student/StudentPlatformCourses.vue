@@ -14,7 +14,7 @@ import {
   User,
   VideoPlay,
 } from '@element-plus/icons-vue'
-import { getCourse, getCourseChapters, listPublicCourses } from '@/api/course'
+import { getStudentCourseChapters, getStudentPublicCourse, listStudentPublicCourses } from '@/api/course'
 import cover1 from '@/assets/course/img1.webp'
 import cover2 from '@/assets/course/img2.webp'
 import cover3 from '@/assets/course/img3.webp'
@@ -66,7 +66,7 @@ async function loadCourses() {
   loading.value = true
   try {
     courses.value =
-      (await listPublicCourses({
+      (await listStudentPublicCourses({
         keyword: filters.keyword.trim() || undefined,
         grade: filters.grade || undefined,
         difficulty: filters.difficulty || undefined,
@@ -91,8 +91,8 @@ async function openDetail(course) {
   detailChapters.value = []
   try {
     const [courseData, chapterData] = await Promise.all([
-      getCourse(course.id),
-      getCourseChapters(course.id),
+      getStudentPublicCourse(course.id),
+      getStudentCourseChapters(course.id),
     ])
     detailCourse.value = courseData
     detailChapters.value = chapterData || []

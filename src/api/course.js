@@ -36,6 +36,30 @@ export function saveCourseStudyRecord(courseId, data) {
   return resolve(request.post(`/api/courses/${courseId}/study-records`, data))
 }
 
+export function listStudentPublicCourses(params = {}) {
+  return resolve(request.get('/api/student/public-courses', { params }))
+}
+
+export function getStudentPublicCourse(courseId) {
+  return resolve(request.get(`/api/student/public-courses/${courseId}`))
+}
+
+export function getStudentCourse(courseId, params = {}) {
+  return resolve(request.get(`/api/student/courses/${courseId}`, { params }))
+}
+
+export function getStudentCourseChapters(courseId, params = {}) {
+  return resolve(request.get(`/api/student/courses/${courseId}/chapters`, { params }))
+}
+
+export function listStudentCourseStudyRecords(courseId, params = {}) {
+  return resolve(request.get(`/api/student/courses/${courseId}/study-records`, { params }))
+}
+
+export function saveStudentCourseStudyRecord(courseId, data) {
+  return resolve(request.post('/api/student/study-records', { ...data, courseId }))
+}
+
 export function listTeacherCourses(params = {}) {
   return resolve(request.get('/api/teacher/courses', { params }))
 }

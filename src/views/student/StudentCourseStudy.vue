@@ -15,10 +15,10 @@ import {
   VideoPlay,
 } from '@element-plus/icons-vue'
 import {
-  getCourse,
-  getCourseChapters,
-  listCourseStudyRecords,
-  saveCourseStudyRecord,
+  getStudentCourse,
+  getStudentCourseChapters,
+  listStudentCourseStudyRecords,
+  saveStudentCourseStudyRecord,
 } from '@/api/course'
 import cover1 from '@/assets/course/img1.webp'
 import cover2 from '@/assets/course/img2.webp'
@@ -143,9 +143,9 @@ async function loadAll() {
   loading.value = true
   try {
     const [courseData, chapterData, recordData] = await Promise.all([
-      getCourse(courseId.value),
-      getCourseChapters(courseId.value),
-      listCourseStudyRecords(courseId.value),
+      getStudentCourse(courseId.value),
+      getStudentCourseChapters(courseId.value),
+      listStudentCourseStudyRecords(courseId.value),
     ])
     course.value = courseData
     chapters.value = chapterData || []
@@ -161,7 +161,7 @@ async function loadAll() {
 }
 
 async function refreshRecords() {
-  records.value = (await listCourseStudyRecords(courseId.value)) || []
+  records.value = (await listStudentCourseStudyRecords(courseId.value)) || []
 }
 
 function buildProgressPayload(extra = {}) {
@@ -180,7 +180,7 @@ async function saveProgress(extra = {}, showMessage = true) {
   if (!selectedChapterId.value || saving.value) return
   saving.value = true
   try {
-    await saveCourseStudyRecord(courseId.value, buildProgressPayload(extra))
+    await saveStudentCourseStudyRecord(courseId.value, buildProgressPayload(extra))
     await refreshRecords()
     if (showMessage) ElMessage.success('学习进度已保存')
   } catch (error) {
