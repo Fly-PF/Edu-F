@@ -367,7 +367,6 @@ onMounted(async () => {
                       发布课程
                     </el-dropdown-item>
                     <el-dropdown-item
-                      v-if="course.status === 'draft'"
                       divided
                       command="delete"
                       :icon="Delete"

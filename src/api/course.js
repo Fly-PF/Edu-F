@@ -73,7 +73,7 @@ export function getTeacherCourse(courseId) {
 }
 
 export function updateCourse(courseId, data) {
-  return resolve(request.patch(`/api/teacher/courses/${courseId}`, data))
+  return resolve(request.put(`/api/teacher/courses/${courseId}`, data))
 }
 
 export function deleteDraftCourse(courseId) {
