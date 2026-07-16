@@ -36,7 +36,7 @@ const navItems = computed(() => {
   const items = [
     {
       label: '首页',
-      path: '/main/home',
+      path: '/home/main',
       roles: [],
     },
     {

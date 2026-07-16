@@ -1,4 +1,4 @@
-<script setup>
+﻿<script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -559,9 +559,9 @@ onMounted(loadAll)
               <el-form-item label="适配学段">
                 <el-select v-model="courseForm.grade" class="full-width">
                   <el-option label="通用" value="通用" />
-                  <el-option label="小学" value="小学" />
-                  <el-option label="初中" value="初中" />
-                  <el-option label="高中" value="高中" />
+                  <el-option label="研一" value="研一" />
+                  <el-option label="研二" value="研二" />
+                  <el-option label="研三" value="研三" />
                   <el-option label="大学" value="大学" />
                 </el-select>
               </el-form-item>

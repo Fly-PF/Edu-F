@@ -27,3 +27,11 @@ export function joinStudentClass(data) {
 export function leaveStudentClass(classId) {
   return resolve(request.delete(`/api/student/classes/${classId}/leave`))
 }
+
+export function getStudentClassDetail(classId) {
+  return resolve(request.get(`/api/student/classes/${classId}`))
+}
+
+export function getStudentClassCourses(classId, params) {
+  return resolve(request.get(`/api/student/classes/${classId}/courses`, { params }))
+}
