@@ -50,14 +50,13 @@ const coverProgress = ref(0)
 const course = ref(null)
 const chapters = ref([])
 const selectedChapterId = ref(null)
-const tagInput = ref('')
 const courseForm = reactive({
   title: '',
   description: '',
-  tags: [],
   grade: '通用',
   difficulty: 1,
   courseType: 1,
+  isPublic: 0,
 })
 
 const chapterDraft = reactive({ title: '', duration: 0 })
@@ -130,10 +129,10 @@ function syncCourseForm(courseData) {
   Object.assign(courseForm, {
     title: courseData?.title || '',
     description: courseData?.description || '',
-    tags: [...(courseData?.tags || [])],
     grade: courseData?.grade || '通用',
     difficulty: courseData?.difficulty || 1,
     courseType: courseData?.courseType || 1,
+    isPublic: Number(courseData?.isPublic ?? (courseData?.publicCourse ? 1 : 0)),
   })
 }
 
@@ -177,21 +176,6 @@ function goCreate() {
   router.push({ name: 'teacher-courses', query: { create: '1' } })
 }
 
-function addTag() {
-  const tag = tagInput.value.trim()
-  if (!tag) return
-  if (courseForm.tags.length >= 8) {
-    ElMessage.warning('最多添加 8 个标签')
-    return
-  }
-  if (!courseForm.tags.includes(tag)) courseForm.tags.push(tag)
-  tagInput.value = ''
-}
-
-function removeTag(tag) {
-  courseForm.tags = courseForm.tags.filter((item) => item !== tag)
-}
-
 async function saveCourse() {
   if (!courseForm.title.trim()) {
     ElMessage.warning('课程名称不能为空')
@@ -202,7 +186,7 @@ async function saveCourse() {
     course.value = await updateCourse(courseId.value, {
       title: courseForm.title.trim(),
       description: courseForm.description,
-      tags: courseForm.tags,
+      isPublic: courseForm.isPublic,
       grade: courseForm.grade,
       difficulty: courseForm.difficulty,
       courseType: courseForm.courseType,
@@ -582,20 +566,16 @@ onMounted(loadAll)
                   <el-option label="实验课" :value="3" />
                 </el-select>
               </el-form-item>
-            </div>
-            <el-form-item label="课程标签">
-              <div class="tag-editor">
-                <el-tag v-for="tag in courseForm.tags" :key="tag" closable @close="removeTag(tag)">
-                  {{ tag }}
-                </el-tag>
-                <el-input
-                  v-model.trim="tagInput"
-                  maxlength="20"
-                  placeholder="输入标签后按回车"
-                  @keyup.enter="addTag"
+              <el-form-item label="课程公开状态">
+                <el-switch
+                  v-model="courseForm.isPublic"
+                  :active-value="1"
+                  :inactive-value="0"
+                  active-text="公开"
+                  inactive-text="不公开"
                 />
-              </div>
-            </el-form-item>
+              </el-form-item>
+            </div>
             <el-form-item label="课程介绍">
               <el-input
                 v-model="courseForm.description"
@@ -1055,18 +1035,6 @@ onMounted(loadAll)
 
 .full-width {
   width: 100%;
-}
-
-.tag-editor {
-  display: flex;
-  width: 100%;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
-.tag-editor .el-input {
-  width: 190px;
 }
 
 .content-editor {

@@ -21,14 +21,11 @@ const userTypeMap = {
 }
 
 const studentNavItems = [
-  { label: '学生班级列表/加入班级页', path: '/main/student/classes', roles: ['STUDENT'] },
-  { label: '学生班级详情页', path: '/main/student/class-detail', roles: ['STUDENT'] },
-  { label: '学生课程详情/课程学习页', path: '/main/student/course-study', roles: ['STUDENT'] },
+  { label: '学生班级列表', path: '/main/student/classes', roles: ['STUDENT'] },
 ]
 
 const teacherNavItems = [
   { label: '老师班级列表/班级管理页', path: '/main/teacher/classes', roles: ['TEACHER'] },
-  { label: '老师班级详情页', path: '/main/teacher/class-detail', roles: ['TEACHER'] },
   { label: '课程管理', path: '/main/teacher/courses', roles: ['TEACHER'] },
 ]
 
@@ -36,7 +33,7 @@ const navItems = computed(() => {
   const items = [
     {
       label: '首页',
-      path: '/home/main',
+      path: '/main/home',
       roles: [],
     },
     {
@@ -70,8 +67,16 @@ const activePath = computed(() => {
     return '/main/teacher/courses'
   }
 
+  if (route.name === 'teacher-class-detail') {
+    return '/main/teacher/classes'
+  }
+
   if (route.name === 'student-platform-courses' || route.name === 'course-learn') {
     return '/main/courses'
+  }
+
+  if (route.name === 'student-class-detail') {
+    return '/main/student/classes'
   }
 
   return route.path

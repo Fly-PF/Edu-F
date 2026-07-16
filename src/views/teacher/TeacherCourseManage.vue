@@ -39,13 +39,12 @@ const courses = ref([])
 const createVisible = ref(false)
 const createLoading = ref(false)
 const createFormRef = ref()
-const createTagInput = ref('')
 const createForm = reactive({
   title: '',
   grade: '通用',
   difficulty: 1,
   courseType: 1,
-  tags: [],
+  isPublic: 0,
 })
 
 const previewVisible = ref(false)
@@ -125,27 +124,9 @@ function openCreateDialog() {
     grade: '通用',
     difficulty: 1,
     courseType: 1,
-    tags: [],
+    isPublic: 0,
   })
-  createTagInput.value = ''
   createVisible.value = true
-}
-
-function addCreateTag() {
-  const tag = createTagInput.value.trim()
-  if (!tag) return
-  if (createForm.tags.length >= 8) {
-    ElMessage.warning('最多添加 8 个标签')
-    return
-  }
-  if (!createForm.tags.includes(tag)) {
-    createForm.tags.push(tag)
-  }
-  createTagInput.value = ''
-}
-
-function removeCreateTag(tag) {
-  createForm.tags = createForm.tags.filter((item) => item !== tag)
 }
 
 async function submitCreate() {
@@ -156,8 +137,8 @@ async function submitCreate() {
     const course = await createCourse({
       title: createForm.title.trim(),
       description: '',
-      tags: createForm.tags,
       coverUrl: '',
+      isPublic: createForm.isPublic,
       grade: createForm.grade,
       difficulty: createForm.difficulty,
       courseType: createForm.courseType,
@@ -378,11 +359,6 @@ onMounted(async () => {
               </el-dropdown>
             </div>
 
-            <div class="tag-list">
-              <span v-for="tag in (course.tags || []).slice(0, 3)" :key="tag">{{ tag }}</span>
-              <span v-if="!course.tags?.length" class="empty-tag">暂无标签</span>
-            </div>
-
             <div class="course-card-meta">
               <span><el-icon><FolderOpened /></el-icon>{{ course.totalChapter || 0 }} 章</span>
               <span><el-icon><Collection /></el-icon>{{ course.resourceCount || 0 }} 个资源</span>
@@ -439,18 +415,14 @@ onMounted(async () => {
             <el-radio-button :value="3">实验课</el-radio-button>
           </el-radio-group>
         </el-form-item>
-        <el-form-item label="课程标签">
-          <div class="tag-editor">
-            <el-tag v-for="tag in createForm.tags" :key="tag" closable @close="removeCreateTag(tag)">
-              {{ tag }}
-            </el-tag>
-            <el-input
-              v-model.trim="createTagInput"
-              maxlength="20"
-              placeholder="输入标签后按回车"
-              @keyup.enter="addCreateTag"
-            />
-          </div>
+        <el-form-item label="课程公开状态">
+          <el-switch
+            v-model="createForm.isPublic"
+            :active-value="1"
+            :inactive-value="0"
+            active-text="公开"
+            inactive-text="不公开"
+          />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -464,9 +436,6 @@ onMounted(async () => {
         <template v-if="previewCourse">
           <img :src="previewCourse.coverUrl || fallbackCover(previewCourse)" alt="课程封面" />
           <h2>{{ previewCourse.title }}</h2>
-          <div class="preview-tags">
-            <el-tag v-for="tag in previewCourse.tags || []" :key="tag" effect="plain">{{ tag }}</el-tag>
-          </div>
           <p>{{ previewCourse.description || '老师暂未填写课程介绍。' }}</p>
           <h3>课程目录</h3>
           <el-collapse>
@@ -761,27 +730,6 @@ onMounted(async () => {
   white-space: nowrap;
 }
 
-.tag-list {
-  display: flex;
-  min-height: 26px;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 13px;
-}
-
-.tag-list span {
-  padding: 3px 8px;
-  border-radius: 4px;
-  background: #f0f4f8;
-  color: #5f6d80;
-  font-size: 11px;
-}
-
-.tag-list .empty-tag {
-  background: transparent;
-  color: #a0a8b4;
-}
-
 .course-card-meta {
   display: flex;
   flex-wrap: wrap;
@@ -823,18 +771,6 @@ onMounted(async () => {
   width: 100%;
 }
 
-.tag-editor {
-  display: flex;
-  width: 100%;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
-.tag-editor .el-input {
-  width: 190px;
-}
-
 .course-preview > img {
   width: 100%;
   aspect-ratio: 16 / 8;
@@ -851,12 +787,6 @@ onMounted(async () => {
   color: #657187;
   line-height: 1.8;
   white-space: pre-wrap;
-}
-
-.preview-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
 }
 
 .course-preview h3 {

@@ -104,11 +104,7 @@
           <el-input v-model="formData.className" placeholder="请输入班级名称" maxlength="50" />
         </el-form-item>
         <el-form-item label="学段" prop="grade">
-          <el-select v-model="formData.grade" placeholder="请选择学段" style="width:100%">
-            <el-option label="研一" value="研一" />
-            <el-option label="研二" value="研二" />
-            <el-option label="研三" value="研三" />
-          </el-select>
+          <el-input v-model="formData.grade" placeholder="请输入学段" maxlength="20" />
         </el-form-item>
         <el-form-item label="所属学校" prop="school">
           <el-input v-model="formData.school" placeholder="请输入所属学校" maxlength="50" />
@@ -175,7 +171,7 @@ const formData = reactive({
 
 const formRules = {
   className: [{ required: true, message: '请输入班级名称', trigger: 'blur' }],
-  grade: [{ required: true, message: '请选择学段', trigger: 'change' }],
+  grade: [{ required: true, message: '请输入学段', trigger: 'blur' }],
   school: [{ required: true, message: '请输入所属学校', trigger: 'blur' }],
   joinType: [{ required: true, message: '请选择加入方式', trigger: 'change' }]
 }
@@ -257,14 +253,14 @@ async function submitForm() {
     if (isEditing.value) {
       res = await updateTeacherClass(editingId.value, {
         className: formData.className.trim(),
-        grade: formData.grade,
+        grade: formData.grade.trim(),
         school: formData.school.trim(),
         joinType: formData.joinType
       })
     } else {
       res = await createTeacherClass({
         className: formData.className.trim(),
-        grade: formData.grade,
+        grade: formData.grade.trim(),
         school: formData.school.trim(),
         joinType: formData.joinType,
         classCode: formData.classCode.trim() || undefined

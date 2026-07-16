@@ -24,6 +24,10 @@ export function joinStudentClass(data) {
   return resolve(request.post('/api/student/classes/join', data))
 }
 
+export function listJoinablePublicClasses(params = {}) {
+  return resolve(request.get('/api/student/classes/public-joinable', { params }))
+}
+
 export function leaveStudentClass(classId) {
   return resolve(request.delete(`/api/student/classes/${classId}/leave`))
 }

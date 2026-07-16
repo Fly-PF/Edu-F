@@ -1,10 +1,11 @@
-npm run dev<script setup>
+<script setup>
 import { computed, reactive, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   assignCourseToClass,
   getClassAssignedCourses,
+  getClassAssignableCourses,
   getClassCourseStudyRecords,
   getClassInviteCode,
   getClassStudents,
@@ -18,9 +19,7 @@ import {
 } from '@/api/teacherClassDetail'
 
 const route = useRoute()
-const router = useRouter()
 
-const classIdInput = ref('')
 const currentClassId = ref('')
 const pageLoading = ref(false)
 const classDetail = ref({})
@@ -35,6 +34,12 @@ const assignDialogVisible = ref(false)
 const assignForm = reactive({
   courseId: '',
   deadline: '',
+})
+
+const assignableCourses = reactive({
+  keyword: '',
+  records: [],
+  loading: false,
 })
 
 const deadlineDialogVisible = ref(false)
@@ -146,6 +151,32 @@ function toNumber(value) {
   return Number.isFinite(numberValue) ? numberValue : value
 }
 
+function getAssignableCourseLabel(course) {
+  const suffix = Number(course?.isPublic) === 1 ? '#公开本人课程' : '#本人非公开课程'
+  return `${course?.courseName || '-'} ${suffix}`
+}
+
+async function loadAssignableCourses(keyword = '') {
+  if (!currentClassId.value) {
+    assignableCourses.records = []
+    return
+  }
+
+  assignableCourses.keyword = keyword
+  assignableCourses.loading = true
+
+  try {
+    const data = readResponse(await getClassAssignableCourses(currentClassId.value, {
+      keyword: keyword || undefined,
+    }))
+    assignableCourses.records = data || []
+  } catch (error) {
+    showError(error, '可下发课程加载失败')
+  } finally {
+    assignableCourses.loading = false
+  }
+}
+
 async function loadClassDetail() {
   const data = readResponse(await getTeacherClassDetail(currentClassId.value))
   classDetail.value = data || {}
@@ -245,28 +276,6 @@ async function loadPageData() {
   }
 }
 
-function loadByInput() {
-  const nextClassId = normalizeId(classIdInput.value)
-
-  if (!nextClassId) {
-    ElMessage.warning('请输入班级 ID')
-    return
-  }
-
-  if (nextClassId === currentClassId.value) {
-    loadPageData()
-    return
-  }
-
-  router.replace({
-    path: route.path,
-    query: {
-      ...route.query,
-      classId: nextClassId,
-    },
-  })
-}
-
 function resetStudentSearch() {
   students.pageNum = 1
   loadStudents()
@@ -360,15 +369,18 @@ async function removeStudent(row) {
   }
 }
 
-function openAssignDialog() {
+async function openAssignDialog() {
   assignForm.courseId = ''
   assignForm.deadline = ''
+  assignableCourses.keyword = ''
+  assignableCourses.records = []
   assignDialogVisible.value = true
+  await loadAssignableCourses()
 }
 
 async function saveAssignCourse() {
   if (!assignForm.courseId) {
-    ElMessage.warning('请输入课程 ID')
+    ElMessage.warning('请选择课程')
     return
   }
 
@@ -380,6 +392,7 @@ async function saveAssignCourse() {
     }))
     assignDialogVisible.value = false
     ElMessage.success('课程已下发')
+    await loadAssignableCourses(assignableCourses.keyword)
     await loadAssignedCourses()
   } catch (error) {
     showError(error, '课程下发失败')
@@ -455,7 +468,6 @@ watch(
   () => route.query.classId,
   (classId) => {
     const normalizedClassId = normalizeId(classId)
-    classIdInput.value = normalizedClassId
 
     if (!normalizedClassId) {
       currentClassId.value = ''
@@ -482,20 +494,9 @@ watch(
         <p class="eyebrow">老师班级详情页</p>
         <h1>{{ classDetail.className || '班级详情' }}</h1>
       </div>
-
-      <div class="class-loader">
-        <el-input
-          v-model="classIdInput"
-          class="class-id-input"
-          clearable
-          placeholder="班级 ID"
-          @keyup.enter="loadByInput"
-        />
-        <el-button type="primary" @click="loadByInput">加载</el-button>
-      </div>
     </section>
 
-    <el-empty v-if="!currentClassId" description="输入班级 ID 后查看详情" />
+    <el-empty v-if="!currentClassId" description="请从班级列表进入班级详情" />
 
     <template v-else>
       <section v-loading="pageLoading" class="summary-panel">
@@ -751,8 +752,31 @@ watch(
 
     <el-dialog v-model="assignDialogVisible" title="下发课程" width="460px">
       <el-form label-width="90px">
-        <el-form-item label="课程 ID">
-          <el-input v-model="assignForm.courseId" placeholder="请输入课程 ID" />
+        <el-form-item label="课程">
+          <el-select
+            v-model="assignForm.courseId"
+            class="assign-course-select"
+            clearable
+            filterable
+            remote
+            :remote-method="loadAssignableCourses"
+            :loading="assignableCourses.loading"
+            placeholder="搜索或选择课程"
+          >
+            <el-option
+              v-for="course in assignableCourses.records"
+              :key="course.courseId"
+              :label="getAssignableCourseLabel(course)"
+              :value="course.courseId"
+            >
+              <div class="assign-course-option">
+                <span>{{ course.courseName }}</span>
+                <el-tag size="small" :type="Number(course.isPublic) === 1 ? 'success' : 'info'">
+                  {{ Number(course.isPublic) === 1 ? '公开本人课程' : '本人非公开课程' }}
+                </el-tag>
+              </div>
+            </el-option>
+          </el-select>
         </el-form-item>
         <el-form-item label="截止时间">
           <el-date-picker
@@ -884,17 +908,12 @@ h2 {
   line-height: 1.35;
 }
 
-.class-loader,
 .section-actions,
 .filter-actions,
 .progress-filters {
   display: flex;
   align-items: center;
   gap: 10px;
-}
-
-.class-id-input {
-  width: 180px;
 }
 
 .summary-panel {
@@ -1032,6 +1051,23 @@ h2 {
   width: 180px;
 }
 
+.assign-course-select {
+  width: 100%;
+}
+
+.assign-course-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.assign-course-option span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .course-cell {
   display: flex;
   align-items: center;
@@ -1108,7 +1144,6 @@ h2 {
   }
 
   .page-header,
-  .class-loader,
   .filter-actions,
   .section-actions,
   .invite-panel,
@@ -1117,8 +1152,6 @@ h2 {
     flex-direction: column;
   }
 
-  .class-loader,
-  .class-id-input,
   .filter-actions .el-input,
   .progress-filters .el-select,
   .progress-filters .el-input,

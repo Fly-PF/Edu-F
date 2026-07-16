@@ -1,22 +1,5 @@
 ﻿<template>
   <main class="student-class-detail-page">
-    <el-card class="query-card" shadow="never">
-      <el-form :inline="true" @keyup.enter="handleQuery">
-        <el-form-item label="班级ID">
-          <el-input
-            v-model="inputClassId"
-            placeholder="请输入班级ID"
-            clearable
-            style="width: 220px"
-          />
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" @click="handleQuery" :disabled="!inputClassId">查询</el-button>
-          <el-button @click="goBack">返回</el-button>
-        </el-form-item>
-      </el-form>
-    </el-card>
-
     <template v-if="classInfo">
     <div class="page-header">
       <div class="class-header-info">
@@ -29,6 +12,7 @@
           <span>{{ classInfo.studentCount }} 名学生</span>
         </div>
       </div>
+      <el-button @click="goBack">返回</el-button>
     </div>
 
     <el-card class="course-card" shadow="never" v-if="classInfo">
@@ -80,20 +64,20 @@
       </div>
     </el-card>
 
-    <el-empty v-else description="请输入班级ID查询班级详情" />
+    <el-empty v-else description="请从班级列表进入班级详情" />
     </template>
   </main>
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getStudentClassDetail, getStudentClassCourses } from '@/api/studentClass'
 
 const router = useRouter()
+const route = useRoute()
 
-const inputClassId = ref('')
 const classInfo = ref(null)
 const courseList = ref([])
 const loading = ref(false)
@@ -134,10 +118,10 @@ function goStudy(row) {
   })
 }
 
-async function handleQuery() {
-  const id = inputClassId.value?.trim()
+async function loadClassDetail(classId) {
+  const id = String(classId || '').trim()
   if (!id) {
-    ElMessage.warning('请输入班级ID')
+    ElMessage.warning('缺少班级ID')
     return
   }
   classInfo.value = null
@@ -155,8 +139,15 @@ async function handleQuery() {
 }
 
 function goBack() {
-  router.push({ name: 'main-student' })
+  router.push({ name: 'student-classes' })
 }
+
+onMounted(() => {
+  const classId = route.query.classId
+  if (classId) {
+    loadClassDetail(classId)
+  }
+})
 </script>
 
 <style scoped>
@@ -166,18 +157,11 @@ function goBack() {
   background: #f4f6f9;
 }
 
-.query-card {
-  margin-bottom: 16px;
-  border: 1px solid #e5eaf2;
-  border-radius: 8px;
-}
-
 .page-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 16px;
-  margin-top: 16px;
 }
 
 .class-header-info h2 {

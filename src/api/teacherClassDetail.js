@@ -32,6 +32,10 @@ export function getClassAssignedCourses(classId, params) {
   return request.get(`/api/teacher/classes/${classId}/courses`, { params })
 }
 
+export function getClassAssignableCourses(classId, params) {
+  return request.get(`/api/teacher/classes/${classId}/assignable-courses`, { params })
+}
+
 export function updateAssignedCourseDeadline(classId, courseId, deadline) {
   return request.patch(`/api/teacher/classes/${classId}/courses/${courseId}/deadline`, { deadline })
 }
