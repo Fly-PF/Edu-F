@@ -1,0 +1,492 @@
+<script setup>
+import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import {
+  ArrowLeft,
+  Box,
+  Collection,
+  Document,
+  Files,
+  Folder,
+  MoreFilled,
+  Plus,
+  Promotion,
+  Refresh,
+  Setting,
+  Upload,
+  VideoPlay,
+} from '@element-plus/icons-vue'
+import * as monaco from 'monaco-editor/esm/vs/editor/editor.api'
+import 'monaco-editor/esm/vs/basic-languages/python/python.contribution'
+import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
+
+self.MonacoEnvironment = {
+  getWorker() {
+    return new EditorWorker()
+  },
+}
+
+const router = useRouter()
+const editorHost = ref(null)
+const runMessage = ref('暂无运行结果')
+const runStatus = ref('empty')
+let editor = null
+let resizeObserver = null
+
+const defaultCode = `# main.py
+print("Hello, Python 工坊")
+`
+
+function goBack() {
+  router.push('/tools')
+}
+
+function runScript() {
+  runStatus.value = 'ready'
+  runMessage.value = `已准备运行 main.py
+
+当前为前端静态编辑界面，Python 执行环境将在后续步骤接入。
+
+脚本内容：
+${editor?.getValue() || ''}`
+}
+
+onMounted(async () => {
+  await nextTick()
+
+  editor = monaco.editor.create(editorHost.value, {
+    value: defaultCode,
+    language: 'python',
+    theme: 'vs',
+    automaticLayout: true,
+    fontSize: 15,
+    lineHeight: 23,
+    minimap: {
+      enabled: false,
+    },
+    scrollBeyondLastLine: false,
+    tabSize: 4,
+    wordWrap: 'on',
+  })
+
+  resizeObserver = new ResizeObserver(() => {
+    editor?.layout()
+  })
+  resizeObserver.observe(editorHost.value)
+})
+
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect()
+  editor?.dispose()
+})
+</script>
+
+<template>
+  <main class="python-workshop">
+    <header class="ide-header">
+      <div class="header-left">
+        <button class="icon-button" type="button" aria-label="返回在线工具" @click="goBack">
+          <el-icon><ArrowLeft /></el-icon>
+        </button>
+        <span class="python-logo">Py</span>
+        <strong>Python</strong>
+        <span class="version-text">版本: 草稿</span>
+      </div>
+
+      <button class="project-title" type="button">未命名项目</button>
+
+      <div class="header-actions">
+        <button class="round-button" type="button" aria-label="设置">
+          <el-icon><Setting /></el-icon>
+        </button>
+        <button class="round-button" type="button" aria-label="新建">
+          <el-icon><Plus /></el-icon>
+        </button>
+        <button class="icon-button" type="button" aria-label="更多">
+          <el-icon><MoreFilled /></el-icon>
+        </button>
+        <button class="run-button" type="button" aria-label="运行脚本" @click="runScript">
+          <el-icon><VideoPlay /></el-icon>
+        </button>
+      </div>
+    </header>
+
+    <section class="ide-body">
+      <aside class="activity-bar" aria-label="工具栏">
+        <button class="activity-button active" type="button" aria-label="项目文件">
+          <el-icon><Folder /></el-icon>
+        </button>
+        <button class="activity-button" type="button" aria-label="版本管理">
+          <el-icon><Promotion /></el-icon>
+        </button>
+        <button class="activity-button" type="button" aria-label="依赖包">
+          <el-icon><Box /></el-icon>
+        </button>
+        <button class="activity-button" type="button" aria-label="资源">
+          <el-icon><Collection /></el-icon>
+        </button>
+      </aside>
+
+      <aside class="file-panel">
+        <div class="panel-title">
+          <span>项目文件</span>
+          <div>
+            <button class="small-icon-button" type="button" aria-label="刷新">
+              <el-icon><Refresh /></el-icon>
+            </button>
+            <button class="small-icon-button" type="button" aria-label="新建文件">
+              <el-icon><Plus /></el-icon>
+            </button>
+            <button class="small-icon-button" type="button" aria-label="上传">
+              <el-icon><Upload /></el-icon>
+            </button>
+          </div>
+        </div>
+
+        <button class="file-item muted" type="button">
+          <el-icon><Document /></el-icon>
+          <span>README</span>
+        </button>
+        <button class="file-item active" type="button">
+          <span class="python-file-icon">Py</span>
+          <span>main.py</span>
+        </button>
+      </aside>
+
+      <section class="editor-area">
+        <div class="editor-tabs">
+          <button class="editor-tab active" type="button">
+            <el-icon><Files /></el-icon>
+            <span>main.py</span>
+          </button>
+        </div>
+        <div ref="editorHost" class="monaco-host"></div>
+      </section>
+
+      <aside class="result-panel">
+        <div class="result-title">运行结果</div>
+        <div :class="['result-content', runStatus]">
+          <pre v-if="runStatus === 'ready'">{{ runMessage }}</pre>
+          <div v-else class="empty-result">
+            <span class="empty-illustration">
+              <el-icon><Document /></el-icon>
+            </span>
+            <strong>{{ runMessage }}</strong>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <footer class="ide-status">
+      <span>项目已就绪</span>
+      <span>科学创造师_IXGI 最后保存于 09:03</span>
+      <span>未启动容器</span>
+    </footer>
+  </main>
+</template>
+
+<style scoped>
+.python-workshop {
+  display: grid;
+  min-width: 1024px;
+  height: 100vh;
+  grid-template-rows: 50px minmax(0, 1fr) 32px;
+  overflow: hidden;
+  background: #f4f6fa;
+  color: #303744;
+}
+
+.ide-header {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) auto minmax(280px, 1fr);
+  align-items: center;
+  background: #252c37;
+  color: #eef2f7;
+}
+
+.header-left,
+.header-actions,
+.panel-title,
+.file-item,
+.editor-tab,
+.ide-status {
+  display: flex;
+  align-items: center;
+}
+
+.header-left {
+  gap: 12px;
+  padding-left: 16px;
+}
+
+.python-logo,
+.python-file-icon {
+  display: inline-grid;
+  place-items: center;
+  border-radius: 5px;
+  background: linear-gradient(135deg, #3178c6 0%, #ffd95a 100%);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.python-logo {
+  width: 28px;
+  height: 28px;
+}
+
+.python-file-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.version-text {
+  margin-left: 8px;
+  color: #9aa3b2;
+  font-size: 13px;
+}
+
+.project-title {
+  border: 0;
+  background: transparent;
+  color: #ffffff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.header-actions {
+  justify-content: flex-end;
+  gap: 12px;
+  padding-right: 14px;
+}
+
+.icon-button,
+.round-button,
+.small-icon-button,
+.activity-button {
+  display: inline-grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.icon-button {
+  width: 30px;
+  height: 30px;
+  font-size: 20px;
+}
+
+.round-button {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 12%);
+}
+
+.run-button {
+  display: inline-grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  background: #ff7a4f;
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 20px;
+}
+
+.ide-body {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: 56px 316px minmax(360px, 1fr) 360px;
+  border-bottom: 1px solid #e1e5ec;
+}
+
+.activity-bar,
+.file-panel,
+.result-panel {
+  border-right: 1px solid #e3e7ee;
+  background: #f8fafc;
+}
+
+.activity-bar {
+  display: grid;
+  align-content: start;
+  gap: 22px;
+  padding-top: 22px;
+}
+
+.activity-button {
+  width: 56px;
+  height: 34px;
+  color: #8a919c;
+  font-size: 24px;
+}
+
+.activity-button.active {
+  color: #5140c8;
+}
+
+.file-panel {
+  padding: 18px 18px 0;
+}
+
+.panel-title {
+  justify-content: space-between;
+  margin-bottom: 28px;
+  color: #5b6472;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.panel-title div {
+  display: flex;
+  gap: 12px;
+}
+
+.small-icon-button {
+  width: 18px;
+  height: 18px;
+  color: #4b5563;
+  font-size: 16px;
+}
+
+.file-item {
+  width: 100%;
+  gap: 10px;
+  margin-bottom: 14px;
+  border: 0;
+  background: transparent;
+  color: #555f70;
+  cursor: pointer;
+  font: inherit;
+  font-size: 16px;
+  text-align: left;
+}
+
+.file-item.muted {
+  color: #687385;
+}
+
+.file-item.active {
+  color: #303744;
+  font-weight: 600;
+}
+
+.editor-area {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: 50px minmax(0, 1fr);
+  background: #ffffff;
+}
+
+.editor-tabs {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid #e1e5ec;
+  background: #edf0f5;
+}
+
+.editor-tab {
+  gap: 8px;
+  min-width: 150px;
+  padding: 0 16px;
+  border: 0;
+  border-right: 1px solid #e1e5ec;
+  background: #ffffff;
+  color: #555f70;
+  cursor: pointer;
+  font: inherit;
+  font-size: 15px;
+}
+
+.monaco-host {
+  min-height: 0;
+}
+
+.result-panel {
+  display: grid;
+  min-width: 0;
+  grid-template-rows: 50px minmax(0, 1fr);
+  border-right: 0;
+  background: #f8fafc;
+}
+
+.result-title {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid #e1e5ec;
+  padding-left: 18px;
+  color: #404957;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.result-content {
+  min-height: 0;
+  padding: 18px;
+  overflow: auto;
+}
+
+.result-content pre {
+  margin: 0;
+  color: #263241;
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 14px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.empty-result {
+  display: grid;
+  height: 100%;
+  place-items: center;
+  align-content: center;
+  gap: 22px;
+  color: #667085;
+}
+
+.empty-illustration {
+  display: grid;
+  width: 118px;
+  height: 118px;
+  place-items: center;
+  border-radius: 34px;
+  background: #e8edf5;
+  color: #ffffff;
+  font-size: 68px;
+}
+
+.ide-status {
+  justify-content: space-between;
+  padding: 0 18px;
+  background: #f8fafc;
+  color: #8a919c;
+  font-size: 13px;
+}
+
+button:hover,
+button:focus-visible {
+  outline: none;
+}
+
+.icon-button:hover,
+.round-button:hover,
+.small-icon-button:hover,
+.activity-button:hover,
+.file-item:hover,
+.editor-tab:hover {
+  color: #5140c8;
+}
+
+.run-button:hover,
+.run-button:focus-visible {
+  background: #ff6433;
+}
+</style>

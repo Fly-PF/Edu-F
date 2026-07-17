@@ -152,15 +152,6 @@ const toolRoutes = [
     },
   },
   {
-    path: 'python',
-    name: 'python-workshop',
-    component: () => import('@/views/tools/ToolPlaceholderView.vue'),
-    meta: {
-      title: 'Python工坊',
-      toolType: 'python',
-    },
-  },
-  {
     path: 'ai',
     name: 'ai-workshop',
     component: () => import('@/views/tools/ToolPlaceholderView.vue'),
@@ -250,6 +241,15 @@ const router = createRouter({
           children: personnelRoutes,
         },
       ],
+    },
+    {
+      path: '/tools/python',
+      name: 'python-workshop',
+      component: () => import('@/views/tools/PythonWorkshopView.vue'),
+      meta: {
+        title: 'Python工坊',
+        toolType: 'python',
+      },
     },
     {
       path: '/tools',
