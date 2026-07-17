@@ -142,6 +142,35 @@ const studentRoutes = [
   },
 ]
 
+const toolRoutes = [
+  {
+    path: '',
+    name: 'online-tools',
+    component: () => import('@/views/tools/OnlineToolsView.vue'),
+    meta: {
+      title: '在线工具',
+    },
+  },
+  {
+    path: 'python',
+    name: 'python-workshop',
+    component: () => import('@/views/tools/ToolPlaceholderView.vue'),
+    meta: {
+      title: 'Python工坊',
+      toolType: 'python',
+    },
+  },
+  {
+    path: 'ai',
+    name: 'ai-workshop',
+    component: () => import('@/views/tools/ToolPlaceholderView.vue'),
+    meta: {
+      title: '人工智能工坊',
+      toolType: 'ai',
+    },
+  },
+]
+
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
@@ -223,6 +252,11 @@ const router = createRouter({
       ],
     },
     {
+      path: '/tools',
+      component: () => import('@/views/layout/MainView.vue'),
+      children: toolRoutes,
+    },
+    {
       path: '/personnel/managers',
       redirect: '/main/admin/personnel/managers',
     },
@@ -263,4 +297,4 @@ router.beforeEach((to) => {
 })
 
 export default router
-export { personnelRoutes, studentRoutes, teacherRoutes }
+export { personnelRoutes, studentRoutes, teacherRoutes, toolRoutes }

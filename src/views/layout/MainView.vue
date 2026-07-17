@@ -41,6 +41,11 @@ const navItems = computed(() => {
       path: '/main/courses',
       roles: [],
     },
+    {
+      label: '在线工具',
+      path: '/tools',
+      roles: [],
+    },
   ]
 
   if (userStore.roleCode === 'STUDENT') {
@@ -77,6 +82,10 @@ const activePath = computed(() => {
 
   if (route.name === 'student-class-detail') {
     return '/main/student/classes'
+  }
+
+  if (route.path.startsWith('/tools')) {
+    return '/tools'
   }
 
   return route.path
