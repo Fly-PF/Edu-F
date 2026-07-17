@@ -1,5 +1,5 @@
 <script setup>
-import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   ArrowLeft,
@@ -8,6 +8,7 @@ import {
   Document,
   Files,
   Folder,
+  Close,
   MoreFilled,
   Plus,
   Promotion,
@@ -16,6 +17,7 @@ import {
   Upload,
   VideoPlay,
 } from '@element-plus/icons-vue'
+import { ElMessageBox, ElMessage } from 'element-plus'
 import * as monaco from 'monaco-editor/esm/vs/editor/editor.api'
 import 'monaco-editor/esm/vs/basic-languages/python/python.contribution'
 import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
@@ -28,22 +30,149 @@ self.MonacoEnvironment = {
 
 const router = useRouter()
 const editorHost = ref(null)
+const activeFileId = ref('main')
+const openFileIds = ref(['readme', 'main'])
 const runMessage = ref('暂无运行结果')
 const runStatus = ref('empty')
 let editor = null
 let resizeObserver = null
+let contentChangeDisposable = null
 
-const defaultCode = `# main.py
-print("Hello, Python 工坊")
-`
+const files = ref([
+  {
+    id: 'readme',
+    name: 'README',
+    language: 'plaintext',
+    content: 'Python 工坊项目说明\n\n在 main.py 中编写 Python 脚本，点击右上角运行按钮查看运行结果。',
+  },
+  {
+    id: 'main',
+    name: 'main.py',
+    language: 'python',
+    content: '# main.py\nprint("Hello, Python 工坊")\n',
+  },
+])
+
+const activeFile = computed(() => {
+  return files.value.find((file) => file.id === activeFileId.value) || files.value[0]
+})
+
+const openFiles = computed(() => {
+  return openFileIds.value
+    .map((fileId) => files.value.find((file) => file.id === fileId))
+    .filter(Boolean)
+})
 
 function goBack() {
   router.push('/tools')
 }
 
+function getFileIconLabel(file) {
+  return file.name.endsWith('.py') ? 'Py' : ''
+}
+
+function switchFile(fileId) {
+  const file = files.value.find((item) => item.id === fileId)
+
+  if (!file) {
+    return
+  }
+
+  if (!openFileIds.value.includes(file.id)) {
+    openFileIds.value.push(file.id)
+  }
+
+  if (editor && activeFile.value) {
+    activeFile.value.content = editor.getValue()
+  }
+
+  activeFileId.value = file.id
+  editor?.setValue(file.content)
+  const model = editor?.getModel()
+
+  if (model) {
+    monaco.editor.setModelLanguage(model, file.language)
+  }
+
+  editor?.focus()
+}
+
+function closeFile(fileId) {
+  if (openFileIds.value.length <= 1) {
+    return
+  }
+
+  const closingIndex = openFileIds.value.indexOf(fileId)
+
+  if (closingIndex === -1) {
+    return
+  }
+
+  openFileIds.value.splice(closingIndex, 1)
+
+  if (activeFileId.value !== fileId) {
+    return
+  }
+
+  const nextFileId =
+    openFileIds.value[Math.min(closingIndex, openFileIds.value.length - 1)] || openFileIds.value[0]
+
+  switchFile(nextFileId)
+}
+
+function normalizeFileName(value) {
+  const trimmedName = value.trim()
+
+  if (!trimmedName) {
+    return ''
+  }
+
+  return trimmedName.includes('.') ? trimmedName : `${trimmedName}.py`
+}
+
+async function createFile() {
+  let fileName = ''
+
+  try {
+    const { value } = await ElMessageBox.prompt('请输入文件名', '新建文件', {
+      confirmButtonText: '创建',
+      cancelButtonText: '取消',
+      inputPlaceholder: '例如 script.py',
+      inputPattern: /\S+/,
+      inputErrorMessage: '文件名不能为空',
+    })
+
+    fileName = normalizeFileName(value)
+  } catch {
+    return
+  }
+
+  if (!fileName) {
+    return
+  }
+
+  const usedNames = new Set(files.value.map((file) => file.name))
+
+  if (usedNames.has(fileName)) {
+    ElMessage.warning('文件名已存在')
+    return
+  }
+
+  const file = {
+    id: `script-${Date.now()}`,
+    name: fileName,
+    language: 'python',
+    content: `# ${fileName}\n`,
+  }
+
+  files.value.push(file)
+  openFileIds.value.push(file.id)
+  nextTick(() => switchFile(file.id))
+}
+
 function runScript() {
   runStatus.value = 'ready'
-  runMessage.value = `已准备运行 main.py
+  runMessage.value = `已准备运行 ${activeFile.value.name}
 
 当前为前端静态编辑界面，Python 执行环境将在后续步骤接入。
 
@@ -55,8 +184,8 @@ onMounted(async () => {
   await nextTick()
 
   editor = monaco.editor.create(editorHost.value, {
-    value: defaultCode,
-    language: 'python',
+    value: activeFile.value.content,
+    language: activeFile.value.language,
     theme: 'vs',
     automaticLayout: true,
     fontSize: 15,
@@ -69,6 +198,10 @@ onMounted(async () => {
     wordWrap: 'on',
   })
 
+  contentChangeDisposable = editor.onDidChangeModelContent(() => {
+    activeFile.value.content = editor.getValue()
+  })
+
   resizeObserver = new ResizeObserver(() => {
     editor?.layout()
   })
@@ -77,6 +210,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   resizeObserver?.disconnect()
+  contentChangeDisposable?.dispose()
   editor?.dispose()
 })
 </script>
@@ -99,7 +233,7 @@ onBeforeUnmount(() => {
         <button class="round-button" type="button" aria-label="设置">
           <el-icon><Setting /></el-icon>
         </button>
-        <button class="round-button" type="button" aria-label="新建">
+        <button class="round-button" type="button" aria-label="新建文件" @click="createFile">
           <el-icon><Plus /></el-icon>
         </button>
         <button class="icon-button" type="button" aria-label="更多">
@@ -134,7 +268,7 @@ onBeforeUnmount(() => {
             <button class="small-icon-button" type="button" aria-label="刷新">
               <el-icon><Refresh /></el-icon>
             </button>
-            <button class="small-icon-button" type="button" aria-label="新建文件">
+            <button class="small-icon-button" type="button" aria-label="新建文件" @click="createFile">
               <el-icon><Plus /></el-icon>
             </button>
             <button class="small-icon-button" type="button" aria-label="上传">
@@ -143,21 +277,45 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <button class="file-item muted" type="button">
-          <el-icon><Document /></el-icon>
-          <span>README</span>
-        </button>
-        <button class="file-item active" type="button">
-          <span class="python-file-icon">Py</span>
-          <span>main.py</span>
+        <button
+          v-for="file in files"
+          :key="file.id"
+          :class="['file-item', { active: file.id === activeFileId, muted: file.id !== activeFileId }]"
+          type="button"
+          @click="switchFile(file.id)"
+        >
+          <span v-if="getFileIconLabel(file)" class="python-file-icon">
+            {{ getFileIconLabel(file) }}
+          </span>
+          <el-icon v-else><Document /></el-icon>
+          <span>{{ file.name }}</span>
         </button>
       </aside>
 
       <section class="editor-area">
         <div class="editor-tabs">
-          <button class="editor-tab active" type="button">
-            <el-icon><Files /></el-icon>
-            <span>main.py</span>
+          <button
+            v-for="file in openFiles"
+            :key="file.id"
+            :class="['editor-tab', { active: file.id === activeFileId }]"
+            type="button"
+            @click="switchFile(file.id)"
+          >
+            <span v-if="getFileIconLabel(file)" class="tab-python-icon">
+              {{ getFileIconLabel(file) }}
+            </span>
+            <el-icon v-else><Files /></el-icon>
+            <span>{{ file.name }}</span>
+            <span
+              class="tab-close"
+              role="button"
+              tabindex="0"
+              aria-label="关闭文件"
+              @click.stop="closeFile(file.id)"
+              @keydown.enter.stop.prevent="closeFile(file.id)"
+            >
+              <el-icon><Close /></el-icon>
+            </span>
           </button>
         </div>
         <div ref="editorHost" class="monaco-host"></div>
@@ -220,7 +378,8 @@ onBeforeUnmount(() => {
 }
 
 .python-logo,
-.python-file-icon {
+.python-file-icon,
+.tab-python-icon {
   display: inline-grid;
   place-items: center;
   border-radius: 5px;
@@ -238,6 +397,13 @@ onBeforeUnmount(() => {
 .python-file-icon {
   width: 18px;
   height: 18px;
+  flex: 0 0 18px;
+}
+
+.tab-python-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
 }
 
 .version-text {
@@ -389,6 +555,8 @@ onBeforeUnmount(() => {
 .editor-tabs {
   display: flex;
   align-items: stretch;
+  overflow-x: auto;
+  overflow-y: hidden;
   border-bottom: 1px solid #e1e5ec;
   background: #edf0f5;
 }
@@ -396,14 +564,44 @@ onBeforeUnmount(() => {
 .editor-tab {
   gap: 8px;
   min-width: 150px;
+  max-width: 220px;
   padding: 0 16px;
   border: 0;
   border-right: 1px solid #e1e5ec;
-  background: #ffffff;
+  background: #edf0f5;
   color: #555f70;
   cursor: pointer;
   font: inherit;
   font-size: 15px;
+}
+
+.editor-tab.active {
+  background: #ffffff;
+  color: #303744;
+}
+
+.editor-tab span:nth-child(2) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-close {
+  display: inline-grid;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  place-items: center;
+  border-radius: 4px;
+  color: #7b8491;
+  font-size: 13px;
+}
+
+.tab-close:hover,
+.tab-close:focus-visible {
+  background: #e5e9f0;
+  color: #303744;
+  outline: none;
 }
 
 .monaco-host {

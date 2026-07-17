@@ -149,6 +149,17 @@ const toolRoutes = [
     component: () => import('@/views/tools/OnlineToolsView.vue'),
     meta: {
       title: '在线工具',
+      allowAnonymous: true,
+    },
+  },
+  {
+    path: 'python',
+    name: 'python-workshop',
+    component: () => import('@/views/tools/PythonWorkshopView.vue'),
+    meta: {
+      title: 'Python工坊',
+      toolType: 'python',
+      allowAnonymous: true,
     },
   },
   {
@@ -158,6 +169,7 @@ const toolRoutes = [
     meta: {
       title: '人工智能工坊',
       toolType: 'ai',
+      allowAnonymous: true,
     },
   },
 ]
@@ -243,15 +255,6 @@ const router = createRouter({
       ],
     },
     {
-      path: '/tools/python',
-      name: 'python-workshop',
-      component: () => import('@/views/tools/PythonWorkshopView.vue'),
-      meta: {
-        title: 'Python工坊',
-        toolType: 'python',
-      },
-    },
-    {
       path: '/tools',
       component: () => import('@/views/layout/MainView.vue'),
       children: toolRoutes,
@@ -285,7 +288,7 @@ router.beforeEach((to) => {
     return '/main'
   }
 
-  if (!to.meta.publicOnly && !userStore.isLoggedIn) {
+  if (!to.meta.publicOnly && !to.meta.allowAnonymous && !userStore.isLoggedIn) {
     return '/login'
   }
 

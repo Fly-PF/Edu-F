@@ -91,6 +91,8 @@ const activePath = computed(() => {
   return route.path
 })
 
+const isFullscreenRoute = computed(() => route.name === 'python-workshop')
+
 const headerAvatar = computed(() => {
   if (headerAvatarLoadFailed.value || !userStore.avatar) {
     return defaultAvatar
@@ -156,7 +158,9 @@ onMounted(loadCurrentUserProfile)
 </script>
 
 <template>
-  <el-container class="main-shell">
+  <RouterView v-if="isFullscreenRoute" />
+
+  <el-container v-else class="main-shell">
     <el-header class="main-header" height="64px">
       <div class="header-left">
         <div class="brand-mark">E</div>
