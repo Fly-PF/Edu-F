@@ -22,11 +22,13 @@ const userTypeMap = {
 
 const studentNavItems = [
   { label: '学生班级列表', path: '/main/student/classes', roles: ['STUDENT'] },
+  { label: 'AI展馆', path: '/main/ai-exhibit', roles: ['STUDENT'] },
 ]
 
 const teacherNavItems = [
   { label: '老师班级列表/班级管理页', path: '/main/teacher/classes', roles: ['TEACHER'] },
   { label: '课程管理', path: '/main/teacher/courses', roles: ['TEACHER'] },
+  { label: 'AI展馆', path: '/main/ai-exhibit', roles: ['TEACHER'] },
 ]
 
 const navItems = computed(() => {
@@ -82,6 +84,10 @@ const activePath = computed(() => {
 
   if (route.name === 'student-class-detail') {
     return '/main/student/classes'
+  }
+
+  if (route.path.startsWith('/main/ai-exhibit')) {
+    return '/main/ai-exhibit'
   }
 
   if (route.path.startsWith('/tools')) {

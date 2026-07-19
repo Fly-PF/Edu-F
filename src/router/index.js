@@ -225,6 +225,38 @@ const router = createRouter({
           },
         },
         {
+          path: 'ai-exhibit',
+          name: 'ai-exhibit',
+          component: () => import('@/views/aiExhibit/AiExhibitView.vue'),
+          meta: {
+            title: 'AI展馆',
+          },
+        },
+        {
+          path: 'ai-exhibit/:caseId/practice',
+          name: 'ai-experience',
+          component: () => import('@/views/aiExhibit/AiExperienceView.vue'),
+          meta: {
+            title: 'AI体验',
+          },
+        },
+        {
+          path: 'ai-exhibit/draw-guess',
+          name: 'ai-draw-guess',
+          component: () => import('@/views/aiExhibit/AiDrawGuessView.vue'),
+          meta: {
+            title: '你画我猜',
+          },
+        },
+        {
+          path: 'ai-exhibit/face-recognition',
+          name: 'ai-face-recognition',
+          component: () => import('@/views/aiExhibit/AiFaceRecognitionView.vue'),
+          meta: {
+            title: '人脸识别',
+          },
+        },
+        {
           path: 'student',
           name: 'main-student',
           redirect: getStudentEntryPath,
