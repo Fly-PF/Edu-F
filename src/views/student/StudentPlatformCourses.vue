@@ -14,7 +14,7 @@ import {
   User,
   VideoPlay,
 } from '@element-plus/icons-vue'
-import { getStudentCourseChapters, getStudentPublicCourse, listStudentPublicCourses } from '@/api/course'
+import { getCourse, getCourseChapters, listPublicCourses } from '@/api/course'
 import cover1 from '@/assets/course/img1.webp'
 import cover2 from '@/assets/course/img2.webp'
 import cover3 from '@/assets/course/img3.webp'
@@ -66,7 +66,7 @@ async function loadCourses() {
   loading.value = true
   try {
     courses.value =
-      (await listStudentPublicCourses({
+      (await listPublicCourses({
         keyword: filters.keyword.trim() || undefined,
         grade: filters.grade || undefined,
         difficulty: filters.difficulty || undefined,
@@ -91,8 +91,8 @@ async function openDetail(course) {
   detailChapters.value = []
   try {
     const [courseData, chapterData] = await Promise.all([
-      getStudentPublicCourse(course.id),
-      getStudentCourseChapters(course.id),
+      getCourse(course.id),
+      getCourseChapters(course.id),
     ])
     detailCourse.value = courseData
     detailChapters.value = chapterData || []
@@ -173,7 +173,7 @@ onMounted(loadCourses)
     </section>
 
     <section v-loading="loading" class="catalog-grid" aria-live="polite">
-      <article v-for="course in courses" :key="course.id" class="catalog-card" @click="startLearning(course)">
+      <article v-for="course in courses" :key="course.id" class="catalog-card" @click="openDetail(course)">
         <div class="catalog-cover">
           <el-image :src="course.coverUrl || fallbackCover(course)" fit="cover" />
           <span>{{ courseTypeText(course.courseType) }}</span>
@@ -215,6 +215,9 @@ onMounted(loadCourses)
             <span><el-icon><User /></el-icon>{{ detailCourse.teacherName || '平台教师' }}</span>
             <span><el-icon><FolderOpened /></el-icon>{{ detailCourse.totalChapter || 0 }} 个章节</span>
             <span><el-icon><Collection /></el-icon>{{ detailCourse.resourceCount || 0 }} 个资源</span>
+          </div>
+          <div class="detail-actions">
+            <el-button type="primary" @click="startLearning(detailCourse)">开始学习</el-button>
           </div>
           <section class="detail-intro">
             <h3>课程介绍</h3>
@@ -475,6 +478,10 @@ onMounted(loadCourses)
   display: flex;
   align-items: center;
   gap: 5px;
+}
+
+.detail-actions {
+  margin-top: 18px;
 }
 
 .detail-intro,

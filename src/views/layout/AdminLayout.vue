@@ -29,12 +29,32 @@ const personnelMenus = [
   },
 ]
 
+const utilityMenus = [
+  {
+    label: '知识库问答',
+    path: '/main/knowledge-qa',
+    roles: ['ADMIN', 'SUPERADMIN'],
+  },
+]
+
 const visiblePersonnelMenus = computed(() => {
   return personnelMenus.filter((item) => userStore.hasAnyRole(item.roles))
 })
 
+const visibleUtilityMenus = computed(() => {
+  return utilityMenus.filter((item) => userStore.hasAnyRole(item.roles))
+})
+
 const activeMenu = computed(() => {
-  return route.path.startsWith('/main/admin/personnel/') ? route.path : ''
+  if (route.path.startsWith('/main/admin/personnel/')) {
+    return route.path
+  }
+
+  if (route.path === '/main/knowledge-qa') {
+    return route.path
+  }
+
+  return ''
 })
 
 const openedMenus = computed(() => shellStore.openedMenus)
@@ -48,7 +68,14 @@ watch(
       return
     }
 
+    if (path === '/main/knowledge-qa') {
+      shellStore.openMenu('utility')
+      shellStore.setActiveMenu(path)
+      return
+    }
+
     shellStore.closeMenu('personnel')
+    shellStore.closeMenu('utility')
     shellStore.setActiveMenu('')
   },
   { immediate: true },
@@ -71,7 +98,14 @@ function handleClose(index) {
 }
 
 function handleSelect(index) {
-  shellStore.openMenu('personnel')
+  if (index.startsWith('/main/admin/personnel/')) {
+    shellStore.openMenu('personnel')
+  }
+
+  if (index === '/main/knowledge-qa') {
+    shellStore.openMenu('utility')
+  }
+
   shellStore.setActiveMenu(index)
   router.push(index)
 }
@@ -112,6 +146,14 @@ function handleSelect(index) {
               :key="item.path"
               :index="item.path"
             >
+              {{ item.label }}
+            </el-menu-item>
+          </el-sub-menu>
+          <el-sub-menu v-if="visibleUtilityMenus.length" index="utility">
+            <template #title>
+              <span>常用入口</span>
+            </template>
+            <el-menu-item v-for="item in visibleUtilityMenus" :key="item.path" :index="item.path">
               {{ item.label }}
             </el-menu-item>
           </el-sub-menu>

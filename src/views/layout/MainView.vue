@@ -21,11 +21,11 @@ const userTypeMap = {
 }
 
 const studentNavItems = [
-  { label: '学生班级列表', path: '/main/student/classes', roles: ['STUDENT'] },
+  { label: '班级', path: '/main/student/classes', roles: ['STUDENT'] },
 ]
 
 const teacherNavItems = [
-  { label: '老师班级列表/班级管理页', path: '/main/teacher/classes', roles: ['TEACHER'] },
+  { label: '班级管理', path: '/main/teacher/classes', roles: ['TEACHER'] },
   { label: '课程管理', path: '/main/teacher/courses', roles: ['TEACHER'] },
 ]
 
@@ -37,8 +37,13 @@ const navItems = computed(() => {
       roles: [],
     },
     {
-      label: '课程列表',
+      label: '课程',
       path: '/main/courses',
+      roles: [],
+    },
+    {
+      label: '知识库',
+      path: '/main/knowledge-qa',
       roles: [],
     },
   ]
@@ -58,6 +63,16 @@ const navItems = computed(() => {
   return items
 })
 
+const visibleTopNavItems = computed(() => {
+  if (!userStore.hasAnyRole(['ADMIN', 'SUPERADMIN'])) {
+    return navItems.value
+  }
+
+  return navItems.value.filter(
+    (item) => !['/main/home', '/main/courses', '/main/knowledge-qa'].includes(item.path),
+  )
+})
+
 const activePath = computed(() => {
   if (route.path.startsWith('/main/admin')) {
     return getAdminEntryPath()
@@ -65,6 +80,10 @@ const activePath = computed(() => {
 
   if (route.name === 'teacher-course-resources') {
     return '/main/teacher/courses'
+  }
+
+  if (route.name === 'knowledge-qa') {
+    return '/main/knowledge-qa'
   }
 
   if (route.name === 'teacher-class-detail') {
@@ -120,6 +139,14 @@ function handleLogout() {
   router.replace('/login')
 }
 
+function goLogin() {
+  router.push('/login')
+}
+
+function goRegister() {
+  router.push('/register')
+}
+
 async function loadCurrentUserProfile() {
   if (!userStore.token) {
     return
@@ -161,12 +188,12 @@ onMounted(loadCurrentUserProfile)
         :ellipsis="false"
         @select="handleSelect"
       >
-        <el-menu-item v-for="item in navItems" :key="item.path" :index="item.path">
+        <el-menu-item v-for="item in visibleTopNavItems" :key="item.path" :index="item.path">
           {{ item.label }}
         </el-menu-item>
       </el-menu>
 
-      <div class="user-box">
+      <div v-if="userStore.isLoggedIn" class="user-box">
         <div class="user-info">
           <span class="user-name">{{ userStore.realName || userStore.username }}</span>
           <span class="user-role">{{ headerUserType }}</span>
@@ -183,6 +210,10 @@ onMounted(loadCurrentUserProfile)
             </el-dropdown-menu>
           </template>
         </el-dropdown>
+      </div>
+      <div v-else class="auth-actions">
+        <button class="auth-button auth-register" type="button" @click="goRegister">注册</button>
+        <button class="auth-button auth-login" type="button" @click="goLogin">登录</button>
       </div>
     </el-header>
 
@@ -244,6 +275,33 @@ onMounted(loadCurrentUserProfile)
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.auth-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.auth-button {
+  min-width: 88px;
+  height: 40px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: 20px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.auth-register {
+  background: #e7e1ff;
+  color: #5b3fd6;
+}
+
+.auth-login {
+  background: #5137cf;
+  color: #ffffff;
 }
 
 .user-info {

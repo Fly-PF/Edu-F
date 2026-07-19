@@ -31,6 +31,8 @@ function getMainEntryPath(userStore) {
   return '/main/home'
 }
 
+const publicRouteNames = new Set(['main-home', 'course-list', 'login', 'register'])
+
 const personnelRoutes = [
   {
     path: 'personnel/managers',
@@ -147,10 +149,7 @@ const router = createRouter({
   routes: [
     {
       path: '/',
-      redirect: () => {
-        const userStore = useUserStore()
-        return userStore.isLoggedIn ? '/main' : '/login'
-      },
+      redirect: '/main/home',
     },
     {
       path: '/login',
@@ -161,15 +160,31 @@ const router = createRouter({
       },
     },
     {
+      path: '/register',
+      name: 'register',
+      component: () => import('@/views/common/RegisterView.vue'),
+      meta: {
+        publicOnly: true,
+      },
+    },
+    {
       path: '/main',
       name: 'main',
       component: () => import('@/views/layout/MainView.vue'),
-      redirect: () => getMainEntryPath(useUserStore()),
+      redirect: '/main/home',
       children: [
         {
           path: 'home',
           name: 'main-home',
           component: () => import('@/views/common/PublicHomeView.vue'),
+        },
+        {
+          path: 'knowledge-qa',
+          name: 'knowledge-qa',
+          component: () => import('@/views/common/KnowledgeBaseChatView.vue'),
+          meta: {
+            title: '知识库问答',
+          },
         },
         {
           path: 'profile',
@@ -236,10 +251,7 @@ const router = createRouter({
     },
     {
       path: '/:pathMatch(.*)*',
-      redirect: () => {
-        const userStore = useUserStore()
-        return userStore.isLoggedIn ? '/main' : '/login'
-      },
+      redirect: '/main/home',
     },
   ],
 })
@@ -248,10 +260,10 @@ router.beforeEach((to) => {
   const userStore = useUserStore()
 
   if (to.meta.publicOnly && userStore.isLoggedIn) {
-    return '/main'
+    return '/main/home'
   }
 
-  if (!to.meta.publicOnly && !userStore.isLoggedIn) {
+  if (!publicRouteNames.has(String(to.name || '')) && !userStore.isLoggedIn) {
     return '/login'
   }
 

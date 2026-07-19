@@ -13,6 +13,22 @@ function isLoginRequest(config) {
   return config?.url?.includes('/user/login/')
 }
 
+function isPublicCourseRequest(config) {
+  const method = (config?.method || 'get').toLowerCase()
+  const url = String(config?.url || '').split('?')[0]
+
+  return (
+    method === 'get' &&
+    (/^\/api\/courses$/.test(url) ||
+      /^\/api\/courses\/[^/]+$/.test(url) ||
+      /^\/api\/courses\/[^/]+\/chapters$/.test(url))
+  )
+}
+
+function isPublicRequest(config) {
+  return isLoginRequest(config) || isPublicCourseRequest(config)
+}
+
 function redirectToLogin() {
   import('@/router').then(({ default: router }) => {
     if (router.currentRoute.value.path !== '/login') {
@@ -32,7 +48,7 @@ instance.interceptors.request.use(
   function (config) {
     const userStore = useUserStore()
 
-    if (!isLoginRequest(config) && !userStore.isLoggedIn) {
+    if (!isPublicRequest(config) && !userStore.isLoggedIn) {
       return handleAuthExpired('请先登录')
     }
 
