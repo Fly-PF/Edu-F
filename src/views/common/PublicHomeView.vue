@@ -200,11 +200,6 @@ function goTeacherPage(path) {
           </div>
         </div>
       </div>
-
-      <div class="floating-actions" aria-hidden="true">
-        <div class="gift-box">邀请<br />有礼</div>
-        <div class="mini-action">?</div>
-      </div>
     </section>
 
     <section class="course-section">
@@ -901,43 +896,6 @@ button {
   font-size: 20px;
 }
 
-.floating-actions {
-  position: fixed;
-  right: 20px;
-  bottom: 32px;
-  z-index: 5;
-  display: grid;
-  gap: 18px;
-  justify-items: center;
-}
-
-.gift-box {
-  display: grid;
-  width: 70px;
-  height: 76px;
-  place-items: center;
-  border-radius: 22px;
-  background: #ffffff;
-  box-shadow: 0 12px 32px rgb(29 37 72 / 15%);
-  color: #ff4b43;
-  font-size: 22px;
-  font-weight: 900;
-  line-height: 1.05;
-}
-
-.mini-action {
-  display: grid;
-  width: 44px;
-  height: 44px;
-  place-items: center;
-  border-radius: 50%;
-  background: #ffffff;
-  color: #a79ee8;
-  font-size: 22px;
-  font-weight: 900;
-  box-shadow: 0 8px 24px rgb(29 37 72 / 12%);
-}
-
 .course-section {
   display: grid;
   min-height: 640px;
@@ -1376,7 +1334,6 @@ button {
 
   .migo-card::after,
   .mascot,
-  .floating-actions,
   .stage-figure {
     display: none;
   }
