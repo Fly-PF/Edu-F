@@ -136,7 +136,7 @@ function handleUserCommand(command) {
 
 function handleLogout() {
   userStore.clearUser()
-  router.replace('/login')
+  router.replace('/main/home')
 }
 
 function goLogin() {

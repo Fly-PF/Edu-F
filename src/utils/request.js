@@ -13,6 +13,10 @@ function isLoginRequest(config) {
   return config?.url?.includes('/user/login/')
 }
 
+function isRegisterRequest(config) {
+  return config?.url === '/api/user/register/student'
+}
+
 function isPublicCourseRequest(config) {
   const method = (config?.method || 'get').toLowerCase()
   const url = String(config?.url || '').split('?')[0]
@@ -26,7 +30,7 @@ function isPublicCourseRequest(config) {
 }
 
 function isPublicRequest(config) {
-  return isLoginRequest(config) || isPublicCourseRequest(config)
+  return isLoginRequest(config) || isRegisterRequest(config) || isPublicCourseRequest(config)
 }
 
 function redirectToLogin() {

@@ -7,3 +7,11 @@ export function loginByUsername(data) {
     data,
   })
 }
+
+export function registerStudent(data) {
+  return request({
+    url: '/api/user/register/student',
+    method: 'post',
+    data,
+  })
+}

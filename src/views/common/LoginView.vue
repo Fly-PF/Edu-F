@@ -1,18 +1,19 @@
 <script setup>
 import { reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { loginByUsername } from '@/api/auth'
 import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
 const formRef = ref(null)
 const loading = ref(false)
 const errorMessage = ref('')
 
 const form = reactive({
-  username: '',
+  username: typeof route.query.username === 'string' ? route.query.username : '',
   password: '',
 })
 
@@ -120,6 +121,11 @@ async function handleLogin() {
           <el-button class="login-button" type="primary" size="large" :loading="loading" @click="handleLogin">
             登录
           </el-button>
+
+          <div class="login-actions">
+            <RouterLink class="login-link" to="/register">注册账号</RouterLink>
+            <RouterLink class="login-link muted-link" to="/main/home">返回首页</RouterLink>
+          </div>
         </el-form>
       </div>
     </section>
@@ -306,6 +312,23 @@ async function handleLogin() {
 .login-button {
   width: 100%;
   margin-top: 8px;
+}
+
+.login-actions {
+  display: flex;
+  justify-content: center;
+  gap: 26px;
+  margin-top: 18px;
+}
+
+.login-link {
+  color: #0b63e5;
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.muted-link {
+  color: #5f6b7a;
 }
 
 @media (max-width: 900px) {
