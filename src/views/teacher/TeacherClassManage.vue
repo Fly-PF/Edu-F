@@ -115,9 +115,6 @@
             <el-radio :value="2">公开可直接加入</el-radio>
           </el-radio-group>
         </el-form-item>
-        <el-form-item v-if="!isEditing && formData.joinType === 1" label="邀请码" prop="classCode">
-          <el-input v-model="formData.classCode" placeholder="不填则自动生成" maxlength="30" />
-        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
@@ -165,8 +162,7 @@ const formData = reactive({
   className: '',
   grade: '',
   school: '',
-  joinType: 1,
-  classCode: ''
+  joinType: 1
 })
 
 const formRules = {
@@ -222,7 +218,6 @@ function openCreateDialog() {
   formData.grade = ''
   formData.school = ''
   formData.joinType = 1
-  formData.classCode = ''
   dialogVisible.value = true
   nextTick(() => formRef.value?.clearValidate())
 }
@@ -234,7 +229,6 @@ function openEditDialog(row) {
   formData.grade = row.grade
   formData.school = row.school
   formData.joinType = row.joinType
-  formData.classCode = ''
   dialogVisible.value = true
   nextTick(() => formRef.value?.clearValidate())
 }
@@ -262,8 +256,7 @@ async function submitForm() {
         className: formData.className.trim(),
         grade: formData.grade.trim(),
         school: formData.school.trim(),
-        joinType: formData.joinType,
-        classCode: formData.classCode.trim() || undefined
+        joinType: formData.joinType
       })
     }
     if (res.code === 200) {

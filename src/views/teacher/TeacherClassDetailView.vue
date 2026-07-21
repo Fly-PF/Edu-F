@@ -8,7 +8,6 @@ import {
   CopyDocument,
   DataAnalysis,
   Delete,
-  Edit,
   Link,
   Plus,
   Refresh,
@@ -30,8 +29,8 @@ import {
   removeAssignedCourse,
   removeClassStudent,
   updateAssignedCourseDeadline,
-  updateClassInviteCode,
 } from '@/api/teacherClassDetail'
+import classDetailMascot from '@/assets/teacher/class-detail-mascot.png'
 
 const route = useRoute()
 
@@ -39,11 +38,6 @@ const currentClassId = ref('')
 const pageLoading = ref(false)
 const classDetail = ref({})
 const inviteInfo = ref({})
-
-const inviteDialogVisible = ref(false)
-const inviteForm = reactive({
-  classCode: '',
-})
 
 const assignDialogVisible = ref(false)
 const assignForm = reactive({
@@ -387,36 +381,6 @@ function handleProgressCourseChange() {
   loadCourseProgress()
 }
 
-function openInviteDialog() {
-  inviteForm.classCode = visibleClassCode.value === '-' ? '' : visibleClassCode.value
-  inviteDialogVisible.value = true
-}
-
-async function saveInviteCode() {
-  const classCode = inviteForm.classCode.trim()
-
-  if (!classCode) {
-    ElMessage.warning('请输入新的邀请码')
-    return
-  }
-
-  try {
-    const data = readResponse(await updateClassInviteCode(currentClassId.value, classCode))
-    inviteInfo.value = {
-      ...inviteInfo.value,
-      classCode: data?.classCode || classCode,
-    }
-    classDetail.value = {
-      ...classDetail.value,
-      classCode: data?.classCode || classCode,
-    }
-    inviteDialogVisible.value = false
-    ElMessage.success('邀请码已修改')
-  } catch (error) {
-    showError(error, '邀请码修改失败')
-  }
-}
-
 async function refreshInviteCode() {
   try {
     await ElMessageBox.confirm('刷新后旧邀请码将不可再用于加入班级，确认刷新吗？', '刷新邀请码', {
@@ -615,32 +579,7 @@ watch(
           <div class="sidebar-card">
             <div class="sidebar-class">
               <div class="sidebar-cover mascot-cover" aria-hidden="true">
-                <svg class="class-mascot" viewBox="0 0 180 128" role="img">
-                  <rect width="180" height="128" rx="18" fill="url(#mascotBg)" />
-                  <circle cx="137" cy="27" r="18" fill="#DDF0FF" />
-                  <path d="M38 92C68 76 106 76 140 92" stroke="#9AD0FF" stroke-width="2" stroke-linecap="round" />
-                  <path d="M48 94C68 101 106 105 136 98" stroke="#FFB338" stroke-width="8" stroke-linecap="round" />
-                  <circle cx="66" cy="103" r="6" fill="#F8FAFC" stroke="#C9D8EA" stroke-width="2" />
-                  <circle cx="120" cy="104" r="6" fill="#F8FAFC" stroke="#C9D8EA" stroke-width="2" />
-                  <path d="M87 44C78 42 71 49 69 59C66 72 75 84 88 84C102 85 111 75 109 62C107 51 98 43 87 44Z" fill="#FFCA64" />
-                  <path d="M70 59C58 64 48 73 41 82" stroke="#FFCA64" stroke-width="12" stroke-linecap="round" />
-                  <path d="M109 62C122 64 133 70 140 79" stroke="#FFCA64" stroke-width="12" stroke-linecap="round" />
-                  <path d="M78 80C73 89 68 96 61 102" stroke="#263247" stroke-width="12" stroke-linecap="round" />
-                  <path d="M99 80C108 88 115 96 121 105" stroke="#263247" stroke-width="12" stroke-linecap="round" />
-                  <path d="M72 52C67 42 70 31 80 25L84 39L72 52Z" fill="#FF9B41" />
-                  <path d="M104 52C111 42 109 32 101 25L94 39L104 52Z" fill="#FF9B41" />
-                  <ellipse cx="88" cy="45" rx="22" ry="20" fill="#FFB25F" />
-                  <circle cx="80" cy="45" r="2.4" fill="#243047" />
-                  <circle cx="96" cy="45" r="2.4" fill="#243047" />
-                  <path d="M86 52C89 55 94 54 96 51" stroke="#243047" stroke-width="2" stroke-linecap="round" />
-                  <path d="M86 23C94 17 106 18 112 25C103 25 94 27 86 23Z" fill="#FF8B2F" />
-                  <defs>
-                    <linearGradient id="mascotBg" x1="0" y1="0" x2="180" y2="128" gradientUnits="userSpaceOnUse">
-                      <stop stop-color="#F7FBFF" />
-                      <stop offset="1" stop-color="#FFFFFF" />
-                    </linearGradient>
-                  </defs>
-                </svg>
+                <img :src="classDetailMascot" alt="" />
               </div>
               <div>
                 <strong>{{ classDetail.className || '班级详情' }}</strong>
@@ -667,32 +606,7 @@ watch(
           >
             <div class="summary-main">
               <div class="class-cover-card mascot-cover" aria-hidden="true">
-                <svg class="class-mascot" viewBox="0 0 180 128" role="img">
-                  <rect width="180" height="128" rx="18" fill="url(#mascotBg2)" />
-                  <circle cx="137" cy="27" r="18" fill="#DDF0FF" />
-                  <path d="M38 92C68 76 106 76 140 92" stroke="#9AD0FF" stroke-width="2" stroke-linecap="round" />
-                  <path d="M48 94C68 101 106 105 136 98" stroke="#FFB338" stroke-width="8" stroke-linecap="round" />
-                  <circle cx="66" cy="103" r="6" fill="#F8FAFC" stroke="#C9D8EA" stroke-width="2" />
-                  <circle cx="120" cy="104" r="6" fill="#F8FAFC" stroke="#C9D8EA" stroke-width="2" />
-                  <path d="M87 44C78 42 71 49 69 59C66 72 75 84 88 84C102 85 111 75 109 62C107 51 98 43 87 44Z" fill="#FFCA64" />
-                  <path d="M70 59C58 64 48 73 41 82" stroke="#FFCA64" stroke-width="12" stroke-linecap="round" />
-                  <path d="M109 62C122 64 133 70 140 79" stroke="#FFCA64" stroke-width="12" stroke-linecap="round" />
-                  <path d="M78 80C73 89 68 96 61 102" stroke="#263247" stroke-width="12" stroke-linecap="round" />
-                  <path d="M99 80C108 88 115 96 121 105" stroke="#263247" stroke-width="12" stroke-linecap="round" />
-                  <path d="M72 52C67 42 70 31 80 25L84 39L72 52Z" fill="#FF9B41" />
-                  <path d="M104 52C111 42 109 32 101 25L94 39L104 52Z" fill="#FF9B41" />
-                  <ellipse cx="88" cy="45" rx="22" ry="20" fill="#FFB25F" />
-                  <circle cx="80" cy="45" r="2.4" fill="#243047" />
-                  <circle cx="96" cy="45" r="2.4" fill="#243047" />
-                  <path d="M86 52C89 55 94 54 96 51" stroke="#243047" stroke-width="2" stroke-linecap="round" />
-                  <path d="M86 23C94 17 106 18 112 25C103 25 94 27 86 23Z" fill="#FF8B2F" />
-                  <defs>
-                    <linearGradient id="mascotBg2" x1="0" y1="0" x2="180" y2="128" gradientUnits="userSpaceOnUse">
-                      <stop stop-color="#F7FBFF" />
-                      <stop offset="1" stop-color="#FFFFFF" />
-                    </linearGradient>
-                  </defs>
-                </svg>
+                <img :src="classDetailMascot" alt="" />
               </div>
               <div class="summary-copy">
                 <div class="title-row">
@@ -752,12 +666,6 @@ watch(
             <el-button plain @click="copyInviteCode">
               <el-icon><CopyDocument /></el-icon>
               复制
-            </el-button>
-          </el-tooltip>
-          <el-tooltip content="手动设置一个新的邀请码" placement="top">
-            <el-button @click="openInviteDialog">
-              <el-icon><Edit /></el-icon>
-              修改
             </el-button>
           </el-tooltip>
           <el-tooltip content="生成新的邀请码，旧码会失效" placement="top">
@@ -1053,18 +961,6 @@ watch(
         </div>
       </div>
     </template>
-
-    <el-dialog v-model="inviteDialogVisible" title="修改邀请码" width="420px">
-      <el-form label-width="90px">
-        <el-form-item label="邀请码">
-          <el-input v-model="inviteForm.classCode" maxlength="32" placeholder="请输入新的邀请码" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="inviteDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveInviteCode">保存</el-button>
-      </template>
-    </el-dialog>
 
     <el-dialog v-model="assignDialogVisible" title="下发课程" width="460px">
       <el-form label-width="90px">
@@ -2906,14 +2802,6 @@ h2 {
   display: grid;
   place-items: center;
   background: linear-gradient(135deg, #f7fbff, #ffffff) !important;
-}
-
-.class-mascot {
-  display: block;
-  width: 100%;
-  height: 100%;
-  position: relative;
-  z-index: 1;
 }
 
 .sidebar-cover img,

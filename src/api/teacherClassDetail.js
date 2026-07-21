@@ -12,10 +12,6 @@ export function refreshClassInviteCode(classId) {
   return request.post(`/api/teacher/classes/${classId}/invite-code/refresh`)
 }
 
-export function updateClassInviteCode(classId, classCode) {
-  return request.put(`/api/teacher/classes/${classId}/invite-code`, { classCode })
-}
-
 export function getClassStudents(classId, params) {
   return request.get(`/api/teacher/classes/${classId}/students`, { params })
 }
