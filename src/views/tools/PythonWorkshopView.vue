@@ -32,6 +32,7 @@ const router = useRouter()
 const editorHost = ref(null)
 const activeFileId = ref('main')
 const openFileIds = ref(['readme', 'main'])
+const projectTitle = ref('未命名 Python 项目')
 const runMessage = ref('暂无运行结果')
 const runStatus = ref('empty')
 let editor = null
@@ -180,6 +181,31 @@ function runScript() {
 ${editor?.getValue() || ''}`
 }
 
+function saveProject() {
+  if (editor && activeFile.value) {
+    activeFile.value.content = editor.getValue()
+  }
+
+  const title = projectTitle.value.trim() || '未命名 Python 项目'
+  const record = {
+    id: 'python-default',
+    type: 'python',
+    title,
+    description: `${files.value.length} 个文件`,
+    updatedTime: new Date().toISOString(),
+    files: JSON.parse(JSON.stringify(files.value)),
+  }
+
+  try {
+    const saved = JSON.parse(localStorage.getItem('edu-python-projects') || '[]')
+    const projects = Array.isArray(saved) ? saved : []
+    localStorage.setItem('edu-python-projects', JSON.stringify([record, ...projects.filter((item) => item.id !== record.id)]))
+    ElMessage.success('Python 项目已保存')
+  } catch {
+    ElMessage.error('项目保存失败，请检查浏览器存储设置')
+  }
+}
+
 onMounted(async () => {
   await nextTick()
 
@@ -227,7 +253,7 @@ onBeforeUnmount(() => {
         <span class="version-text">版本: 草稿</span>
       </div>
 
-      <button class="project-title" type="button">未命名项目</button>
+      <input v-model="projectTitle" class="project-title" aria-label="Python 项目名称" maxlength="100" />
 
       <div class="header-actions">
         <button class="round-button" type="button" aria-label="设置">
@@ -235,6 +261,9 @@ onBeforeUnmount(() => {
         </button>
         <button class="round-button" type="button" aria-label="新建文件" @click="createFile">
           <el-icon><Plus /></el-icon>
+        </button>
+        <button class="round-button" type="button" aria-label="保存项目" @click="saveProject">
+          <el-icon><Document /></el-icon>
         </button>
         <button class="icon-button" type="button" aria-label="更多">
           <el-icon><MoreFilled /></el-icon>
@@ -416,11 +445,13 @@ onBeforeUnmount(() => {
   border: 0;
   background: transparent;
   color: #ffffff;
-  cursor: pointer;
   font: inherit;
   font-size: 17px;
   font-weight: 700;
+  text-align: center;
 }
+
+.project-title:focus-visible { outline: 2px solid #9de4eb; outline-offset: 3px; }
 
 .header-actions {
   justify-content: flex-end;

@@ -172,6 +172,24 @@ const toolRoutes = [
       allowAnonymous: true,
     },
   },
+  {
+    path: 'blocks',
+    name: 'block-workshop',
+    component: () => import('@/views/tools/BlockWorkshopView.vue'),
+    meta: {
+      title: '积木工坊',
+      allowAnonymous: true,
+    },
+  },
+  {
+    path: 'blocks/projects',
+    name: 'block-project-gallery',
+    redirect: '/main/projects?type=blocks',
+    meta: {
+      title: '积木项目',
+      allowAnonymous: true,
+    },
+  },
 ]
 
 const router = createRouter({
@@ -230,6 +248,14 @@ const router = createRouter({
           component: () => import('@/views/student/StudentCourseStudy.vue'),
           meta: {
             title: '课程学习',
+          },
+        },
+        {
+          path: 'projects',
+          name: 'project-center',
+          component: () => import('@/views/common/ProjectCenterView.vue'),
+          meta: {
+            title: '项目中心',
           },
         },
         {

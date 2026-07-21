@@ -4,8 +4,9 @@ import { useRouter } from 'vue-router'
 import { ArrowRight, MagicStick, Search, StarFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { listAiProjectCases } from '@/api/aiExhibit'
-import drawGuessCover from '@/assets/img/bd5497d4-7e7a-4984-965d-2a2024e85d8f.png'
-import textClassificationCover from '@/assets/img/ad5e70fe-b530-433a-bb6d-ef956ad7882f.png'
+import drawGuessCover from '@/assets/img/ai-draw-guess.png'
+import textClassificationCover from '@/assets/img/ai-text-classification.png'
+import faceRecognitionCover from '@/assets/img/ai-face-recognition.png'
 
 const router = useRouter()
 const loading = ref(false)
@@ -38,6 +39,7 @@ const cardPresets = {
     coverImage: textClassificationCover,
   },
   face_recognition: {
+    coverImage: faceRecognitionCover,
     title: '人脸识别',
     subtitle: '录入人脸并与实时画面做比对',
     badge: '实时体验',
@@ -106,6 +108,7 @@ const fallbackCards = [
     heat: '79,423',
     learners: '14,886',
     motif: 'text',
+    coverImage: textClassificationCover,
   },
   {
     id: 'local-face-recognition',
@@ -121,21 +124,6 @@ const fallbackCards = [
     heat: '118,204',
     learners: '26,480',
     motif: 'face',
-  },
-  {
-    id: 'local-doodle',
-    projectCode: 'doodle_recognition',
-    projectName: '涂鸦识别',
-    caseSummary: '使用 AI 模型识别简笔画',
-    gradeBand: '小学',
-    subjectDirection: '美术',
-    practiceType: 'vision',
-    aiCapability: 'vision',
-    badge: '最新上架',
-    theme: 'yellow',
-    heat: '454,929',
-    learners: '46,477',
-    motif: 'doodle',
   },
   {
     id: 'local-gesture',
@@ -188,7 +176,9 @@ const exhibitCards = computed(() => {
       ...item,
       coverImage: resolveCoverImage(item.projectCode, item.coverImage),
     }))
-  const allCards = [...priorityCards, ...remoteCards, ...otherFallbackCards]
+  const allCards = [...priorityCards, ...remoteCards, ...otherFallbackCards].filter(
+    (item) => item.projectCode !== 'doodle_recognition',
+  )
   const seenKeys = new Set()
   const uniqueCards = allCards.filter((item) => {
     const key = item.projectCode || item.id
@@ -217,15 +207,19 @@ function resolveCoverImage(projectCode, coverImage, preset = {}) {
     return preset.coverImage
   }
 
-  if (projectCode === 'face_recognition') {
-    return null
+  if (projectCode === 'draw_guess') {
+    return drawGuessCover
   }
 
   if (projectCode === 'text_classification') {
     return textClassificationCover
   }
 
-  return drawGuessCover
+  if (projectCode === 'face_recognition') {
+    return faceRecognitionCover
+  }
+
+  return null
 }
 
 async function loadCases() {
@@ -887,9 +881,10 @@ onMounted(loadCases)
 .experience-card.has-cover { min-height: 212px; aspect-ratio: auto; padding: 25px 24px 21px; }
 .experience-card:hover { transform: translate(-4px, -6px) rotate(-.45deg); box-shadow: 10px 11px 0 rgb(61 53 100 / 76%); }
 .experience-card::after { position: absolute; inset: 0; z-index: 1; content: ''; background: linear-gradient(180deg, transparent 24%, rgb(44 37 79 / 14%) 100%); pointer-events: none; }
-.experience-card.has-cover::after { background: linear-gradient(180deg, transparent 25%, rgb(43 34 83 / 35%) 100%); }
-.cover-image { z-index: 0; width: 100%; height: 100%; object-fit: cover; opacity: .9; mix-blend-mode: multiply; }
-.experience-card.has-cover .card-title, .experience-card.has-cover .card-action { color: #fff; text-shadow: 0 1px 2px rgb(61 53 100 / 32%); }
+.experience-card.has-cover::after { background: linear-gradient(180deg, transparent 40%, rgb(61 53 100 / 6%) 100%); }
+.cover-image { z-index: 0; width: 100%; height: 100%; object-fit: cover; opacity: 1; mix-blend-mode: normal; }
+.experience-card.has-cover .card-title, .experience-card.has-cover .card-action { color: var(--ink); text-shadow: 0 1px 1px rgb(255 255 255 / 48%); }
+.experience-card.theme-dark.has-cover .card-title, .experience-card.theme-dark.has-cover .card-action { color: #fff; text-shadow: 0 1px 2px rgb(12 10 28 / 58%); }
 .experience-card.has-cover .card-title { max-width: 82%; margin-top: 18px; }.experience-card.has-cover .card-action { color: rgb(255 255 255 / 92%); }
 .card-title { z-index: 2; max-width: 76%; margin-top: 12px; font-family: 'Trebuchet MS', 'Microsoft YaHei', sans-serif; font-size: 23px; font-weight: 900; line-height: 1.14; }.card-action { display: inline-flex; align-items: center; gap: 5px; z-index: 2; margin-top: auto; padding-top: 14px; color: rgb(255 255 255 / 88%); font-size: 13px; font-weight: 800; }
 .corner-badge { top: 12px; right: 12px; width: auto; height: auto; padding: 4px 8px; transform: rotate(3deg); border: 1px solid var(--ink); border-radius: 4px; background: var(--yellow); box-shadow: 2px 2px 0 rgb(61 53 100 / 35%); color: var(--ink); font-size: 10px; line-height: 1.25; }

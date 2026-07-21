@@ -44,6 +44,11 @@ const navItems = computed(() => {
       roles: [],
     },
     {
+      label: '项目',
+      path: '/main/projects',
+      roles: [],
+    },
+    {
       label: '在线工具',
       path: '/tools',
       roles: [],
@@ -92,6 +97,10 @@ const activePath = computed(() => {
 
   if (route.path.startsWith('/tools')) {
     return '/tools'
+  }
+
+  if (route.path.startsWith('/main/projects')) {
+    return '/main/projects'
   }
 
   return route.path
