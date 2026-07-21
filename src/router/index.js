@@ -93,6 +93,15 @@ const teacherRoutes = [
     },
   },
   {
+    path: 'teacher/ai-assistant',
+    name: 'teacher-ai-assistant',
+    component: () => import('@/views/teacher/TeacherAiAssistant.vue'),
+    meta: {
+      title: 'AI备课与批改',
+      allowedRoles: ['TEACHER'],
+    },
+  },
+  {
     path: 'teacher/course-resources',
     name: 'teacher-course-resources',
     component: () => import('@/views/teacher/TeacherCourseResources.vue'),

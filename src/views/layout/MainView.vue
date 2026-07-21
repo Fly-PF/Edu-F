@@ -27,6 +27,7 @@ const studentNavItems = [
 const teacherNavItems = [
   { label: '老师班级列表/班级管理页', path: '/main/teacher/classes', roles: ['TEACHER'] },
   { label: '课程管理', path: '/main/teacher/courses', roles: ['TEACHER'] },
+  { label: 'AI备课与批改', path: '/main/teacher/ai-assistant', roles: ['TEACHER'] },
 ]
 
 const navItems = computed(() => {
