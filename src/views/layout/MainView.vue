@@ -78,7 +78,7 @@ const activePath = computed(() => {
     return '/main/teacher/classes'
   }
 
-  if (route.name === 'student-platform-courses' || route.name === 'course-learn') {
+  if (route.name === 'student-platform-courses' || route.name === 'course-search' || route.name === 'course-learn') {
     return '/main/courses'
   }
 

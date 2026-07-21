@@ -512,4 +512,30 @@ onBeforeUnmount(() => {
     padding: 12px 16px;
   }
 }
+/* Drawing studio - uses the same playful exploration palette */
+.draw-guess-page {
+  --ink: #3d3564;
+  --purple: #8178cf;
+  --pink: #ee91bb;
+  --mint: #9de4eb;
+  --yellow: #fff1a8;
+  height: calc(100vh - 64px);
+  display: flex;
+  flex-direction: column;
+  padding: 24px clamp(18px, 4vw, 56px) 48px;
+  overflow: hidden;
+  background-color: #fbfbff;
+  background-image: linear-gradient(90deg, rgb(129 120 207 / 5%) 1px, transparent 1px), linear-gradient(rgb(238 145 187 / 5%) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+.draw-guess-page::before { position: absolute; top: -130px; right: 9%; width: 270px; height: 270px; content: ''; border: 2px solid rgb(238 145 187 / 28%); border-radius: 46% 54% 62% 38%; transform: rotate(18deg); animation: draw-float 10s ease-in-out infinite; }
+.draw-guess-page::after { position: absolute; right: 4%; bottom: 8%; width: 68px; height: 68px; content: '+'; color: rgb(82 187 196 / 48%); font-size: 68px; font-weight: 300; line-height: 1; animation: draw-spark 2.4s ease-in-out infinite; }
+.back-button { position: relative; top: auto; left: auto; z-index: 2; width: 44px; height: 44px; margin: 0 0 18px; border: 1px solid rgb(78 68 121 / 48%); border-radius: 6px; background: #fff; box-shadow: 2px 3px 0 rgb(61 53 100 / 20%); color: var(--purple); transition: transform .18s ease, box-shadow .18s ease; }.back-button:hover { transform: translate(-2px, -2px); box-shadow: 4px 5px 0 rgb(61 53 100 / 20%); }
+.draw-shell { position: relative; z-index: 1; flex: 1 1 auto; grid-template-rows: 68px minmax(0, 1fr) 86px; width: 100%; height: auto; min-height: 0; max-width: 1480px; margin: 0 auto; overflow: hidden; border: 2px solid var(--ink); border-radius: 10px; box-shadow: 7px 8px 0 rgb(61 53 100 / 70%); }
+.prompt-bar, .result-bar { background: linear-gradient(105deg, #e8e4ff 0%, #f9ddec 52%, #d3f2f2 100%); color: var(--ink); }.prompt-bar { padding: 0 24px; border-bottom: 1px solid rgb(61 53 100 / 26%); }.prompt-title { font-family: 'Trebuchet MS', 'Microsoft YaHei', sans-serif; font-size: 26px; font-weight: 900; }.prompt-title::before { display: inline-grid; width: 26px; height: 26px; margin-right: 10px; place-items: center; border: 1px solid var(--ink); border-radius: 50%; background: var(--yellow); content: '?'; font-family: Arial, sans-serif; font-size: 16px; vertical-align: 2px; }.prompt-actions button { min-height: 34px; padding: 0 9px; border: 1px solid rgb(78 68 121 / 38%); border-radius: 4px; background: rgb(255 255 255 / 78%); box-shadow: 2px 2px 0 rgb(61 53 100 / 13%); color: #655a8c; font-size: 13px; }.prompt-actions button:hover { background: #fff; color: var(--purple); }
+.canvas-wrap { background-color: #fff; background-image: radial-gradient(rgb(129 120 207 / 18%) 1.2px, transparent 1.4px); background-size: 24px 24px; }.canvas-wrap::before { position: absolute; top: 15px; right: 20px; z-index: 1; padding: 5px 9px; border: 1px solid rgb(78 68 121 / 36%); border-radius: 4px; background: rgb(255 241 168 / 86%); box-shadow: 2px 2px 0 rgb(61 53 100 / 15%); color: #665a80; content: 'DRAW IT!'; font-size: 10px; font-weight: 900; letter-spacing: 1px; transform: rotate(3deg); pointer-events: none; }.draw-canvas { position: relative; z-index: 2; }
+.result-bar { min-height: 86px; padding: 0 25px; border-top: 1px solid rgb(61 53 100 / 26%); color: #51486f; font-size: clamp(16px, 1.8vw, 22px); font-weight: 750; }.result-bar::before { display: inline-block; width: 9px; height: 9px; margin-right: 12px; border: 1px solid var(--ink); border-radius: 50%; background: var(--pink); content: ''; box-shadow: 14px 0 0 var(--mint), 28px 0 0 var(--yellow); }
+@keyframes draw-float { 0%, 100% { transform: rotate(18deg) translate(0); } 50% { transform: rotate(27deg) translate(-14px, 14px); } }
+@keyframes draw-spark { 0%, 100% { opacity: .32; transform: scale(.82) rotate(0); } 50% { opacity: .88; transform: scale(1.1) rotate(18deg); } }
+@media (max-width: 900px) { .draw-guess-page { height: calc(100vh - 64px); padding: 16px 16px 28px; }.draw-shell { grid-template-rows: auto minmax(0, 1fr) auto; }.prompt-bar { padding: 13px 16px; }.result-bar { min-height: 76px; padding: 12px 16px; }.prompt-title { font-size: 21px; } }
 </style>

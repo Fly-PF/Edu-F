@@ -1,6 +1,6 @@
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   Clock,
@@ -14,7 +14,7 @@ import {
   User,
   VideoPlay,
 } from '@element-plus/icons-vue'
-import { getCourse, getCourseChapters, listPublicCourses } from '@/api/course'
+import { getCourse, getCourseChapters, listCourseTags, listPublicCourses } from '@/api/course'
 import cover1 from '@/assets/course/img1.webp'
 import cover2 from '@/assets/course/img2.webp'
 import cover3 from '@/assets/course/img3.webp'
@@ -22,13 +22,18 @@ import cover4 from '@/assets/course/img4.webp'
 
 const covers = [cover1, cover2, cover3, cover4]
 const router = useRouter()
+const route = useRoute()
 const loading = ref(false)
 const courses = ref([])
+const availableTags = ref([])
+const selectedTags = ref([])
+const matchAll = ref(false)
 const filters = reactive({
   keyword: '',
   grade: '',
   difficulty: null,
   courseType: null,
+  sortBy: 'publishedDesc',
 })
 
 const detailVisible = ref(false)
@@ -59,13 +64,15 @@ function resourceTypeText(type) {
 async function loadCourses() {
   loading.value = true
   try {
-    courses.value =
-      (await listPublicCourses({
+    const data = await listPublicCourses({
         keyword: filters.keyword.trim() || undefined,
         grade: filters.grade || undefined,
         difficulty: filters.difficulty || undefined,
         courseType: filters.courseType || undefined,
-      })) || []
+        tags: selectedTags.value.join(',') || undefined,
+        matchAll: matchAll.value || undefined,
+      })
+    courses.value = sortCourses(data || [])
   } catch (error) {
     ElMessage.error(error?.message || '课程列表加载失败')
   } finally {
@@ -74,8 +81,29 @@ async function loadCourses() {
 }
 
 function resetFilters() {
-  Object.assign(filters, { keyword: '', grade: '', difficulty: null, courseType: null })
+  Object.assign(filters, { keyword: '', grade: '', difficulty: null, courseType: null, sortBy: 'publishedDesc' })
+  selectedTags.value = []
+  matchAll.value = false
   loadCourses()
+}
+
+function sortCourses(list) {
+  return [...list].sort((left, right) => {
+    if (filters.sortBy === 'likes') {
+      return Number(right.likeCount || 0) - Number(left.likeCount || 0)
+    }
+    const leftTime = new Date(left.publishedTime || left.updatedTime || left.createdTime || 0).getTime()
+    const rightTime = new Date(right.publishedTime || right.updatedTime || right.createdTime || 0).getTime()
+    return filters.sortBy === 'publishedAsc' ? leftTime - rightTime : rightTime - leftTime
+  })
+}
+
+function syncRouteFilters() {
+  const tagQuery = Array.isArray(route.query.tags) ? route.query.tags.join(',') : route.query.tags
+  selectedTags.value = typeof tagQuery === 'string'
+    ? tagQuery.split(',').map((tag) => tag.trim()).filter(Boolean)
+    : []
+  matchAll.value = route.query.matchAll === 'true'
 }
 
 async function openDetail(course) {
@@ -102,46 +130,24 @@ function startLearning(course) {
   router.push({ name: 'course-learn', params: { courseId: course.id } })
 }
 
-onMounted(loadCourses)
+watch(selectedTags, () => loadCourses(), { deep: true })
+onMounted(async () => {
+  syncRouteFilters()
+  try {
+    availableTags.value = (await listCourseTags()) || []
+  } catch {
+    availableTags.value = []
+  }
+  await loadCourses()
+})
 </script>
 
 <template>
   <main class="platform-course-page">
-    <header class="course-hero">
-      <div class="hero-copy">
-        <p class="hero-kicker"><span></span> AI EXPLORER CLUB</p>
-        <h1>把好奇心<br />变成超能力</h1>
-        <p class="hero-description">挑一门喜欢的课，和 AI 一起动手、创作、发现新世界。</p>
-        <div class="hero-actions">
-          <span class="hero-note">本周持续更新</span>
-          <el-tooltip content="刷新课程" placement="bottom">
-            <el-button
-              class="refresh-button"
-              circle
-              aria-label="刷新课程"
-              :loading="loading"
-              @click="loadCourses"
-            >
-              <el-icon><Refresh /></el-icon>
-            </el-button>
-          </el-tooltip>
-        </div>
-      </div>
-
-      <div class="hero-art" aria-hidden="true">
-        <div class="hero-spray spray-one"></div>
-        <div class="hero-spray spray-two"></div>
-        <div class="hero-sticker sticker-one">AI</div>
-        <div class="hero-sticker sticker-two">GO!</div>
-        <div class="hero-grid-mark"></div>
-        <p>CREATE<br />PLAY<br />LEARN</p>
-      </div>
-    </header>
-
     <section class="catalog-browser" aria-label="课程筛选">
       <div class="browser-heading">
-        <p>探索地图</p>
-        <h2>今天，想解锁什么新技能？</h2>
+        <p>COURSE SEARCH</p>
+        <h1>找到下一门想学的课</h1>
       </div>
       <div class="catalog-toolbar">
       <el-input
@@ -154,6 +160,19 @@ onMounted(loadCourses)
       >
         <template #prefix><el-icon><Search /></el-icon></template>
       </el-input>
+      <el-select
+        v-model="selectedTags"
+        class="course-tag-picker"
+        multiple
+        filterable
+        clearable
+        collapse-tags
+        collapse-tags-tooltip
+        placeholder="课程标签"
+        @change="loadCourses"
+      >
+        <el-option v-for="tag in availableTags" :key="tag" :label="tag" :value="tag" />
+      </el-select>
       <el-select v-model="filters.grade" clearable placeholder="适配学段" @change="loadCourses">
         <el-option label="通用" value="通用" />
         <el-option label="小学" value="小学" />
@@ -171,11 +190,19 @@ onMounted(loadCourses)
         <el-option label="项目实践课" :value="2" />
         <el-option label="实验课" :value="3" />
       </el-select>
+      <el-select v-model="filters.sortBy" class="course-sort-picker" @change="loadCourses">
+        <el-option label="最新发布" value="publishedDesc" />
+        <el-option label="最早发布" value="publishedAsc" />
+        <el-option label="点赞最多" value="likes" />
+      </el-select>
         <el-tooltip content="清除筛选" placement="bottom">
           <el-button class="reset-button" circle aria-label="清除筛选" @click="resetFilters">
             <el-icon><Refresh /></el-icon>
           </el-button>
         </el-tooltip>
+      </div>
+      <div v-if="selectedTags.length > 1" class="tag-filter-row">
+        <el-switch v-model="matchAll" active-text="同时匹配全部标签" inactive-text="匹配任意一个标签" @change="loadCourses" />
       </div>
     </section>
 
@@ -510,7 +537,7 @@ onMounted(loadCourses)
 }
 
 .catalog-browser {
-  padding-top: 40px;
+  padding-top: 8px;
 }
 
 .browser-heading {
@@ -528,7 +555,7 @@ onMounted(loadCourses)
   letter-spacing: 1px;
 }
 
-.browser-heading h2 {
+.browser-heading h1 {
   flex: 1;
   margin: 0;
   color: var(--ink);
@@ -538,14 +565,57 @@ onMounted(loadCourses)
   letter-spacing: 0;
 }
 
+.tag-filter-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 0;
+  margin: -10px 0 17px;
+  padding: 7px 10px;
+  width: fit-content;
+  border: 1px solid #ded7ed;
+  border-radius: 7px;
+  background: rgb(255 255 255 / 72%);
+  box-shadow: 1px 2px 0 rgb(105 94 150 / 10%);
+  color: #746b91;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.tag-filter-row :deep(.el-switch) {
+  margin-left: 2px;
+  --el-switch-on-color: #8b81cc;
+  --el-switch-off-color: #ddd8e9;
+  --el-switch-border-color: #c8bfdf;
+}
+
+.tag-filter-row :deep(.el-switch__label) {
+  color: #7a7193;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.tag-filter-row :deep(.el-switch__label.is-active) {
+  color: #635993;
+}
+
 .catalog-toolbar {
   display: grid;
   margin: 17px 0 25px;
-  grid-template-columns: minmax(220px, 1.5fr) repeat(3, minmax(130px, 0.55fr)) auto;
+  grid-template-columns: minmax(200px, 1.12fr) minmax(145px, 0.68fr) repeat(4, minmax(108px, 0.44fr)) auto;
   gap: 12px;
 }
 
 .catalog-search {
+  min-width: 0;
+}
+
+.course-tag-picker {
+  min-width: 0;
+}
+
+.course-sort-picker {
   min-width: 0;
 }
 
@@ -595,8 +665,8 @@ onMounted(loadCourses)
 .catalog-grid {
   display: grid;
   min-height: 180px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: clamp(18px, 2vw, 29px);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(16px, 1.4vw, 24px);
 }
 
 .catalog-card {
@@ -674,7 +744,7 @@ onMounted(loadCourses)
 }
 
 .catalog-card-body {
-  padding: 18px 18px 15px;
+  padding: 15px 15px 13px;
 }
 
 .catalog-tags {
@@ -699,7 +769,7 @@ onMounted(loadCourses)
   overflow: hidden;
   color: var(--ink);
   font-family: 'Trebuchet MS', 'Microsoft YaHei', sans-serif;
-  font-size: 19px;
+  font-size: 18px;
   font-weight: 900;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -923,8 +993,18 @@ onMounted(loadCourses)
     grid-column: span 2;
   }
 
+  .course-tag-picker {
+    grid-column: span 1;
+  }
+
   .catalog-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1101px) and (max-width: 1480px) {
+  .catalog-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
@@ -959,7 +1039,7 @@ onMounted(loadCourses)
   }
 
   .catalog-browser {
-    padding-top: 35px;
+    padding-top: 4px;
   }
 
   .browser-heading {
@@ -970,12 +1050,21 @@ onMounted(loadCourses)
     margin-bottom: 4px;
   }
 
+  .tag-filter-row {
+    align-items: flex-start;
+    margin-top: 0;
+  }
+
   .catalog-toolbar,
   .catalog-grid {
     grid-template-columns: 1fr;
   }
 
   .catalog-search {
+    grid-column: auto;
+  }
+
+  .course-tag-picker {
     grid-column: auto;
   }
 

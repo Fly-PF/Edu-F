@@ -211,9 +211,17 @@ const router = createRouter({
         {
           path: 'courses',
           name: 'course-list',
+          component: () => import('@/views/student/StudentCourseCategories.vue'),
+          meta: {
+            title: '课程分类',
+          },
+        },
+        {
+          path: 'courses/search',
+          name: 'course-search',
           component: () => import('@/views/student/StudentPlatformCourses.vue'),
           meta: {
-            title: '课程列表',
+            title: '课程搜索',
           },
         },
         {

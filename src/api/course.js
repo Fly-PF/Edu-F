@@ -20,6 +20,26 @@ export function listPublicCourses(params = {}) {
   return resolve(request.get('/api/courses', { params }))
 }
 
+export function listCourseCategories() {
+  return resolve(request.get('/api/course-categories'))
+}
+
+export function listCourseTags() {
+  return resolve(request.get('/api/course-categories/tags'))
+}
+
+export function createCourseCategory(data) {
+  return resolve(request.post('/api/course-categories', data))
+}
+
+export function updateCourseCategory(categoryId, data) {
+  return resolve(request.put(`/api/course-categories/${categoryId}`, data))
+}
+
+export function deleteCourseCategory(categoryId) {
+  return resolve(request.delete(`/api/course-categories/${categoryId}`))
+}
+
 export function getCourse(courseId) {
   return resolve(request.get(`/api/courses/${courseId}`))
 }
