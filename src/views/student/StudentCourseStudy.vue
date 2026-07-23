@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   ArrowLeft,
+  ChatDotRound,
   Check,
   Clock,
   Collection,
@@ -14,6 +15,7 @@ import {
   Refresh,
   VideoPlay,
 } from '@element-plus/icons-vue'
+import StudentAiCompanion from '@/components/student/StudentAiCompanion.vue'
 import {
   getStudentCourse,
   getStudentCourseChapters,
@@ -30,6 +32,7 @@ const router = useRouter()
 const covers = [cover1, cover2, cover3, cover4]
 const loading = ref(false)
 const saving = ref(false)
+const companionOpen = ref(false)
 const course = ref(null)
 const chapters = ref([])
 const records = ref([])
@@ -282,6 +285,10 @@ onBeforeUnmount(revokePdfViewerUrl)
           <el-button circle aria-label="刷新" :loading="loading" @click="loadAll">
             <el-icon><Refresh /></el-icon>
           </el-button>
+          <el-button type="primary" plain @click="companionOpen = true">
+            <el-icon><ChatDotRound /></el-icon>
+            智能学伴
+          </el-button>
           <el-button type="success" :loading="saving" :disabled="!selectedChapter" @click="markCompleted">
             <el-icon><Check /></el-icon>
             标记完成
@@ -338,6 +345,17 @@ onBeforeUnmount(revokePdfViewerUrl)
         </span>
       </footer>
     </section>
+
+    <StudentAiCompanion
+      v-model:open="companionOpen"
+      :course-id="courseId"
+      :chapter-id="selectedChapterId"
+      :resource-id="selectedResourceId"
+      :course-title="course?.title || course?.courseName"
+      :chapter-title="selectedChapter?.title || selectedChapter?.chapterName"
+      :resource-title="selectedResource?.name"
+      :progress="selectedChapter ? chapterProgress(selectedChapter) : 0"
+    />
   </main>
 </template>
 
