@@ -181,10 +181,45 @@ const router = createRouter({
         {
           path: 'knowledge-qa',
           name: 'knowledge-qa',
-          component: () => import('@/views/common/KnowledgeBaseChatView.vue'),
+          component: () => import('@/views/common/KnowledgeBaseView.vue'),
+          redirect: '/main/knowledge-qa/chat',
           meta: {
             title: '知识库问答',
           },
+          children: [
+            {
+              path: 'chat',
+              name: 'knowledge-base-chat',
+              component: () => import('@/views/common/KnowledgeBaseChatView.vue'),
+              meta: {
+                title: '知识库问答',
+              },
+            },
+            {
+              path: 'create',
+              name: 'knowledge-base-create',
+              component: () => import('@/views/common/KnowledgeBaseCreateView.vue'),
+              meta: {
+                title: '新建知识库',
+              },
+            },
+            {
+              path: 'my',
+              name: 'knowledge-base-my',
+              component: () => import('@/views/common/KnowledgeBaseMyView.vue'),
+              meta: {
+                title: '我的知识库',
+              },
+            },
+            {
+              path: 'modify',
+              name: 'knowledge-base-modify',
+              component: () => import('@/views/common/KnowledgeBaseModifyView.vue'),
+              meta: {
+                title: '编辑知识库',
+              },
+            },
+          ],
         },
         {
           path: 'profile',
@@ -236,6 +271,10 @@ const router = createRouter({
           children: personnelRoutes,
         },
       ],
+    },
+    {
+      path: '/knowledge-qa/modify',
+      redirect: (to) => ({ path: '/main/knowledge-qa/modify', query: to.query }),
     },
     {
       path: '/personnel/managers',
