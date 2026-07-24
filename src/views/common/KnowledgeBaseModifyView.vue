@@ -1,9 +1,9 @@
 <script setup>
-import { onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { ArrowLeft, Plus, PictureFilled } from '@element-plus/icons-vue'
-import { getMyKnowledgeBase, updateKnowledgeBase } from '@/api/rag'
+import { ElMessage, ElMessageBox, genFileId } from 'element-plus'
+import { ArrowLeft, Delete, Edit, Files, Plus, PictureFilled, Refresh, Search, UploadFilled, View } from '@element-plus/icons-vue'
+import { deleteRagDocument, getMyKnowledgeBase, pageKnowledgeBaseDocuments, updateKnowledgeBase, updateRagDocument, uploadRagFile } from '@/api/rag'
 
 const route = useRoute()
 const router = useRouter()
@@ -14,8 +14,19 @@ const coverPreviewUrl = ref('')
 const coverPreviewObjectUrl = ref('')
 const coverFile = ref(null)
 const submitting = ref(false)
+const uploadDialogVisible = ref(false)
+const uploadSubmitting = ref(false)
+const uploadFile = ref(null)
+const uploadRef = ref(null)
+const documentEditDialogVisible = ref(false)
+const documentEditSubmitting = ref(false)
+const editingDocument = ref(null)
+const documentDeletingId = ref(null)
 const loading = ref(false)
+const docLoading = ref(false)
 const kbId = Number(route.query.kb_id)
+const documentTotal = ref(0)
+const documentRecords = ref([])
 const snapshot = ref({
   kb_name: '',
   description: '',
@@ -33,6 +44,22 @@ const form = reactive({
   status: 1,
 })
 
+const documentQuery = reactive({
+  pageNum: 1,
+  pageSize: 10,
+  doc_type: '',
+  doc_name: '',
+})
+
+const uploadForm = reactive({
+  description: '',
+})
+
+const documentEditForm = reactive({
+  doc_name: '',
+  description: '',
+})
+
 const rules = {
   kb_name: [{ required: true, message: '请输入知识库名称', trigger: 'blur' }],
   kb_type: [{ required: true, message: '请选择知识库类型', trigger: 'change' }],
@@ -46,12 +73,102 @@ const kbTypeOptions = [
   { label: '政策', value: 4 },
 ]
 
+const documentTypeOptions = [
+  '.pdf',
+  '.doc',
+  '.docx',
+  '.txt',
+  '.md',
+  '.ppt',
+  '.pptx',
+  '.jpg',
+  '.jpeg',
+  '.png',
+  '.webp',
+]
+
+const uploadAccept = documentTypeOptions.join(',')
+
+function backToKnowledgeBaseMy() {
+  router.replace('/main/knowledge-qa/my')
+}
+
+const groupedDocuments = computed(() => {
+  const groups = new Map()
+
+  documentRecords.value.forEach((item) => {
+    const docType = item.docType || '未分类'
+    if (!groups.has(docType)) {
+      groups.set(docType, [])
+    }
+    groups.get(docType).push(item)
+  })
+
+  return Array.from(groups.entries()).map(([docType, items]) => ({
+    docType,
+    title: formatDocumentType(docType),
+    count: items.length,
+    items,
+  }))
+})
+
 function coverUrl(objectName) {
   if (!objectName) {
     return ''
   }
 
   return `http://localhost:8080/api/rag/kb/cover?objectName=${encodeURIComponent(objectName)}`
+}
+
+function formatDocumentType(docType) {
+  if (!docType) {
+    return '未分类'
+  }
+
+  return `${String(docType).replace(/^\./, '').toUpperCase()} 类型`
+}
+
+function formatDocumentFilterLabel(docType) {
+  if (!docType) {
+    return ''
+  }
+
+  return String(docType).replace(/^\./, '').toLowerCase()
+}
+
+function formatDateTime(value) {
+  return value ? String(value).replace('T', ' ') : '-'
+}
+
+function getDocumentExtension(row) {
+  return row?.docType || ''
+}
+
+function getDocumentBaseName(row) {
+  const docName = row?.docName || ''
+  const extension = getDocumentExtension(row)
+  return extension && docName.toLowerCase().endsWith(extension.toLowerCase())
+    ? docName.slice(0, -extension.length)
+    : docName
+}
+
+function buildDocumentParams() {
+  const params = {
+    kb_id: kbId,
+    pageNum: documentQuery.pageNum,
+    pageSize: documentQuery.pageSize,
+  }
+
+  const docName = documentQuery.doc_name.trim()
+  if (docName) {
+    params.doc_name = docName
+  }
+
+  if (documentQuery.doc_type) {
+    params.doc_type = documentQuery.doc_type
+  }
+
+  return params
 }
 
 function revokeCoverPreview() {
@@ -125,7 +242,7 @@ async function loadKnowledgeBase(options = {}) {
   if (!Number.isInteger(kbId) || kbId <= 0) {
     ElMessage.error('知识库参数错误')
     if (backOnError) {
-      router.back()
+      backToKnowledgeBaseMy()
     }
     return
   }
@@ -134,13 +251,35 @@ async function loadKnowledgeBase(options = {}) {
   try {
     const data = await getMyKnowledgeBase(kbId)
     applyKnowledgeBase(data)
+    await loadDocuments()
   } catch (error) {
     ElMessage.error(error?.message || '知识库加载失败')
     if (backOnError) {
-      router.back()
+      backToKnowledgeBaseMy()
     }
   } finally {
     loading.value = false
+  }
+}
+
+async function loadDocuments() {
+  if (!Number.isInteger(kbId) || kbId <= 0) {
+    documentRecords.value = []
+    documentTotal.value = 0
+    return
+  }
+
+  docLoading.value = true
+  try {
+    const data = await pageKnowledgeBaseDocuments(buildDocumentParams())
+    documentRecords.value = data?.records || []
+    documentTotal.value = data?.total || 0
+  } catch (error) {
+    documentRecords.value = []
+    documentTotal.value = 0
+    ElMessage.error(error?.message || '文件列表加载失败')
+  } finally {
+    docLoading.value = false
   }
 }
 
@@ -182,8 +321,188 @@ async function handleSubmit() {
   }
 }
 
+function handleDocumentSearch() {
+  documentQuery.pageNum = 1
+  loadDocuments()
+}
+
+function handleDocumentReset() {
+  documentQuery.pageNum = 1
+  documentQuery.pageSize = 10
+  documentQuery.doc_type = ''
+  documentQuery.doc_name = ''
+  loadDocuments()
+}
+
+function openUploadDialog() {
+  uploadDialogVisible.value = true
+  uploadFile.value = null
+  uploadForm.description = ''
+  uploadRef.value?.clearFiles()
+}
+
+function handleUploadChange(file) {
+  uploadFile.value = file.raw || null
+}
+
+function handleUploadExceed(files) {
+  const file = files[0]
+  if (!file) {
+    return
+  }
+
+  uploadRef.value?.clearFiles()
+  file.uid = genFileId()
+  uploadRef.value?.handleStart(file)
+  uploadFile.value = file
+}
+
+function handleUploadRemove() {
+  uploadFile.value = null
+}
+
+async function handleUploadSubmit() {
+  if (!Number.isInteger(kbId) || kbId <= 0) {
+    ElMessage.error('知识库参数错误')
+    return
+  }
+
+  if (!uploadFile.value) {
+    ElMessage.warning('请选择要上传的文件')
+    return
+  }
+
+  uploadSubmitting.value = true
+  try {
+    const data = new FormData()
+    data.append('kbId', String(kbId))
+    data.append('file', uploadFile.value)
+    if (uploadForm.description.trim()) {
+      data.append('description', uploadForm.description.trim())
+    }
+
+    await uploadRagFile(data)
+    ElMessage.success('上传成功')
+    uploadDialogVisible.value = false
+    uploadRef.value?.clearFiles()
+    uploadFile.value = null
+    uploadForm.description = ''
+    documentQuery.pageNum = 1
+    await loadDocuments()
+  } catch (error) {
+    ElMessage.error(error?.message || '上传失败')
+  } finally {
+    uploadSubmitting.value = false
+  }
+}
+
+function handleDocumentSizeChange(size) {
+  documentQuery.pageSize = size
+  documentQuery.pageNum = 1
+  loadDocuments()
+}
+
+function handleDocumentCurrentChange(page) {
+  documentQuery.pageNum = page
+  loadDocuments()
+}
+
+function handleViewDocument(row) {
+  if (!row?.fileUrl) {
+    ElMessage.warning('文件地址缺失，暂时无法预览')
+    return
+  }
+
+  router.push({
+    name: 'knowledge-base-file-show',
+    query: {
+      kb_id: kbId,
+      file_url: row.fileUrl,
+      file_name: row.docName,
+      doc_type: row.docType,
+    },
+  })
+}
+
+function handleEditDocument(row) {
+  if (!row?.id) {
+    ElMessage.warning('文件ID缺失，暂时无法编辑')
+    return
+  }
+
+  editingDocument.value = row
+  documentEditForm.doc_name = getDocumentBaseName(row)
+  documentEditForm.description = row.description || ''
+  documentEditDialogVisible.value = true
+}
+
+async function handleDocumentEditSubmit() {
+  const baseName = documentEditForm.doc_name.trim()
+  const extension = getDocumentExtension(editingDocument.value)
+  if (!baseName) {
+    ElMessage.warning('请输入文件名称')
+    return
+  }
+
+  documentEditSubmitting.value = true
+  try {
+    const data = new FormData()
+    data.append('kb_id', String(kbId))
+    data.append('doc_id', String(editingDocument.value.id))
+    data.append('doc_name', `${baseName}${extension}`)
+    if (documentEditForm.description.trim()) {
+      data.append('description', documentEditForm.description.trim())
+    }
+
+    await updateRagDocument(data)
+    ElMessage.success('更新成功')
+    documentEditDialogVisible.value = false
+    editingDocument.value = null
+    await loadDocuments()
+  } catch (error) {
+    ElMessage.error(error?.message || '更新失败')
+  } finally {
+    documentEditSubmitting.value = false
+  }
+}
+
+async function handleDeleteDocument(row) {
+  if (!row?.id) {
+    ElMessage.warning('文件ID缺失，暂时无法删除')
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(`确认删除文件“${row.docName || '-'}”吗？`, '删除文件', {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      confirmButtonClass: 'el-button--danger',
+    })
+  } catch {
+    return
+  }
+
+  documentDeletingId.value = row.id
+  try {
+    const data = new FormData()
+    data.append('kb_id', String(kbId))
+    data.append('doc_id', String(row.id))
+    await deleteRagDocument(data)
+    ElMessage.success('删除成功')
+    if (documentRecords.value.length === 1 && documentQuery.pageNum > 1) {
+      documentQuery.pageNum -= 1
+    }
+    await loadDocuments()
+  } catch (error) {
+    ElMessage.error(error?.message || '删除失败')
+  } finally {
+    documentDeletingId.value = null
+  }
+}
+
 function handleBack() {
-  router.push('/main/knowledge-qa/my')
+  backToKnowledgeBaseMy()
 }
 
 onMounted(loadKnowledgeBase)
@@ -276,6 +595,204 @@ onBeforeUnmount(revokeCoverPreview)
           </div>
         </el-form>
       </div>
+
+      <div class="document-section">
+        <div class="document-head">
+          <div class="document-title">
+            <el-icon><Files /></el-icon>
+            <span>知识库文件</span>
+          </div>
+          <div class="document-head-actions">
+            <div class="document-subtitle">按文件类型分组展示</div>
+          </div>
+        </div>
+
+        <div class="document-toolbar">
+          <el-input
+            v-model="documentQuery.doc_name"
+            class="doc-search"
+            clearable
+            placeholder="按文件名模糊搜索"
+            @keyup.enter="handleDocumentSearch"
+          />
+          <el-select
+            v-model="documentQuery.doc_type"
+            class="doc-select"
+            clearable
+            placeholder="文件类型"
+            @change="handleDocumentSearch"
+          >
+            <el-option
+              v-for="item in documentTypeOptions"
+              :key="item"
+              :label="formatDocumentFilterLabel(item)"
+              :value="item"
+            />
+          </el-select>
+          <el-button type="primary" :icon="Search" :loading="docLoading" @click="handleDocumentSearch">搜索</el-button>
+          <el-button :icon="Refresh" :disabled="docLoading" @click="handleDocumentReset">重置</el-button>
+          <el-button class="doc-upload-btn" type="primary" :icon="UploadFilled" :disabled="loading || uploadSubmitting" @click="openUploadDialog">上传文件解析</el-button>
+        </div>
+
+        <div v-loading="docLoading" class="document-content">
+          <template v-if="groupedDocuments.length">
+            <section v-for="group in groupedDocuments" :key="group.docType" class="document-group">
+              <div class="group-head">
+                <div class="group-name">{{ group.title }}</div>
+                <div class="group-count">{{ group.count }} 个文件</div>
+              </div>
+              <el-table :data="group.items" border class="document-table">
+                <el-table-column prop="docName" label="文件名称" min-width="180" show-overflow-tooltip />
+                <el-table-column prop="docType" label="类型" width="120" align="center">
+                  <template #default="{ row }">
+                    <el-tag type="info" effect="light">{{ formatDocumentType(row.docType) }}</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="description" label="说明" min-width="180" show-overflow-tooltip />
+                <el-table-column prop="createTime" label="创建时间" min-width="170" show-overflow-tooltip>
+                  <template #default="{ row }">
+                    {{ formatDateTime(row.createTime) }}
+                  </template>
+                </el-table-column>
+                <el-table-column prop="updateTime" label="更新时间" min-width="170" show-overflow-tooltip>
+                  <template #default="{ row }">
+                    {{ formatDateTime(row.updateTime) }}
+                  </template>
+                </el-table-column>
+                <el-table-column label="操作" width="240" align="center" fixed="right">
+                  <template #default="{ row }">
+                    <div class="document-actions">
+                      <el-button link type="primary" :icon="View" @click="handleViewDocument(row)">查看</el-button>
+                      <el-button link type="primary" :icon="Edit" @click="handleEditDocument(row)">编辑</el-button>
+                      <el-button link type="danger" :icon="Delete" :loading="documentDeletingId === row.id" :disabled="documentDeletingId !== null" @click="handleDeleteDocument(row)">删除</el-button>
+                    </div>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </section>
+          </template>
+          <el-empty v-else class="document-empty" description="暂无文件数据" />
+        </div>
+
+        <div v-if="documentTotal > 0" class="document-pagination">
+          <el-pagination
+            v-model:current-page="documentQuery.pageNum"
+            v-model:page-size="documentQuery.pageSize"
+            :page-sizes="[5, 10, 20]"
+            :total="documentTotal"
+            layout="total, sizes, prev, pager, next, jumper"
+            background
+            :disabled="docLoading"
+            @size-change="handleDocumentSizeChange"
+            @current-change="handleDocumentCurrentChange"
+          />
+        </div>
+      </div>
+
+      <el-dialog
+        v-model="uploadDialogVisible"
+        title="上传知识库文件"
+        width="520px"
+        :close-on-click-modal="!uploadSubmitting"
+        :close-on-press-escape="!uploadSubmitting"
+        :show-close="!uploadSubmitting"
+      >
+        <div class="upload-dialog-body" v-loading="uploadSubmitting" element-loading-text="文件上传中，请稍候">
+          <div class="upload-kb-card">
+            <div class="upload-kb-label">当前知识库</div>
+            <div class="upload-kb-name">{{ form.kb_name || '未命名知识库' }}</div>
+            <div class="upload-kb-tip">支持 jpg、jpeg、png、webp、pdf、ppt、pptx、txt、md、docx、doc 格式</div>
+          </div>
+
+          <el-form label-position="top">
+            <el-form-item label="文件" required>
+              <el-upload
+                ref="uploadRef"
+                class="file-upload-control"
+                action="#"
+                drag
+                :accept="uploadAccept"
+                :auto-upload="false"
+                :limit="1"
+                :disabled="uploadSubmitting"
+                :on-change="handleUploadChange"
+                :on-exceed="handleUploadExceed"
+                :on-remove="handleUploadRemove"
+              >
+                <el-icon class="upload-icon"><UploadFilled /></el-icon>
+                <div class="upload-text">拖拽文件到这里，或点击选择文件</div>
+              </el-upload>
+            </el-form-item>
+
+            <el-form-item label="文件说明">
+              <el-input
+                v-model="uploadForm.description"
+                type="textarea"
+                :rows="4"
+                maxlength="500"
+                show-word-limit
+                resize="none"
+                :disabled="uploadSubmitting"
+                placeholder="可填写文件用途、内容范围等说明"
+              />
+            </el-form-item>
+          </el-form>
+        </div>
+
+        <template #footer>
+          <el-button :disabled="uploadSubmitting" @click="uploadDialogVisible = false">取消</el-button>
+          <el-button type="primary" :loading="uploadSubmitting" @click="handleUploadSubmit">上传</el-button>
+        </template>
+      </el-dialog>
+
+      <el-dialog
+        v-model="documentEditDialogVisible"
+        title="编辑文件信息"
+        width="520px"
+        :close-on-click-modal="!documentEditSubmitting"
+        :close-on-press-escape="!documentEditSubmitting"
+        :show-close="!documentEditSubmitting"
+      >
+        <div class="upload-dialog-body" v-loading="documentEditSubmitting" element-loading-text="文件信息更新中，请稍候">
+          <div class="upload-kb-card">
+            <div class="upload-kb-label">当前知识库</div>
+            <div class="upload-kb-name">{{ form.kb_name || '未命名知识库' }}</div>
+            <div class="upload-kb-tip">文件后缀 {{ getDocumentExtension(editingDocument) || '-' }} 不允许修改</div>
+          </div>
+
+          <el-form label-position="top">
+            <el-form-item label="文件名称" required>
+              <el-input
+                v-model="documentEditForm.doc_name"
+                maxlength="180"
+                show-word-limit
+                :disabled="documentEditSubmitting"
+                placeholder="请输入文件名称"
+              >
+                <template #append>{{ getDocumentExtension(editingDocument) }}</template>
+              </el-input>
+            </el-form-item>
+
+            <el-form-item label="文件描述">
+              <el-input
+                v-model="documentEditForm.description"
+                type="textarea"
+                :rows="4"
+                maxlength="500"
+                show-word-limit
+                resize="none"
+                :disabled="documentEditSubmitting"
+                placeholder="可填写文件用途、内容范围等说明"
+              />
+            </el-form-item>
+          </el-form>
+        </div>
+
+        <template #footer>
+          <el-button :disabled="documentEditSubmitting" @click="documentEditDialogVisible = false">取消</el-button>
+          <el-button type="primary" :loading="documentEditSubmitting" @click="handleDocumentEditSubmit">保存</el-button>
+        </template>
+      </el-dialog>
     </div>
   </div>
 </template>
@@ -339,6 +856,172 @@ onBeforeUnmount(revokeCoverPreview)
   grid-template-columns: 284px minmax(0, 1fr);
   gap: 30px;
   align-items: start;
+}
+
+.document-section {
+  margin-top: 24px;
+  padding-top: 22px;
+  border-top: 1px solid #eef2f7;
+}
+
+.document-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.document-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.document-subtitle {
+  color: #64748b;
+  font-size: 13px;
+  line-height: 32px;
+  white-space: nowrap;
+}
+
+.document-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+}
+
+.document-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.doc-search {
+  width: 260px;
+}
+
+.doc-select {
+  width: 180px;
+}
+
+.doc-upload-btn {
+  margin-left: auto;
+}
+
+.document-content {
+  display: grid;
+  gap: 16px;
+  min-height: 180px;
+}
+
+.document-group {
+  padding: 14px;
+  border: 1px solid #e5eaf2;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.group-name {
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.group-count {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.document-empty {
+  padding: 32px 0;
+}
+
+.document-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.document-actions :deep(.el-button) {
+  margin-left: 0;
+}
+
+.document-pagination {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.upload-dialog-body {
+  display: grid;
+  gap: 18px;
+}
+
+.upload-kb-card {
+  padding: 14px 16px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.upload-kb-label {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.upload-kb-name {
+  overflow: hidden;
+  margin-top: 4px;
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-kb-tip {
+  margin-top: 6px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.file-upload-control {
+  width: 100%;
+}
+
+.file-upload-control :deep(.el-upload),
+.file-upload-control :deep(.el-upload-dragger) {
+  width: 100%;
+}
+
+.upload-icon {
+  color: #409eff;
+  font-size: 30px;
+}
+
+.upload-text {
+  margin-top: 8px;
+  color: #475569;
+  font-size: 14px;
 }
 
 .cover-pane {
@@ -513,6 +1196,25 @@ onBeforeUnmount(revokeCoverPreview)
 
   .form-actions :deep(.el-button) {
     width: 100%;
+  }
+
+  .document-toolbar {
+    flex-direction: column;
+  }
+
+  .document-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .doc-search,
+  .doc-select,
+  .doc-upload-btn {
+    width: 100%;
+  }
+
+  .doc-upload-btn {
+    margin-left: 0;
   }
 
   .create-form :deep(.el-radio-group) {

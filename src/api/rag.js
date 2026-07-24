@@ -31,3 +31,27 @@ export function updateKnowledgeBase(data) {
 export function listMyKnowledgeBases(params = {}) {
   return resolve(request.get('/api/rag/kb/my', { params }))
 }
+
+export function pageKnowledgeBaseDocuments(params = {}) {
+  return resolve(request.get('/api/rag/kb/documents', { params }))
+}
+
+export function uploadRagFile(data) {
+  return resolve(request.post('/api/rag/files/upload', data, { timeout: 60000 }))
+}
+
+export function updateRagDocument(data) {
+  return resolve(request.post('/api/rag/files/update', data))
+}
+
+export function deleteRagDocument(data) {
+  return resolve(request.post('/api/rag/files/delete', data))
+}
+
+export function getRagFilePreviewContent(params = {}) {
+  return resolve(request.get('/api/rag/files/preview-content', { params, timeout: 60000 }))
+}
+
+export function getRagFilePreviewImages(params = {}) {
+  return resolve(request.get('/api/rag/files/preview-images', { params, timeout: 60000 }))
+}

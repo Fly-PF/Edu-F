@@ -219,6 +219,14 @@ const router = createRouter({
                 title: '编辑知识库',
               },
             },
+            {
+              path: 'file-show',
+              name: 'knowledge-base-file-show',
+              component: () => import('@/views/common/KnowledgeBaseFileShowView.vue'),
+              meta: {
+                title: '文件预览',
+              },
+            },
           ],
         },
         {
@@ -275,6 +283,10 @@ const router = createRouter({
     {
       path: '/knowledge-qa/modify',
       redirect: (to) => ({ path: '/main/knowledge-qa/modify', query: to.query }),
+    },
+    {
+      path: '/knowledge-qa/file-show',
+      redirect: (to) => ({ path: '/main/knowledge-qa/file-show', query: to.query }),
     },
     {
       path: '/personnel/managers',

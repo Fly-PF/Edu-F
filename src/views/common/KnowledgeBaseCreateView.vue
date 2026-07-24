@@ -1,9 +1,11 @@
 <script setup>
 import { onBeforeUnmount, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Plus, PictureFilled } from '@element-plus/icons-vue'
 import { createKnowledgeBase } from '@/api/rag'
 
+const router = useRouter()
 const formRef = ref(null)
 const coverUploadRef = ref(null)
 const coverPreviewUrl = ref('')
@@ -90,6 +92,7 @@ async function handleSubmit() {
     await createKnowledgeBase(buildFormData())
     ElMessage.success('创建成功')
     resetForm()
+    router.push('/main/knowledge-qa/my')
   } catch (error) {
     ElMessage.error(error?.message || '创建失败')
   } finally {
