@@ -1,33 +1,30 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { PictureFilled, Search } from '@element-plus/icons-vue'
-import { listMyKnowledgeBases } from '@/api/rag'
+import { getKnowledgeBaseCollectionStatus, pageCollectedKnowledgeBases } from '@/api/rag'
+import { useUserStore } from '@/stores/user'
+import KnowledgeBaseDetailDrawer from './KnowledgeBaseDetailDrawer.vue'
 
 const apiBaseURL = 'http://localhost:8080'
-const router = useRouter()
+const userStore = useUserStore()
 
 const loading = ref(false)
 const knowledgeBases = ref([])
+const total = ref(0)
+const detailVisible = ref(false)
+const detailKnowledgeBase = ref(null)
+const detailCollected = ref(false)
+const detailCollectionLoading = ref(false)
+const collectionChanged = ref(false)
 const filters = reactive({
   keyword: '',
-  status: '',
-  is_public: '',
   kb_type: '',
 })
-
-const statusOptions = [
-  { label: '全部', value: '' },
-  { label: '启用', value: 1 },
-  { label: '停用', value: 0 },
-]
-
-const publicOptions = [
-  { label: '全部', value: '' },
-  { label: '公开', value: 1 },
-  { label: '非公开', value: 0 },
-]
+const page = reactive({
+  pageNum: 1,
+  pageSize: 8,
+})
 
 const typeOptions = [
   { label: '全部', value: '' },
@@ -37,26 +34,7 @@ const typeOptions = [
   { label: '其他', value: 1 },
 ]
 
-const totalText = computed(() => `共${knowledgeBases.value.length}个知识库`)
-const queryParams = computed(() => {
-  const params = {}
-  const keyword = filters.keyword.trim()
-
-  if (keyword) {
-    params.keyword = keyword
-  }
-  if (filters.status !== '') {
-    params.status = filters.status
-  }
-  if (filters.is_public !== '') {
-    params.is_public = filters.is_public
-  }
-  if (filters.kb_type !== '') {
-    params.kb_type = filters.kb_type
-  }
-
-  return params
-})
+const totalText = computed(() => `共${total.value}个知识库`)
 
 function coverUrl(objectName) {
   if (!objectName) {
@@ -69,30 +47,71 @@ function typeName(value) {
   return typeOptions.find((item) => item.value === value)?.label || '未知'
 }
 
-function publicName(value) {
-  return value === 1 ? '公开' : '非公开'
-}
+function buildQueryParams() {
+  const params = {
+    pageNum: page.pageNum,
+    pageSize: page.pageSize,
+  }
+  const keyword = filters.keyword.trim()
 
-function statusName(value) {
-  return value === 1 ? '启用' : '停用'
-}
-
-function handleCardClick(item) {
-  if (item?.id == null) {
-    ElMessage.warning('知识库数据缺少ID，暂时无法进入编辑页')
-    return
+  if (keyword) {
+    params.keyword = keyword
+  }
+  if (filters.kb_type !== '') {
+    params.kb_type = filters.kb_type
   }
 
-  router.push({
-    name: 'knowledge-base-modify',
-    query: { kb_id: item.id },
-  })
+  return params
+}
+
+function isSelfCreated(item) {
+  const kbUserId = Number(item?.userId)
+  const currentUserId = Number(userStore.userId)
+  return Boolean(kbUserId && currentUserId && kbUserId === currentUserId)
+}
+
+async function openDetail(item) {
+  detailKnowledgeBase.value = item
+  detailCollected.value = false
+  collectionChanged.value = false
+
+  if (item?.id && !isSelfCreated(item)) {
+    detailCollectionLoading.value = true
+    try {
+      detailCollected.value = Boolean(await getKnowledgeBaseCollectionStatus(item.id))
+    } catch (error) {
+      detailCollected.value = false
+      ElMessage.error(error?.message || '收藏状态加载失败')
+    } finally {
+      detailCollectionLoading.value = false
+    }
+  }
+
+  detailVisible.value = true
+}
+
+function handleCollectionChange(value) {
+  detailCollected.value = value
+  collectionChanged.value = true
+}
+
+function handleDetailClosed() {
+  if (!collectionChanged.value) {
+    return
+  }
+  collectionChanged.value = false
+  loadKnowledgeBases()
 }
 
 async function loadKnowledgeBases() {
   loading.value = true
   try {
-    knowledgeBases.value = await listMyKnowledgeBases(queryParams.value)
+    const result = await pageCollectedKnowledgeBases(buildQueryParams())
+    knowledgeBases.value = result?.records || []
+    total.value = Number(result?.total || 0)
+    if (knowledgeBases.value.length === 0 && page.pageNum > 1) {
+      page.pageNum -= 1
+    }
   } catch (error) {
     ElMessage.error(error?.message || '知识库加载失败')
   } finally {
@@ -100,30 +119,31 @@ async function loadKnowledgeBases() {
   }
 }
 
-watch(queryParams, loadKnowledgeBases)
+watch(
+  () => [filters.keyword, filters.kb_type],
+  () => {
+    if (page.pageNum === 1) {
+      loadKnowledgeBases()
+      return
+    }
+    page.pageNum = 1
+  },
+)
+
+watch(
+  () => page.pageNum,
+  loadKnowledgeBases,
+)
+
 onMounted(loadKnowledgeBases)
 </script>
 
 <template>
-  <div class="my-kb-page">
+  <div class="collection-kb-page">
     <section class="filter-panel">
       <div class="filter-head">
         <strong>{{ totalText }}</strong>
         <el-input v-model="filters.keyword" class="search-input" :prefix-icon="Search" clearable placeholder="请输入关键词" />
-      </div>
-
-      <div class="filter-row">
-        <span>状态：</span>
-        <el-radio-group v-model="filters.status">
-          <el-radio-button v-for="item in statusOptions" :key="item.label" :value="item.value">{{ item.label }}</el-radio-button>
-        </el-radio-group>
-      </div>
-
-      <div class="filter-row">
-        <span>权限：</span>
-        <el-radio-group v-model="filters.is_public">
-          <el-radio-button v-for="item in publicOptions" :key="item.label" :value="item.value">{{ item.label }}</el-radio-button>
-        </el-radio-group>
       </div>
 
       <div class="filter-row">
@@ -142,9 +162,9 @@ onMounted(loadKnowledgeBases)
           class="kb-card"
           role="button"
           tabindex="0"
-          @click="handleCardClick(item)"
-          @keydown.enter.prevent="handleCardClick(item)"
-          @keydown.space.prevent="handleCardClick(item)"
+          @click="openDetail(item)"
+          @keydown.enter.prevent="openDetail(item)"
+          @keydown.space.prevent="openDetail(item)"
         >
           <div class="cover-wrap">
             <el-image v-if="item.kbCover" class="cover-img" :src="coverUrl(item.kbCover)" fit="contain" />
@@ -154,21 +174,39 @@ onMounted(loadKnowledgeBases)
           </div>
           <div class="card-body">
             <h3>{{ item.kbName }}</h3>
+            <p v-if="item.description">{{ item.description }}</p>
             <div class="meta-line">
               <el-tag size="small">{{ typeName(item.kbType) }}</el-tag>
-              <el-tag size="small" :type="item.publicFlag === 1 ? 'success' : 'info'">{{ publicName(item.publicFlag) }}</el-tag>
-              <el-tag size="small" :type="item.status === 1 ? 'primary' : 'warning'">{{ statusName(item.status) }}</el-tag>
             </div>
           </div>
         </article>
       </div>
-      <el-empty v-else description="暂无知识库" />
+      <el-empty v-else description="暂无收藏知识库" />
+
+      <el-pagination
+        v-if="total > page.pageSize"
+        v-model:current-page="page.pageNum"
+        class="kb-pagination"
+        :page-size="page.pageSize"
+        :total="total"
+        layout="prev, pager, next, jumper"
+      />
     </section>
+
+    <KnowledgeBaseDetailDrawer
+      v-model="detailVisible"
+      :knowledge-base="detailKnowledgeBase"
+      :collected="detailCollected"
+      :collection-loading="detailCollectionLoading"
+      :show-my-collection="false"
+      @collection-change="handleCollectionChange"
+      @closed="handleDetailClosed"
+    />
   </div>
 </template>
 
 <style scoped>
-.my-kb-page {
+.collection-kb-page {
   height: 100%;
   min-height: 0;
   overflow: auto;
@@ -177,7 +215,7 @@ onMounted(loadKnowledgeBases)
 
 .filter-panel {
   display: grid;
-  gap: 14px;
+  gap: 18px;
   width: min(1200px, calc(100% - 48px));
   margin: 18px auto 0;
   padding: 22px 24px 24px;
@@ -258,8 +296,8 @@ onMounted(loadKnowledgeBases)
 }
 
 .kb-content {
-  min-height: 300px;
   width: min(1200px, calc(100% - 48px));
+  min-height: 300px;
   margin: 0 auto;
   padding: 22px 0 36px;
 }
@@ -272,16 +310,19 @@ onMounted(loadKnowledgeBases)
 
 .kb-card {
   overflow: hidden;
-  border-radius: 8px;
   border: 1px solid #e6edf7;
+  border-radius: 8px;
   background: #ffffff;
+  cursor: pointer;
   box-shadow: 0 12px 26px rgba(15, 23, 42, 0.07);
-  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
 }
 
-.kb-card:hover {
+.kb-card:hover,
+.kb-card:focus-visible {
   border-color: #cdd9eb;
   box-shadow: 0 18px 34px rgba(15, 23, 42, 0.12);
+  outline: none;
   transform: translateY(-3px);
 }
 
@@ -310,8 +351,8 @@ onMounted(loadKnowledgeBases)
 
 .card-body {
   display: grid;
-  gap: 14px;
-  padding: 16px 16px 18px;
+  gap: 10px;
+  padding: 14px 15px 16px;
 }
 
 .card-body h3 {
@@ -324,6 +365,18 @@ onMounted(loadKnowledgeBases)
   white-space: nowrap;
 }
 
+.card-body p {
+  display: -webkit-box;
+  min-height: 40px;
+  overflow: hidden;
+  margin: 0;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
 .meta-line {
   display: flex;
   flex-wrap: wrap;
@@ -333,6 +386,11 @@ onMounted(loadKnowledgeBases)
 .meta-line :deep(.el-tag) {
   border-radius: 5px;
   font-weight: 600;
+}
+
+.kb-pagination {
+  justify-content: center;
+  margin-top: 26px;
 }
 
 .kb-content :deep(.el-empty) {
@@ -349,10 +407,6 @@ onMounted(loadKnowledgeBases)
 
   .filter-panel {
     padding-inline: 14px;
-  }
-
-  .kb-content {
-    padding-inline: 0;
   }
 
   .filter-head {

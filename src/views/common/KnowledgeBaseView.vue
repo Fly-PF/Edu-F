@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import {
+  ArrowLeft,
   ChatDotRound,
   ChatLineRound,
   DocumentAdd,
@@ -460,6 +461,7 @@ const currentConversationTitle = computed(() => {
 
 const isCreatePage = computed(() => route.name === 'knowledge-base-create')
 const isMyKnowledgeBasePage = computed(() => route.name === 'knowledge-base-my')
+const isCollectionPage = computed(() => route.name === 'knowledge-base-collection')
 const isModifyPage = computed(() => route.name === 'knowledge-base-modify')
 const topbarTitle = computed(() => {
   if (isCreatePage.value) {
@@ -467,6 +469,9 @@ const topbarTitle = computed(() => {
   }
   if (isMyKnowledgeBasePage.value) {
     return '我的知识库'
+  }
+  if (isCollectionPage.value) {
+    return '收藏的知识库'
   }
   if (isModifyPage.value) {
     return '编辑知识库'
@@ -479,6 +484,9 @@ const topbarTips = computed(() => {
   }
   if (isMyKnowledgeBasePage.value) {
     return '查看和筛选已创建的知识库。'
+  }
+  if (isCollectionPage.value) {
+    return '查看和筛选已收藏的公开知识库。'
   }
   if (isModifyPage.value) {
     return '修改知识库基础信息。'
@@ -516,9 +524,11 @@ provide('knowledgeBaseChat', {
   handleNewChat,
   handleCreateKnowledgeBase,
   handleMyKnowledgeBase,
+  handleKnowledgeBaseCollection,
   isModifyPage,
   isCreatePage,
   isMyKnowledgeBasePage,
+  isCollectionPage,
 })
 
 function getBubbleListInstance() {
@@ -667,6 +677,16 @@ function handleMyKnowledgeBase() {
   }
 }
 
+function handleKnowledgeBaseCollection() {
+  if (route.path !== '/main/knowledge-qa/collection') {
+    router.push('/main/knowledge-qa/collection')
+  }
+}
+
+function handleBackToKnowledgeBaseShow() {
+  router.push('/main/knowledge-qa/show')
+}
+
 async function setComposerText(text) {
   composerValue.value = text
   await nextTick()
@@ -799,7 +819,7 @@ function handleNewChat() {
           <el-icon><Notebook /></el-icon>
           <span>我的知识库</span>
         </button>
-        <button type="button">
+        <button type="button" :class="{ active: isCollectionPage }" @click="handleKnowledgeBaseCollection">
           <el-icon><CollectionTag /></el-icon>
           <span>知识库收藏</span>
         </button>
@@ -847,6 +867,9 @@ function handleNewChat() {
 
     <section class="chat-main">
       <header class="chat-topbar">
+        <button class="topbar-back" type="button" aria-label="返回知识库" @click="handleBackToKnowledgeBaseShow">
+          <el-icon><ArrowLeft /></el-icon>
+        </button>
         <div class="topbar-title">
           <strong>{{ topbarTitle }}</strong>
           <span>{{ topbarTips }}</span>
@@ -1030,11 +1053,42 @@ function handleNewChat() {
 }
 
 .chat-topbar {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   border-bottom: 1px solid #edf0f3;
   padding: 0 18px;
+}
+
+.topbar-back {
+  position: absolute;
+  left: 18px;
+  top: 50%;
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid #dbe7f8;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #2563eb;
+  cursor: pointer;
+  transform: translateY(-50%);
+  transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.topbar-back:hover,
+.topbar-back:focus-visible {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.12);
+  outline: none;
+  transform: translateY(calc(-50% - 1px));
+}
+
+.topbar-back .el-icon {
+  font-size: 17px;
 }
 
 .topbar-title {

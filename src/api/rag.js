@@ -32,8 +32,36 @@ export function listMyKnowledgeBases(params = {}) {
   return resolve(request.get('/api/rag/kb/my', { params }))
 }
 
+export function listPublicKnowledgeBases(params = {}) {
+  return resolve(request.get('/api/rag/kb/public', { params }))
+}
+
+export function pagePublicKnowledgeBases(params = {}) {
+  return resolve(request.get('/api/rag/kb/public/page', { params }))
+}
+
+export function pageCollectedKnowledgeBases(params = {}) {
+  return resolve(request.get('/api/rag/kb/collection/page', { params }))
+}
+
 export function pageKnowledgeBaseDocuments(params = {}) {
   return resolve(request.get('/api/rag/kb/documents', { params }))
+}
+
+export function listPublicKnowledgeBaseDocuments(params = {}) {
+  return resolve(request.get('/api/rag/kb/public/documents', { params }))
+}
+
+export function getKnowledgeBaseCollectionStatus(kbId) {
+  return resolve(request.get('/api/rag/kb/collection/status', { params: { kb_id: kbId } }))
+}
+
+export function collectKnowledgeBase(kbId) {
+  return resolve(request.post('/api/rag/kb/collection', null, { params: { kb_id: kbId } }))
+}
+
+export function cancelKnowledgeBaseCollection(kbId) {
+  return resolve(request.post('/api/rag/kb/collection/cancel', null, { params: { kb_id: kbId } }))
 }
 
 export function uploadRagFile(data) {

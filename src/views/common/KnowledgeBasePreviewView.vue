@@ -1,11 +1,13 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { ArrowLeft, Document, Refresh, Picture } from '@element-plus/icons-vue'
+import { ArrowLeft, Document, Picture } from '@element-plus/icons-vue'
 import { MarkdownRenderer } from 'x-markdown-vue'
 import 'x-markdown-vue/style'
 import { getRagFilePreviewContent, getRagFilePreviewImages } from '@/api/rag'
+
+const apiBaseURL = 'http://localhost:8080'
+const supportedExtensions = ['pdf', 'ppt', 'pptx', 'txt', 'md', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'webp']
 
 const route = useRoute()
 const router = useRouter()
@@ -18,8 +20,7 @@ const previewPages = ref([])
 const kbId = computed(() => Number(route.query.kb_id))
 const fileUrl = computed(() => String(route.query.file_url || ''))
 const fileName = computed(() => String(route.query.file_name || '') || getFileName(fileUrl.value))
-const docType = computed(() => normalizeDocType(route.query.doc_type || getExtension(fileUrl.value)))
-const extension = computed(() => getExtension(fileUrl.value))
+const extension = computed(() => normalizeExtension(route.query.doc_type) || getExtension(fileUrl.value) || getExtension(fileName.value))
 
 const previewType = computed(() => {
   if (['jpg', 'jpeg', 'png', 'webp'].includes(extension.value)) {
@@ -38,33 +39,30 @@ const previewType = computed(() => {
 })
 
 const previewUrl = computed(() => {
-  if (!fileUrl.value) {
+  if (!fileUrl.value || !kbId.value) {
     return ''
   }
-
-  return `http://localhost:8080/api/rag/files/preview?file_url=${encodeURIComponent(fileUrl.value)}&kb_id=${encodeURIComponent(String(kbId.value || ''))}`
+  return `${apiBaseURL}/api/rag/files/preview?file_url=${encodeURIComponent(fileUrl.value)}&kb_id=${encodeURIComponent(String(kbId.value))}`
 })
 
 const displayTypeText = computed(() => {
-  const value = docType.value || extension.value
-  if (!value) {
+  if (!extension.value) {
     return '未知类型'
   }
-  return previewType.value === 'pages' ? `${value.toUpperCase()} 图片预览` : `${value.toUpperCase()} 类型`
+  return previewType.value === 'pages' ? `${extension.value.toUpperCase()} 图片预览` : `${extension.value.toUpperCase()} 类型`
 })
 
 const textContent = computed(() => previewData.value?.content || '')
 const htmlContent = computed(() => previewData.value?.html || '')
 
+function normalizeExtension(value) {
+  return String(value || '').replace(/^\./, '').trim().toLowerCase()
+}
+
 function getExtension(value) {
   const cleanValue = String(value || '').split('?')[0]
   const index = cleanValue.lastIndexOf('.')
   return index >= 0 ? cleanValue.slice(index + 1).toLowerCase() : ''
-}
-
-function normalizeDocType(value) {
-  const ext = String(value || '').replace(/^\./, '').trim().toLowerCase()
-  return ext || ''
 }
 
 function getFileName(value) {
@@ -74,24 +72,29 @@ function getFileName(value) {
 }
 
 function handleBack() {
-  router.push({
-    path: '/knowledge-qa/modify',
-    query: { kb_id: Number.isInteger(kbId.value) && kbId.value > 0 ? kbId.value : route.query.kb_id },
-  })
+  if (window.history.length > 1) {
+    router.back()
+    return
+  }
+  router.push('/main/knowledge-qa/show')
 }
 
 async function loadPreview() {
+  previewData.value = null
+  previewPages.value = []
+
   if (!Number.isInteger(kbId.value) || kbId.value <= 0 || !fileUrl.value) {
     previewError.value = '文件参数无效'
+    return
+  }
+  if (!supportedExtensions.includes(extension.value)) {
+    previewError.value = '暂不支持预览该文件类型'
     return
   }
 
   previewLoading.value = true
   previewError.value = ''
   try {
-    previewData.value = null
-    previewPages.value = []
-
     if (previewType.value === 'image') {
       return
     }
@@ -105,32 +108,29 @@ async function loadPreview() {
       return
     }
 
-    const data = await getRagFilePreviewContent({
+    previewData.value = await getRagFilePreviewContent({
       kb_id: kbId.value,
       file_url: fileUrl.value,
     })
-    previewData.value = data || null
   } catch (error) {
-    previewData.value = null
-    previewPages.value = []
     previewError.value = error?.message || '文件预览失败'
-    ElMessage.error(previewError.value)
   } finally {
     previewLoading.value = false
   }
 }
 
-function handleRefresh() {
-  loadPreview()
+function handleImageError() {
+  previewError.value = '文件预览失败'
 }
 
 onMounted(loadPreview)
+watch(() => route.fullPath, loadPreview)
 </script>
 
 <template>
-  <div class="file-show-page">
-    <section class="file-show-panel">
-      <div class="file-head">
+  <div class="kb-preview-page">
+    <section class="preview-panel">
+      <div class="preview-head">
         <el-button class="back-btn" :icon="ArrowLeft" text @click="handleBack">返回</el-button>
         <div class="file-title-wrap">
           <div class="file-icon">
@@ -142,12 +142,19 @@ onMounted(loadPreview)
             <span>{{ displayTypeText }}</span>
           </div>
         </div>
-        <el-button class="refresh-btn" :icon="Refresh" text @click="handleRefresh">刷新</el-button>
       </div>
 
       <div class="preview-shell" v-loading="previewLoading" element-loading-text="等待文件解析，请耐心等待！">
-        <template v-if="previewType === 'image' && previewUrl">
-          <img class="image-preview" :src="previewUrl" :alt="fileName" />
+        <div v-if="previewError" class="error-state">
+          <el-result icon="error" title="预览失败" :sub-title="previewError">
+            <template #extra>
+              <el-button type="primary" :icon="ArrowLeft" @click="handleBack">返回</el-button>
+            </template>
+          </el-result>
+        </div>
+
+        <template v-else-if="previewType === 'image' && previewUrl">
+          <img class="image-preview" :src="previewUrl" :alt="fileName" @error="handleImageError" />
         </template>
 
         <template v-else-if="previewType === 'pages'">
@@ -156,7 +163,7 @@ onMounted(loadPreview)
               <div class="page-head">page {{ page.pageNum }}/{{ previewPages.length }}</div>
               <img class="page-image" :src="page.imageUrl" :alt="`${fileName} 第${page.pageNum}页`" />
             </section>
-            <el-empty v-if="!previewPages.length && !previewError" description="暂无可预览内容" />
+            <el-empty v-if="!previewPages.length && !previewLoading" description="暂无可预览内容" />
           </div>
         </template>
 
@@ -179,55 +186,49 @@ onMounted(loadPreview)
             <pre v-else>{{ textContent }}</pre>
           </div>
         </template>
-
-        <el-empty v-else-if="previewError" :description="previewError" />
-        <el-empty v-else description="暂无可预览内容" />
       </div>
     </section>
   </div>
 </template>
 
 <style scoped>
-.file-show-page {
-  height: 100%;
-  min-height: 0;
+.kb-preview-page {
+  min-height: calc(100vh - 64px);
   overflow: auto;
   padding: 24px;
-  background: linear-gradient(180deg, #f3f7fc 0%, #f8fafc 48%, #ffffff 100%);
+  background: #f6f8fb;
 }
 
-.file-show-panel {
+.preview-panel {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   width: min(1280px, 100%);
-  min-height: calc(100vh - 104px);
+  min-height: calc(100vh - 112px);
   margin: 0 auto;
   border: 1px solid #e5eaf2;
   border-radius: 8px;
   background: #ffffff;
-  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.06);
 }
 
-.file-head {
+.preview-head {
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 20px 24px;
+  padding: 18px 24px;
   border-bottom: 1px solid #eef2f7;
 }
 
-.back-btn,
-.refresh-btn {
+.back-btn {
   flex: 0 0 auto;
   color: #475569;
 }
 
 .file-title-wrap {
   display: flex;
-  align-items: center;
-  gap: 12px;
   min-width: 0;
   flex: 1;
+  align-items: center;
+  gap: 12px;
 }
 
 .file-icon {
@@ -264,10 +265,16 @@ onMounted(loadPreview)
 }
 
 .preview-shell {
-  display: grid;
   min-height: 0;
   padding: 18px;
+  overflow: auto;
   background: #f8fafc;
+}
+
+.error-state {
+  display: grid;
+  min-height: 520px;
+  place-items: center;
 }
 
 .text-preview,
@@ -282,6 +289,7 @@ onMounted(loadPreview)
 }
 
 .image-preview {
+  display: block;
   max-height: calc(100vh - 190px);
   margin: auto;
   object-fit: contain;
@@ -311,7 +319,6 @@ onMounted(loadPreview)
   width: 100%;
   max-width: 1040px;
   margin: 0 auto;
-  border: 0;
   box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
 }
 
@@ -373,15 +380,15 @@ onMounted(loadPreview)
 }
 
 @media (max-width: 640px) {
-  .file-show-page {
+  .kb-preview-page {
     padding: 14px;
   }
 
-  .file-show-panel {
-    min-height: calc(100vh - 28px);
+  .preview-panel {
+    min-height: calc(100vh - 92px);
   }
 
-  .file-head {
+  .preview-head {
     align-items: flex-start;
     flex-wrap: wrap;
     padding: 16px;

@@ -43,7 +43,7 @@ const navItems = computed(() => {
     },
     {
       label: '知识库',
-      path: '/main/knowledge-qa/chat',
+      path: '/main/knowledge-qa/show',
       roles: [],
     },
   ]
@@ -69,7 +69,7 @@ const visibleTopNavItems = computed(() => {
   }
 
   return navItems.value.filter(
-    (item) => !['/main/home', '/main/courses', '/main/knowledge-qa/chat'].includes(item.path),
+    (item) => !['/main/home', '/main/courses', '/main/knowledge-qa/show'].includes(item.path),
   )
 })
 
@@ -83,7 +83,7 @@ const activePath = computed(() => {
   }
 
   if (route.path.startsWith('/main/knowledge-qa')) {
-    return '/main/knowledge-qa/chat'
+    return '/main/knowledge-qa/show'
   }
 
   if (route.name === 'teacher-class-detail') {
