@@ -1,4 +1,7 @@
 import request from '@/utils/request'
+import { useUserStore } from '@/stores/user'
+
+const baseURL = 'http://localhost:8080'
 
 function unwrap(response) {
   if (!response || typeof response !== 'object' || !Object.prototype.hasOwnProperty.call(response, 'code')) {
@@ -62,6 +65,85 @@ export function collectKnowledgeBase(kbId) {
 
 export function cancelKnowledgeBaseCollection(kbId) {
   return resolve(request.post('/api/rag/kb/collection/cancel', null, { params: { kb_id: kbId } }))
+}
+
+export function pageChatSessions(params = {}) {
+  return resolve(request.get('/api/rag/chat/session/page', { params }))
+}
+
+export function listChatSessionKnowledgeBases(sessionId) {
+  return resolve(request.get('/api/rag/chat/session/kb', { params: { session_id: sessionId } }))
+}
+
+export function createChatSession(data) {
+  return resolve(request.post('/api/rag/chat/session', data))
+}
+
+export function renameChatSession(data) {
+  return resolve(request.post('/api/rag/chat/session/rename', data))
+}
+
+export function deleteChatSession(sessionId) {
+  return resolve(request.post('/api/rag/chat/session/delete', null, { params: { session_id: sessionId } }))
+}
+
+export function listChatMessages(sessionId) {
+  return resolve(request.get('/api/rag/chat/message', { params: { session_id: sessionId } }))
+}
+
+export async function sendRagChatStream(data, onMessage) {
+  const userStore = useUserStore()
+  const response = await fetch(`${baseURL}/api/rag/chat`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'text/event-stream',
+      ...(userStore.token ? { Authorization: userStore.token } : {}),
+    },
+    body: JSON.stringify(data),
+  })
+
+  if (!response.ok || !response.body) {
+    throw new Error('聊天接口请求失败')
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder('utf-8')
+  let buffer = ''
+
+  while (true) {
+    const { value, done } = await reader.read()
+    if (done) {
+      break
+    }
+    buffer += decoder.decode(value, { stream: true })
+    const events = buffer.split(/\r?\n\r?\n/)
+    buffer = events.pop() || ''
+
+    for (const eventText of events) {
+      await handleSseEvent(eventText, onMessage)
+    }
+  }
+
+  buffer += decoder.decode()
+
+  if (buffer.trim()) {
+    await handleSseEvent(buffer, onMessage)
+  }
+}
+
+async function handleSseEvent(eventText, onMessage) {
+  const lines = eventText.split(/\r?\n/).filter((line) => line.startsWith('data:'))
+  if (!lines.length) {
+    return
+  }
+
+  const text = lines.map((line) => line.slice(5).trimStart()).join('\n').trim()
+  if (!text || text === '[DONE]') {
+    return
+  }
+
+  await onMessage?.(JSON.parse(text))
 }
 
 export function uploadRagFile(data) {

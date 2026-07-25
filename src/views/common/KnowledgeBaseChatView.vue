@@ -16,11 +16,14 @@ const {
   bubbleListRef,
   composerValue,
   isLoading,
+  activeConversation,
   isNewConversation,
   expandedSources,
   bubbleItems,
   promptCards,
   scrollBubbleListToBottom,
+  handleBubbleListScroll,
+  shouldFollowBubbleContent,
   setComposerText,
   handleSend,
   copyMessageContent,
@@ -61,7 +64,8 @@ onMounted(async () => {
       :always-show-scrollbar="true"
       :item-key="(item) => item.id"
       :btn-loading="isLoading"
-      :should-follow-content="() => true"
+      :should-follow-content="shouldFollowBubbleContent"
+      @scroll="handleBubbleListScroll"
     >
       <template #item="{ item }">
         <div class="message-row">
@@ -158,6 +162,7 @@ onMounted(async () => {
 
     <div class="composer-wrap">
       <XSender
+        :key="activeConversation"
         ref="senderRef"
         class="composer"
         placeholder="发消息或按住空格说话..."

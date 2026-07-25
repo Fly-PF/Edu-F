@@ -1,443 +1,76 @@
 <script setup>
-import { computed, nextTick, provide, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, provide, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import {
+  createChatSession,
+  deleteChatSession,
+  listChatMessages,
+  listChatSessionKnowledgeBases,
+  listMyKnowledgeBases,
+  pageChatSessions,
+  pageCollectedKnowledgeBases,
+  renameChatSession,
+  sendRagChatStream,
+} from '@/api/rag'
+import {
   ArrowLeft,
   ChatDotRound,
   ChatLineRound,
+  Close,
   DocumentAdd,
   FolderAdd,
   MoreFilled,
   Notebook,
   CollectionTag,
+  PictureFilled,
+  Plus,
+  Search,
 } from '@element-plus/icons-vue'
 
 const userStore = useUserStore()
 const route = useRoute()
 const router = useRouter()
 
-const formulaAlignedBlock = String.raw`$$
-\begin{aligned}
-\mathcal{L} &= -\sum_{i=1}^{n} y_i \log \hat{y}_i \\
-\hat{y}_i &= \mathrm{softmax}(W x_i + b)\\
-\mathrm{Acc} &= \frac{TP + TN}{TP + TN + FP + FN}
-\end{aligned}
-$$`
-
-const formulaCasesBlock = String.raw`$$
-P(A|B) = \frac{P(B|A)P(A)}{P(B)}
-$$
-
-如果要做多行展示，也可以写成：
-
-$$
-\begin{cases}
- a = b + c \\
- d = e - f \\
- g = h \times i
-\end{cases}
-$$
-
-还可以补一个求和公式：
-
-$$
-S_n = \sum_{k=1}^{n} k = \frac{n(n+1)}{2}
-$$`
-
-const richFormulaBlock = String.raw`$$
-\begin{aligned}
-\mathcal{L} &= -\sum_{i=1}^{n} y_i \log \hat{y}_i \\
-\hat{y}_i &= \mathrm{softmax}(W x_i + b)\\
-\mathrm{score}(q, d) &= \lambda \cdot \cos(q, d) + (1 - \lambda) \cdot BM25(q, d)
-\end{aligned}
-$$`
-
-const formulaScoreBlock = String.raw`$$
-score(q, d) = \lambda \cdot \frac{q \cdot d}{\|q\|\,\|d\|} + (1 - \lambda) \cdot BM25(q, d)
-$$`
-
-const chartMermaidDemo = [
-  '下面是几个 Mermaid 图表样例，用来验证流程图、时序图、饼图和甘特图渲染。',
-  '',
-  '### 流程图',
-  '',
-  '```mermaid',
-  'flowchart TD',
-  '  A[上传文档] --> B[文档解析]',
-  '  B --> C{解析成功}',
-  '  C -- 是 --> D[切片入库]',
-  '  C -- 否 --> E[返回错误]',
-  '  D --> F[向量检索]',
-  '  F --> G[生成回答]',
-  '```',
-  '',
-  '### 时序图',
-  '',
-  '```mermaid',
-  'sequenceDiagram',
-  '  participant U as 用户',
-  '  participant FE as 前端',
-  '  participant API as 问答服务',
-  '  participant KB as 知识库',
-  '  U->>FE: 输入问题',
-  '  FE->>API: 发送问题',
-  '  API->>KB: 检索相关片段',
-  '  KB-->>API: 返回引用内容',
-  '  API-->>FE: 流式返回答案',
-  '  FE-->>U: 渲染 Markdown 和引用',
-  '```',
-  '',
-  '### 饼图',
-  '',
-  '```mermaid',
-  'pie title 引用来源占比',
-  '  "课程文档" : 42',
-  '  "班级规则" : 28',
-  '  "作业反馈" : 18',
-  '  "平台说明" : 12',
-  '```',
-  '',
-  '### 甘特图',
-  '',
-  '```mermaid',
-  'gantt',
-  '  title 知识库问答接入计划',
-  '  dateFormat  YYYY-MM-DD',
-  '  section 数据准备',
-  '  文档导入      :done,    a1, 2026-07-01, 3d',
-  '  文档切片      :active,  a2, after a1, 4d',
-  '  section 检索生成',
-  '  向量检索      :         b1, 2026-07-08, 4d',
-  '  流式回答      :         b2, after b1, 3d',
-  '```',
-].join('\n')
-
-const mockBackendResponse = {
-  conversationList: [
-    { id: 'import-error', title: '导入错误' },
-    { id: 'plan', title: 'Edu-F教育平台开发总结与规划' },
-    { id: 'component', title: 'Vue3 AI聊天组件库推荐' },
-    { id: 'markdown-demo', title: 'Markdown 渲染测试' },
-    { id: 'formula-demo', title: '公式与代码示例' },
-    { id: 'chart-demo', title: '图表渲染测试' },
-    { id: 'rag-chunk', title: 'rag_chunk集合定义' },
-    { id: 'milvus', title: 'Milvus类型' },
-    { id: 'spring-rag', title: 'SpringAI中RAG检索数据的位置' },
-    { id: 'rag-table', title: 'RAG教育知识库模块表结构定义' },
-    { id: 'rag-design', title: 'RAG教育知识库表设计分析' },
-  ],
-  chatRecords: {
-    main: [
-      {
-        id: 'main-u1',
-        role: 'user',
-        content: '知识库问答页面主要解决什么问题？',
-        time: '09:20',
-      },
-      {
-        id: 'main-a1',
-        role: 'assistant',
-        content:
-          '它主要帮助用户快速查询平台功能、课程流程、班级管理和学习反馈规则。后续接入后端后，可以把回答来源替换成真实知识库检索结果。',
-        time: '09:20',
-        sources: ['平台功能总览', '知识库问答说明', '课程管理指引', '班级关联说明', '学习反馈总览', '权限范围规范'],
-      },
-      {
-        id: 'main-u2',
-        role: 'user',
-        content: '后续如果接后端接口，前端需要大改吗？',
-        time: '09:23',
-      },
-      {
-        id: 'main-a2',
-        role: 'assistant',
-        content:
-          '不需要大改。当前页面已经按会话列表和消息记录拆分，后续把 mockBackendResponse 替换成接口返回即可。\n\n可以按下面三步落地：\n\n1. 会话列表接口\n2. 历史消息接口\n3. 发送消息接口\n\n发送消息时调用问答接口，再把 AI 回复追加到当前会话。',
-        time: '09:23',
-        sources: ['前端接口规划'],
-      },
-    ],
-    'import-error': [
-      {
-        id: 'import-u1',
-        role: 'user',
-        content: '导入知识库文档时提示文件格式错误，可能是什么原因？',
-        time: '10:08',
-      },
-      {
-        id: 'import-a1',
-        role: 'assistant',
-        content:
-          '可能是上传文件扩展名不在允许范围内，或者文件内容无法被解析。建议先限制支持 pdf、docx、txt、md，再在后端返回明确的错误码和错误说明。',
-        time: '10:08',
-        sources: ['文档导入规则', '文件解析说明', '上传格式约束', '解析失败处理', '导入错误码规范', '知识库接入流程'],
-      },
-      {
-        id: 'import-u2',
-        role: 'user',
-        content: '前端应该怎么展示这种错误？',
-        time: '10:11',
-      },
-      {
-        id: 'import-a2',
-        role: 'assistant',
-        content:
-          '建议在上传区域旁边展示错误原因，并提供重新选择文件的入口。\n\n如果是批量上传，可以逐条显示：\n- 成功\n- 失败\n- 待处理\n\n这样用户能更快判断问题出在哪个文件上。',
-        time: '10:11',
-        sources: ['上传交互规范'],
-      },
-    ],
-    plan: [
-      {
-        id: 'plan-u1',
-        role: 'user',
-        content: 'Edu-F后续开发应该优先做哪些功能？',
-        time: '11:02',
-      },
-      {
-        id: 'plan-a1',
-        role: 'assistant',
-        content:
-          '建议优先完成以下内容：\n\n1. 知识库导入\n2. 文档切片\n3. 向量检索\n4. 问答接口\n5. 引用来源展示\n\n这样前端页面可以从静态演示自然过渡到真实 RAG 问答。',
-        time: '11:02',
-        sources: ['开发规划草案', '知识库导入顺序', '文档切片建议', '向量检索方案', '问答接口说明', '引用展示规范'],
-      },
-      {
-        id: 'plan-u2',
-        role: 'user',
-        content: '老师和学生的使用场景要分开吗？',
-        time: '11:06',
-      },
-      {
-        id: 'plan-a2',
-        role: 'assistant',
-        content:
-          '可以共用同一个问答页面，但检索范围需要按角色做过滤。老师更关注课程发布、班级数据和资源管理；学生更关注课程学习、练习反馈和错题复盘。',
-        time: '11:06',
-        sources: ['角色权限说明'],
-      },
-    ],
-    component: [
-      {
-        id: 'component-u1',
-        role: 'user',
-        content: 'Vue3 做 AI 聊天页推荐用什么组件？',
-        time: '14:18',
-      },
-      {
-        id: 'component-a1',
-        role: 'assistant',
-        content:
-          '当前项目已经安装 Element Plus 和 vue-element-plus-x，可以优先使用 XSender 做输入框、BubbleList 做消息列表，再用 Element Plus 的按钮、标签和弹窗补齐交互。\n\n一个比较顺手的结构是：\n\n```vue\n<template>\n  <BubbleList :data="messages">\n    <template #item="{ item }">\n      <MessageBubble :role="item.role" :content="item.content" />\n    </template>\n  </BubbleList>\n</template>\n```',
-        time: '14:18',
-        sources: ['组件库选型记录', 'BubbleList 使用说明', 'XSender 输入框', 'Element Plus 基础组件', '聊天页交互建议', '消息渲染规范'],
-      },
-      {
-        id: 'component-u2',
-        role: 'user',
-        content: '消息气泡需要自己写吗？',
-        time: '14:21',
-      },
-      {
-        id: 'component-a2',
-        role: 'assistant',
-        content:
-          '可以用 BubbleList 承载列表，再通过 item 插槽自定义气泡样式。这样既保留 AI 组件的滚动能力，又能按产品风格区分用户和 AI。',
-        time: '14:21',
-        sources: ['Element Plus X 使用说明'],
-      },
-    ],
-    'markdown-demo': [
-      {
-        id: 'markdown-u1',
-        role: 'user',
-        content: '请给我一个 Markdown 渲染测试样例。',
-        time: '19:10',
-      },
-      {
-        id: 'markdown-a1',
-        role: 'assistant',
-        content:
-          '# Markdown 标题\n\n这是一个 **加粗文本**、`行内代码`、*斜体文本* 和 [示例链接](https://example.com) 的组合。\n\n- 第一项\n- 第二项\n- 第三项\n\n> 这是一个引用块，用来验证段落、缩进和引用样式。\n\n| 列 1 | 列 2 |\n| --- | --- |\n| A | B |\n| C | D |\n\n```ts\nfunction sum(a: number, b: number) {\n  return a + b\n}\n\nconsole.log(sum(3, 5))\n```',
-        time: '19:10',
-        sources: ['Markdown 基础语法', '表格渲染说明', '代码块渲染说明', '链接与引用测试'],
-      },
-      {
-        id: 'markdown-u2',
-        role: 'user',
-        content: '再来一个包含多级标题和有序列表的样例。',
-        time: '19:12',
-      },
-      {
-        id: 'markdown-a2',
-        role: 'assistant',
-        content:
-          '## 二级标题\n\n### 三级标题\n\n1. 第一层序号\n2. 第二层序号\n3. 第三层序号\n\n`inline code` 和 **strong text** 也一起检查。\n\n- 这里还可以再补一段\n- 用来测试多段 Markdown 的衔接',
-        time: '19:12',
-        sources: ['Markdown 标题层级', '列表渲染测试'],
-      },
-    ],
-    'rich-markdown-demo': [
-      {
-        id: 'rich-u1',
-        role: 'user',
-        content: '请给我一个带 Mermaid 和数学公式的综合渲染样例。',
-        time: '19:25',
-      },
-      {
-        id: 'rich-a1',
-        role: 'assistant',
-        content:
-          '下面这个样例会同时验证 Mermaid、LaTeX 和代码高亮：\n\n```mermaid\nflowchart TD\n  A[开始] --> B{是否导入知识库?}\n  B -- 是 --> C[切片文档]\n  B -- 否 --> D[继续编辑]\n  C --> E[向量检索]\n  E --> F[生成回答]\n```\n\n' +
-          richFormulaBlock +
-          '\n\n```python\ndef cosine(a, b):\n    dot = sum(x * y for x, y in zip(a, b))\n    na = sum(x * x for x in a) ** 0.5\n    nb = sum(x * x for x in b) ** 0.5\n    return dot / (na * nb)\n```',
-        time: '19:25',
-        sources: ['Mermaid 图表测试', 'LaTeX 数学公式测试', 'Python 代码高亮测试'],
-      },
-    ],
-    'chart-demo': [
-      {
-        id: 'chart-u1',
-        role: 'user',
-        content: '请给我几个图表渲染测试样例。',
-        time: '20:05',
-      },
-      {
-        id: 'chart-a1',
-        role: 'assistant',
-        content: chartMermaidDemo,
-        time: '20:05',
-        sources: ['Mermaid 流程图测试', 'Mermaid 时序图测试', 'Mermaid 饼图测试', 'Mermaid 甘特图测试'],
-      },
-    ],
-    'formula-demo': [
-      {
-        id: 'formula-u1',
-        role: 'user',
-        content: '请给我一个复杂公式和代码块的渲染样例。',
-        time: '19:20',
-      },
-      {
-        id: 'formula-a1',
-        role: 'assistant',
-        content:
-          '下面这段可以同时验证公式、代码块和普通段落：\n\n' +
-          formulaAlignedBlock +
-          '\n\n```python\ndef softmax(logits):\n    exps = [math.exp(v) for v in logits]\n    total = sum(exps)\n    return [v / total for v in exps]\n```\n\n同时也支持行内公式 `E = mc^2` 和 `a^2 + b^2 = c^2`。',
-        time: '19:20',
-        sources: ['复杂公式测试', '代码块语法测试', '行内公式测试'],
-      },
-      {
-        id: 'formula-u2',
-        role: 'user',
-        content: '再补一个带分段推导的公式。',
-        time: '19:22',
-      },
-      {
-        id: 'formula-a2',
-        role: 'assistant',
-        content:
-          formulaCasesBlock,
-        time: '19:22',
-        sources: ['贝叶斯公式测试', '多行公式测试'],
-      },
-    ],
-    'rag-chunk': [
-      {
-        id: 'chunk-u1',
-        role: 'user',
-        content: 'rag_chunk 集合通常存什么字段？',
-        time: '15:30',
-      },
-      {
-        id: 'chunk-a1',
-        role: 'assistant',
-        content:
-          '通常会包含 chunkId、documentId、content、embedding、metadata、createTime 等字段。metadata 可以保存章节、页码、课程 id、角色范围等检索过滤信息。',
-        time: '15:30',
-        sources: ['RAG 数据结构说明', 'chunk 主键设计', 'documentId 关联', 'metadata 过滤字段', 'embedding 向量字段', '版本管理规范'],
-      },
-    ],
-    milvus: [
-      {
-        id: 'milvus-u1',
-        role: 'user',
-        content: 'Milvus 里向量字段和文本字段应该怎么设计？',
-        time: '16:05',
-      },
-      {
-        id: 'milvus-a1',
-        role: 'assistant',
-        content:
-          '向量字段保存 embedding，文本内容可以放在普通字段或外部数据库。实际项目里常用 Milvus 保存向量与关键 metadata，完整文档内容保存在业务库或对象存储。',
-        time: '16:05',
-        sources: ['Milvus 集合设计', '向量字段类型', '索引策略建议', '文本字段存储', '分区设计建议', '业务库关联方式'],
-      },
-    ],
-    'spring-rag': [
-      {
-        id: 'spring-u1',
-        role: 'user',
-        content: 'Spring AI 做 RAG 时检索数据一般放在哪里？',
-        time: '16:40',
-      },
-      {
-        id: 'spring-a1',
-        role: 'assistant',
-        content:
-          '一般会把向量数据放在 Milvus、PgVector、Elasticsearch 等向量库中，业务元数据仍然放在关系型数据库里。问答时先检索相关片段，再把片段拼进提示词。\n\n一个简化的打分公式可以写成：\n\n' +
-          formulaScoreBlock +
-          '\n\n其中 `\\lambda` 用来平衡语义相似度和关键词匹配。',
-        time: '16:40',
-        sources: ['Spring AI RAG 实践', '向量库选择', '检索片段拼接', '提示词模板', '关系库元数据', '召回排序策略'],
-      },
-    ],
-    'rag-table': [
-      {
-        id: 'table-u1',
-        role: 'user',
-        content: 'RAG 教育知识库模块需要哪些表？',
-        time: '17:12',
-      },
-      {
-        id: 'table-a1',
-        role: 'assistant',
-        content:
-          '可以先设计知识库表、文档表、切片表、问答会话表、消息表和引用记录表。这样既能管理文档，也能追踪每次回答引用了哪些片段。',
-        time: '17:12',
-        sources: ['知识库表结构草案', '文档表设计', '切片表设计', '会话表设计', '消息表设计', '引用记录表设计'],
-      },
-    ],
-    'rag-design': [
-      {
-        id: 'design-u1',
-        role: 'user',
-        content: 'RAG 知识库表设计时最容易忽略什么？',
-        time: '18:03',
-      },
-      {
-        id: 'design-a1',
-        role: 'assistant',
-        content:
-          '容易忽略权限范围、文档版本、切片状态和引用追踪。\n\n教育平台里还要考虑老师、学生、管理员不同角色能检索到的资料范围，最好在表结构里提前预留角色字段和可见范围字段。',
-        time: '18:03',
-        sources: ['知识库权限设计', '角色过滤规则', '文档版本管理', '切片状态控制', '引用追踪规范', '可见范围说明'],
-      },
-    ],
-  },
-}
-
 const senderRef = ref(null)
 const bubbleListRef = ref(null)
+const apiBaseURL = 'http://localhost:8080'
 const composerValue = ref('')
 const isLoading = ref(false)
-const activeConversation = ref('import-error')
+const loadingConversationId = ref('')
+const shouldAutoScroll = ref(true)
+const activeConversation = ref('')
 const isNewConversation = ref(false)
 const expandedSources = ref({})
-const conversations = ref(mockBackendResponse.conversationList)
-const messages = ref(cloneMessages(mockBackendResponse.chatRecords[activeConversation.value]))
+const conversations = ref([])
+const conversationPage = reactive({
+  pageNum: 1,
+  pageSize: 20,
+  total: 0,
+})
+const conversationLoading = ref(false)
+const conversationLoaded = ref(false)
+const conversationScrollRef = ref(null)
+const messages = ref([])
+const conversationMessageCache = ref({})
+const sessionDialogVisible = ref(false)
+const sessionDialogLoading = ref(false)
+const sessionCreateLoading = ref(false)
+const sessionKnowledgeBaseVisible = ref(false)
+const sessionKnowledgeBaseLoading = ref(false)
+const sessionKnowledgeBases = ref([])
+const sessionTab = ref('all')
+const myKnowledgeBases = ref([])
+const collectedKnowledgeBases = ref([])
+const selectedKnowledgeBases = ref([])
+const sessionForm = reactive({
+  sessionName: '',
+})
+const sessionFilters = reactive({
+  keyword: '',
+  kb_type: '',
+})
 const bubbleItems = computed(() =>
   messages.value.map((item, index) => ({
     ...item,
@@ -458,6 +91,7 @@ const promptCards = [
 const currentConversationTitle = computed(() => {
   return conversations.value.find((item) => item.id === activeConversation.value)?.title || '知识库问答'
 })
+const hasMoreConversations = computed(() => conversations.value.length < conversationPage.total)
 
 const isCreatePage = computed(() => route.name === 'knowledge-base-create')
 const isMyKnowledgeBasePage = computed(() => route.name === 'knowledge-base-my')
@@ -496,12 +130,50 @@ const topbarTips = computed(() => {
 
 const currentUserName = computed(() => userStore.realName || userStore.username || '用户')
 const currentUserInitial = computed(() => currentUserName.value.slice(0, 1).toUpperCase())
+const sessionTypeOptions = [
+  { label: '全部类型', value: '' },
+  { label: '其他', value: 1 },
+  { label: '课程', value: 2 },
+  { label: '教材', value: 3 },
+  { label: '政策', value: 4 },
+]
+const sessionTabs = [
+  { label: '全部', value: 'all' },
+  { label: '自建', value: 'owned' },
+  { label: '收藏', value: 'collected' },
+]
+const allSessionKnowledgeBases = computed(() => {
+  const map = new Map()
+  myKnowledgeBases.value.forEach((item) => map.set(item.id, { ...item, sourceType: 'owned' }))
+  collectedKnowledgeBases.value.forEach((item) => {
+    if (!map.has(item.id)) {
+      map.set(item.id, { ...item, sourceType: 'collected' })
+    }
+  })
+  return Array.from(map.values())
+})
+const currentSessionKnowledgeBases = computed(() => {
+  if (sessionTab.value === 'owned') {
+    return myKnowledgeBases.value.map((item) => ({ ...item, sourceType: 'owned' }))
+  }
+  if (sessionTab.value === 'collected') {
+    return collectedKnowledgeBases.value.map((item) => ({ ...item, sourceType: 'collected' }))
+  }
+  return allSessionKnowledgeBases.value
+})
+const selectedKbIds = computed(() => new Set(selectedKnowledgeBases.value.map((item) => item.id)))
+const currentConversationLoading = computed(() => isLoading.value && loadingConversationId.value === activeConversation.value)
+const typingQueue = ref([])
+const typingTimer = ref(null)
+const typingAssistantMessage = ref(null)
+const typingFinalize = ref(null)
+const typingConversationId = ref('')
 
 provide('knowledgeBaseChat', {
   senderRef,
   bubbleListRef,
   composerValue,
-  isLoading,
+  isLoading: currentConversationLoading,
   activeConversation,
   isNewConversation,
   expandedSources,
@@ -515,6 +187,8 @@ provide('knowledgeBaseChat', {
   topbarTitle,
   topbarTips,
   scrollBubbleListToBottom,
+  handleBubbleListScroll,
+  shouldFollowBubbleContent,
   setComposerText,
   handleSend,
   copyMessageContent,
@@ -535,16 +209,43 @@ function getBubbleListInstance() {
   return bubbleListRef.value
 }
 
-function scrollBubbleListToBottom(smooth = true) {
+function getBubbleListScrollElement() {
+  const root = bubbleListRef.value?.$el || bubbleListRef.value
+  return root?.querySelector?.('.el-scrollbar__wrap') || root?.querySelector?.('.elx-bubble-list__list') || root
+}
+
+function isBubbleListNearBottom(offset = 80) {
+  const target = getBubbleListScrollElement()
+  if (!target?.scrollHeight) {
+    return true
+  }
+  return target.scrollHeight - target.scrollTop - target.clientHeight <= offset
+}
+
+function handleBubbleListScroll() {
+  window.requestAnimationFrame(() => {
+    shouldAutoScroll.value = isBubbleListNearBottom()
+  })
+}
+
+function shouldFollowBubbleContent() {
+  return shouldAutoScroll.value
+}
+
+function scrollBubbleListToBottom(smooth = true, force = false) {
+  if (!force && !shouldAutoScroll.value) {
+    return
+  }
   const instance = getBubbleListInstance()
   instance?.scrollToBottom?.(smooth)
+  shouldAutoScroll.value = true
 }
 
 watch(
   () => messages.value.length,
   async () => {
     await nextTick()
-    scrollBubbleListToBottom(false)
+    scrollBubbleListToBottom(false, true)
   }
 )
 function cloneMessages(list = []) {
@@ -552,6 +253,22 @@ function cloneMessages(list = []) {
     ...item,
     sources: item.sources ? [...item.sources] : undefined,
   }))
+}
+
+function cacheConversationMessages(sessionId = activeConversation.value, list = messages.value) {
+  if (!sessionId) {
+    return
+  }
+  conversationMessageCache.value = {
+    ...conversationMessageCache.value,
+    [String(sessionId)]: list,
+  }
+}
+
+function removeConversationMessageCache(sessionId) {
+  const nextCache = { ...conversationMessageCache.value }
+  delete nextCache[String(sessionId)]
+  conversationMessageCache.value = nextCache
 }
 
 function wait(ms) {
@@ -602,11 +319,50 @@ async function streamAssistantReply(content, extra = {}) {
   for (let index = 0; index < text.length; index += segmentSize) {
     assistantMessage.content += text.slice(index, index + segmentSize)
     await nextTick()
-    scrollBubbleListToBottom(true)
+    scrollBubbleListToBottom(false)
     await wait(24)
   }
 
   saveCurrentMessages()
+}
+
+function stopTypingLoop() {
+  if (typingTimer.value) {
+    window.clearInterval(typingTimer.value)
+    typingTimer.value = null
+  }
+}
+
+function startTypingLoop() {
+  if (typingTimer.value || !typingAssistantMessage.value) {
+    return
+  }
+
+  typingTimer.value = window.setInterval(() => {
+    if (!typingQueue.value.length || !typingAssistantMessage.value) {
+      if (typingFinalize.value && !typingQueue.value.length) {
+        const finalize = typingFinalize.value
+        typingFinalize.value = null
+        stopTypingLoop()
+        finalize()
+      }
+      return
+    }
+
+    typingAssistantMessage.value.content += typingQueue.value.shift()
+    if (typingConversationId.value === activeConversation.value) {
+      nextTick().then(() => scrollBubbleListToBottom(false))
+    }
+  }, 24)
+}
+
+function pushTypingChunk(text) {
+  const chunk = String(text ?? '')
+  if (!chunk) {
+    return
+  }
+  typingQueue.value.push(...Array.from(chunk))
+  startTypingLoop()
 }
 
 async function copyMessageContent(content) {
@@ -645,7 +401,10 @@ function toggleSources(id) {
 }
 
 function saveCurrentMessages() {
-  mockBackendResponse.chatRecords[activeConversation.value] = cloneMessages(messages.value)
+  if (!activeConversation.value) {
+    return
+  }
+  cacheConversationMessages()
 }
 
 function showChatPage() {
@@ -654,11 +413,246 @@ function showChatPage() {
   }
 }
 
-function handleSelectConversation(id) {
-  saveCurrentMessages()
+function normalizeConversation(item) {
+  return {
+    id: String(item.id),
+    title: item.sessionName || item.title || '新会话',
+  }
+}
+
+function formatMessageTime(value) {
+  if (!value) {
+    return new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+  }
+  return new Date(value).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+}
+
+function mapDocRefsToSources(docRefs = []) {
+  return docRefs.map((item) => item.docName || item.contentSource || item.kbName).filter(Boolean)
+}
+
+function normalizeChatMessage(item) {
+  const docRefInfo = item.docRefInfo || []
+  return {
+    id: item.id || item.messageId || `${item.role}-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`,
+    role: item.role,
+    content: item.content || '',
+    time: formatMessageTime(item.createTime),
+    sources: mapDocRefsToSources(docRefInfo),
+    docRefInfo,
+    messageId: item.messageId,
+    metadata: item.metadata,
+    docRefCount: item.docRefCount || 0,
+  }
+}
+
+async function loadChatMessages(sessionId) {
+  if (!sessionId) {
+    messages.value = []
+    return
+  }
+
+  const cachedMessages = conversationMessageCache.value[String(sessionId)]
+  if (cachedMessages) {
+    messages.value = cachedMessages
+    return
+  }
+
+  try {
+    const result = await listChatMessages(sessionId)
+    messages.value = (result || []).map(normalizeChatMessage)
+    cacheConversationMessages(sessionId)
+  } catch (error) {
+    messages.value = []
+    ElMessage.error(error?.message || '历史消息加载失败')
+  }
+}
+
+async function loadConversationPage(reset = false) {
+  if (conversationLoading.value) {
+    return
+  }
+  if (!reset && !hasMoreConversations.value && conversationLoaded.value) {
+    return
+  }
+
+  conversationLoading.value = true
+  try {
+    const pageNum = reset ? 1 : conversationPage.pageNum
+    const result = await pageChatSessions({
+      pageNum,
+      pageSize: conversationPage.pageSize,
+    })
+    const records = (result?.records || []).map(normalizeConversation)
+
+    conversationPage.total = Number(result?.total || 0)
+    if (reset) {
+      conversations.value = records
+    } else {
+      const knownIds = new Set(conversations.value.map((item) => item.id))
+      records.forEach((item) => {
+        if (!knownIds.has(item.id)) {
+          conversations.value.push(item)
+        }
+      })
+    }
+
+    conversationLoaded.value = true
+    conversationPage.pageNum = pageNum + 1
+
+    if (!activeConversation.value && conversations.value.length) {
+      await handleSelectConversation(conversations.value[0].id)
+    } else if (reset && conversations.value.length === 0) {
+      activeConversation.value = ''
+      messages.value = []
+      ElMessage.info('当前暂无会话，请先新建会话！')
+    }
+  } catch (error) {
+    ElMessage.error(error?.message || '会话加载失败')
+  } finally {
+    conversationLoading.value = false
+  }
+}
+
+function onConversationScroll(event) {
+  const target = event?.target
+  if (!target || conversationLoading.value || !hasMoreConversations.value) {
+    return
+  }
+
+  const remaining = target.scrollHeight - target.scrollTop - target.clientHeight
+  if (remaining < 120) {
+    loadConversationPage()
+  }
+}
+
+function coverUrl(objectName) {
+  if (!objectName) {
+    return ''
+  }
+  return `${apiBaseURL}/api/rag/kb/cover?objectName=${encodeURIComponent(objectName)}`
+}
+
+function typeName(value) {
+  return sessionTypeOptions.find((item) => item.value === value)?.label || '未知'
+}
+
+function sourceName(value) {
+  return value === 'owned' ? '自建' : '收藏'
+}
+
+function kbSourceType(item) {
+  const kbUserId = Number(item?.userId)
+  const currentUserId = Number(userStore.userId)
+  return kbUserId && currentUserId && kbUserId === currentUserId ? 'owned' : 'collected'
+}
+
+function buildSessionKbParams() {
+  const params = {}
+  const keyword = sessionFilters.keyword.trim()
+
+  if (keyword) {
+    params.keyword = keyword
+  }
+  if (sessionFilters.kb_type !== '' && sessionFilters.kb_type != null) {
+    params.kb_type = sessionFilters.kb_type
+  }
+  return params
+}
+
+async function loadSessionKnowledgeBases() {
+  sessionDialogLoading.value = true
+  try {
+    const params = buildSessionKbParams()
+    if (sessionTab.value === 'all') {
+      const [myResult, collectedResult] = await Promise.all([
+        listMyKnowledgeBases({ ...params, status: 1 }),
+        pageCollectedKnowledgeBases({ ...params, pageNum: 1, pageSize: 100 }),
+      ])
+      myKnowledgeBases.value = myResult || []
+      collectedKnowledgeBases.value = collectedResult?.records || []
+      return
+    }
+
+    if (sessionTab.value === 'owned') {
+      myKnowledgeBases.value = await listMyKnowledgeBases({ ...params, status: 1 })
+      return
+    }
+
+    collectedKnowledgeBases.value = (await pageCollectedKnowledgeBases({ ...params, pageNum: 1, pageSize: 100 }))?.records || []
+  } catch (error) {
+    ElMessage.error(error?.message || '知识库加载失败')
+  } finally {
+    sessionDialogLoading.value = false
+  }
+}
+
+function resetSessionDialog() {
+  sessionForm.sessionName = ''
+  sessionFilters.keyword = ''
+  sessionFilters.kb_type = ''
+  sessionTab.value = 'all'
+  selectedKnowledgeBases.value = []
+  myKnowledgeBases.value = []
+  collectedKnowledgeBases.value = []
+}
+
+function addSelectedKnowledgeBase(item) {
+  if (!item?.id || selectedKbIds.value.has(item.id)) {
+    return
+  }
+  selectedKnowledgeBases.value.push(item)
+}
+
+function removeSelectedKnowledgeBase(kbId) {
+  selectedKnowledgeBases.value = selectedKnowledgeBases.value.filter((item) => item.id !== kbId)
+}
+
+function openSessionDialog() {
+  resetSessionDialog()
+  sessionDialogVisible.value = true
+  loadSessionKnowledgeBases()
+}
+
+function handleSessionTabChange(value) {
+  sessionTab.value = value
+  loadSessionKnowledgeBases()
+}
+
+async function handleCreateChatSession() {
+  const sessionName = sessionForm.sessionName.trim()
+  if (!sessionName) {
+    ElMessage.warning('请输入会话名称')
+    return
+  }
+  if (!selectedKnowledgeBases.value.length) {
+    ElMessage.warning('请至少选择一个知识库')
+    return
+  }
+
+  sessionCreateLoading.value = true
+  try {
+    const session = await createChatSession({
+      sessionName,
+      kbIds: selectedKnowledgeBases.value.map((item) => item.id),
+    })
+    createLocalConversation(String(session.id), session.sessionName || sessionName)
+    sessionDialogVisible.value = false
+    ElMessage.success('会话创建成功')
+  } catch (error) {
+    ElMessage.error(error?.message || '会话创建失败')
+  } finally {
+    sessionCreateLoading.value = false
+  }
+}
+
+async function handleSelectConversation(id) {
   isNewConversation.value = false
+  cacheConversationMessages()
   activeConversation.value = id
-  messages.value = cloneMessages(mockBackendResponse.chatRecords[id])
+  senderRef.value?.setLoading?.(false)
+  await loadChatMessages(id)
+  cacheConversationMessages(id)
   expandedSources.value = {}
   composerValue.value = ''
   senderRef.value?.clear?.()
@@ -683,6 +677,25 @@ function handleKnowledgeBaseCollection() {
   }
 }
 
+async function openSessionKnowledgeBases() {
+  if (!activeConversation.value) {
+    ElMessage.warning('当前还未曾选中会话')
+    return
+  }
+
+  sessionKnowledgeBaseVisible.value = true
+  sessionKnowledgeBaseLoading.value = true
+  try {
+    sessionKnowledgeBases.value = await listChatSessionKnowledgeBases(activeConversation.value)
+  } catch (error) {
+    sessionKnowledgeBases.value = []
+    sessionKnowledgeBaseVisible.value = false
+    ElMessage.error(error?.message || '会话知识库加载失败')
+  } finally {
+    sessionKnowledgeBaseLoading.value = false
+  }
+}
+
 function handleBackToKnowledgeBaseShow() {
   router.push('/main/knowledge-qa/show')
 }
@@ -698,22 +711,127 @@ async function handleSend() {
   const senderText = senderRef.value?.getModelValue?.()?.text || ''
   const question = (senderText || composerValue.value).trim()
 
-  if (!question || isLoading.value) {
+  if (!question || currentConversationLoading.value) {
     return
   }
 
+  if (!activeConversation.value) {
+    ElMessage.warning('当前暂无会话，请先新建会话！')
+    return
+  }
+
+  const requestConversationId = activeConversation.value
+  shouldAutoScroll.value = true
   pushMessage('user', question)
+  const assistantMessage = pushMessage('assistant', '', {
+    role: 'assistant',
+    loading: true,
+    sources: [],
+    docRefInfo: [],
+    docRefCount: 0,
+  })
   isNewConversation.value = false
   composerValue.value = ''
   senderRef.value?.clear?.()
   isLoading.value = true
+  loadingConversationId.value = requestConversationId
+  typingConversationId.value = requestConversationId
+  typingQueue.value = []
+  typingAssistantMessage.value = assistantMessage
+  cacheConversationMessages(requestConversationId)
+  let receivedStreamChunk = false
+  let typingCompleted = false
+  let resolveTypingDone = () => {}
+  const typingDone = new Promise((resolve) => {
+    resolveTypingDone = resolve
+  })
+
+  function applyAssistantFrame(frame = {}) {
+    assistantMessage.messageId = frame.messageId || assistantMessage.messageId
+    assistantMessage.metadata = frame.metadata ?? assistantMessage.metadata
+
+    if (Array.isArray(frame.docRefInfo)) {
+      assistantMessage.docRefInfo = frame.docRefInfo
+      assistantMessage.docRefCount = frame.docRefCount ?? frame.docRefInfo.length
+      assistantMessage.sources = mapDocRefsToSources(frame.docRefInfo)
+    } else if (frame.docRefCount !== undefined) {
+      assistantMessage.docRefCount = frame.docRefCount
+    }
+
+    if (requestConversationId === activeConversation.value) {
+      messages.value = [...messages.value]
+    }
+  }
+
+  function completeTyping(frame, keepContent = true) {
+    typingCompleted = true
+    assistantMessage.loading = false
+    applyAssistantFrame(frame)
+
+    if (frame.status === 'done') {
+      if (!keepContent) {
+        assistantMessage.content = frame.content || assistantMessage.content
+      }
+      assistantMessage.id = frame.id || assistantMessage.id
+      assistantMessage.time = formatMessageTime(frame.createTime)
+    } else if (frame.status === 'error') {
+      assistantMessage.content = frame.content || 'AI回答生成失败'
+      ElMessage.error(assistantMessage.content)
+    }
+
+    typingQueue.value = []
+    typingFinalize.value = null
+    stopTypingLoop()
+    typingAssistantMessage.value = null
+    resolveTypingDone()
+  }
 
   try {
-    await streamAssistantReply(buildReply(question), {
-      sources: ['Edu-F平台说明', '知识库模拟样例'],
+    await sendRagChatStream({ sessionId: Number(requestConversationId), message: question }, async (frame) => {
+      if (frame.status === 'stream') {
+        receivedStreamChunk = true
+        applyAssistantFrame(frame)
+        if (assistantMessage.loading) {
+          assistantMessage.loading = false
+        }
+        pushTypingChunk(frame.content || '')
+      } else if (frame.status === 'done') {
+        applyAssistantFrame(frame)
+        if (!receivedStreamChunk && frame.content) {
+          pushTypingChunk(frame.content)
+        }
+        typingFinalize.value = () => completeTyping(frame, receivedStreamChunk)
+        if (!typingQueue.value.length) {
+          typingFinalize.value()
+        }
+      } else if (frame.status === 'error') {
+        completeTyping(frame)
+      }
+
+      await nextTick()
+      if (requestConversationId === activeConversation.value) {
+        scrollBubbleListToBottom(false)
+      }
     })
+  } catch (error) {
+    completeTyping({ status: 'error', content: error?.message || 'AI回答生成失败' })
   } finally {
-    isLoading.value = false
+    if (!typingCompleted) {
+      if (typingQueue.value.length) {
+        typingFinalize.value = () => completeTyping({ status: 'done' })
+        startTypingLoop()
+      } else {
+        completeTyping({ status: 'done' })
+      }
+    }
+    await typingDone
+    if (loadingConversationId.value === requestConversationId) {
+      isLoading.value = false
+      loadingConversationId.value = ''
+    }
+    if (typingConversationId.value === requestConversationId) {
+      typingConversationId.value = ''
+    }
   }
 }
 
@@ -731,19 +849,33 @@ function handleConversationCommand(command, item) {
 async function renameConversation(item) {
   try {
     const { value } = await ElMessageBox.prompt('请输入新的对话名称', '重命名', {
-      confirmButtonText: '确定',
+      confirmButtonText: '纭畾',
       cancelButtonText: '取消',
       inputValue: item.title,
       inputPattern: /\S/,
       inputErrorMessage: '对话名称不能为空',
     })
 
+    const sessionName = value.trim()
+    if (sessionName.length > 50) {
+      ElMessage.warning('对话名称不能超过50个字符')
+      return
+    }
+
+    const session = await renameChatSession({
+      sessionId: Number(item.id),
+      sessionName,
+    })
+
     const target = conversations.value.find((conversation) => conversation.id === item.id)
     if (target) {
-      target.title = value.trim()
+      target.title = session?.sessionName || sessionName
     }
-  } catch {
-    // User cancelled the prompt.
+    ElMessage.success('重命名成功')
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') {
+      ElMessage.error(error?.message || '重命名失败')
+    }
   }
 }
 
@@ -756,54 +888,66 @@ async function deleteConversation(item) {
       type: 'warning',
     })
 
+    await deleteChatSession(Number(item.id))
+
     const index = conversations.value.findIndex((conversation) => conversation.id === item.id)
     if (index < 0) {
       return
     }
 
     conversations.value.splice(index, 1)
-    delete mockBackendResponse.chatRecords[item.id]
+    conversationPage.total = Math.max(0, conversationPage.total - 1)
+    removeConversationMessageCache(item.id)
 
     if (activeConversation.value === item.id) {
-      const nextConversation = conversations.value[index] || conversations.value[index - 1]
+      activeConversation.value = ''
+      messages.value = []
+      composerValue.value = ''
+      senderRef.value?.clear?.()
+      const nextConversation = conversations.value[0]
 
       if (nextConversation) {
-        activeConversation.value = nextConversation.id
-        isNewConversation.value = false
-        messages.value = cloneMessages(mockBackendResponse.chatRecords[nextConversation.id])
-        expandedSources.value = {}
-      } else {
-        handleNewChat()
+        await handleSelectConversation(nextConversation.id)
       }
     }
-  } catch {
-    // User cancelled the confirmation.
+
+    ElMessage.success('删除成功')
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') {
+      ElMessage.error(error?.message || '删除失败')
+    }
   }
 }
-
-function handleNewChat() {
-  saveCurrentMessages()
-  const id = `new-${Date.now()}`
-  const title = '新对话'
-
+function createLocalConversation(id, title) {
+  cacheConversationMessages()
   conversations.value.unshift({ id, title })
-  mockBackendResponse.chatRecords[id] = []
+  conversationPage.total += 1
   isNewConversation.value = true
   activeConversation.value = id
-  messages.value = cloneMessages(mockBackendResponse.chatRecords[id])
+  senderRef.value?.setLoading?.(false)
+  messages.value = []
+  cacheConversationMessages(id)
   expandedSources.value = {}
   composerValue.value = ''
   senderRef.value?.clear?.()
   showChatPage()
 }
+
+function handleNewChat() {
+  openSessionDialog()
+}
+
+onMounted(() => {
+  loadConversationPage(true)
+})
 </script>
 
 <template>
   <main class="knowledge-base-view">
     <aside class="chat-sidebar">
-      <div class="assistant-profile">
+        <div class="assistant-profile">
         <div class="assistant-avatar">AI</div>
-        <span>知识库助手</span>
+        <span>AI知识库助手</span>
       </div>
 
       <nav class="sidebar-actions" aria-label="知识库问答导航">
@@ -823,14 +967,14 @@ function handleNewChat() {
           <el-icon><CollectionTag /></el-icon>
           <span>知识库收藏</span>
         </button>
-        <button type="button">
+        <button type="button" @click="openSessionKnowledgeBases">
           <el-icon><DocumentAdd /></el-icon>
           <span>会话知识库</span>
         </button>
       </nav>
 
       <div class="history-title">历史对话</div>
-      <div class="conversation-list">
+      <div ref="conversationScrollRef" class="conversation-list" @scroll="onConversationScroll">
         <div
           v-for="item in conversations"
           :key="item.id"
@@ -843,8 +987,8 @@ function handleNewChat() {
             <span>{{ item.title }}</span>
           </button>
 
-          <el-dropdown trigger="click" @command="(command) => handleConversationCommand(command, item)">
-            <button class="conversation-more" type="button" aria-label="更多操作" @click.stop>
+          <el-dropdown trigger="click" @click.stop @command="(command) => handleConversationCommand(command, item)">
+            <button class="conversation-more" type="button" aria-label="更多操作">
               <el-icon><MoreFilled /></el-icon>
             </button>
 
@@ -856,6 +1000,10 @@ function handleNewChat() {
             </template>
           </el-dropdown>
         </div>
+
+        <div v-if="conversationLoading" class="conversation-list-tip">加载中...</div>
+        <div v-else-if="conversationLoaded && conversations.length === 0" class="conversation-list-tip">暂无历史对话</div>
+        <div v-else-if="conversationLoaded && !hasMoreConversations" class="conversation-list-tip">已加载全部</div>
       </div>
 
       <div class="sidebar-footer">
@@ -880,6 +1028,139 @@ function handleNewChat() {
         <router-view />
       </div>
     </section>
+
+    <el-dialog v-model="sessionDialogVisible" class="session-dialog" width="1180px" align-center destroy-on-close>
+      <template #header>
+        <div class="session-dialog__header">
+          <div>
+            <strong>请选择您的会话依据知识库</strong>
+            <span>多选知识库后创建会话</span>
+          </div>
+        </div>
+      </template>
+
+      <div class="session-dialog__body">
+        <section class="session-picked">
+          <div class="session-field">
+            <span>会话名称</span>
+            <el-input v-model="sessionForm.sessionName" maxlength="50" show-word-limit placeholder="请输入会话名称" />
+          </div>
+
+          <div class="session-picked__list">
+            <article v-for="item in selectedKnowledgeBases" :key="`picked-${item.id}`" class="session-picked-card">
+              <el-image v-if="item.kbCover" class="session-picked-card__cover" :src="coverUrl(item.kbCover)" fit="contain" />
+              <div v-else class="session-picked-card__cover session-picked-card__cover--empty">
+                <el-icon><PictureFilled /></el-icon>
+              </div>
+
+              <div class="session-picked-card__info">
+                <h3>{{ item.kbName }}</h3>
+                <div class="session-picked-card__tags">
+                  <el-tag size="small">{{ typeName(item.kbType) }}</el-tag>
+                  <el-tag size="small" type="info">{{ sourceName(item.sourceType) }}</el-tag>
+                </div>
+              </div>
+
+              <button class="session-picked-card__remove" type="button" @click="removeSelectedKnowledgeBase(item.id)">
+                <el-icon><Close /></el-icon>
+              </button>
+            </article>
+          </div>
+        </section>
+
+        <section class="session-select">
+          <aside class="session-select__tabs">
+            <button
+              v-for="item in sessionTabs"
+              :key="item.value"
+              type="button"
+              :class="['session-tab', { active: sessionTab === item.value }]"
+              @click="handleSessionTabChange(item.value)"
+            >
+              {{ item.label }}
+            </button>
+          </aside>
+
+          <div class="session-select__panel">
+            <div class="session-filter-bar">
+              <el-input v-model="sessionFilters.keyword" :prefix-icon="Search" clearable placeholder="按知识库名称模糊搜索" @input="loadSessionKnowledgeBases" />
+              <el-select v-model="sessionFilters.kb_type" clearable placeholder="按类型筛选" @change="loadSessionKnowledgeBases">
+                <el-option v-for="item in sessionTypeOptions" :key="item.value === '' ? 'all' : item.value" :label="item.label" :value="item.value" />
+              </el-select>
+            </div>
+
+            <div v-loading="sessionDialogLoading" class="session-kb-grid">
+              <article v-for="item in currentSessionKnowledgeBases" :key="`${sessionTab}-${item.id}`" class="session-kb-card">
+                <div class="session-kb-card__cover-wrap">
+                  <el-image v-if="item.kbCover" class="session-kb-card__cover" :src="coverUrl(item.kbCover)" fit="contain" />
+                  <div v-else class="session-kb-card__cover session-kb-card__cover--empty">
+                    <el-icon><PictureFilled /></el-icon>
+                  </div>
+                </div>
+
+                <div class="session-kb-card__body">
+                  <h3>{{ item.kbName }}</h3>
+                  <div class="session-kb-card__tags">
+                    <el-tag size="small">{{ typeName(item.kbType) }}</el-tag>
+                    <el-tag size="small" type="info">{{ sourceName(item.sourceType) }}</el-tag>
+                  </div>
+                  <button class="session-kb-card__add" type="button" :disabled="selectedKbIds.has(item.id)" @click="addSelectedKnowledgeBase(item)">
+                    <el-icon><Plus /></el-icon>
+                  </button>
+                </div>
+              </article>
+
+              <el-empty v-if="!sessionDialogLoading && currentSessionKnowledgeBases.length === 0" description="暂无知识库" />
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <template #footer>
+        <div class="session-dialog__footer">
+          <el-button @click="sessionDialogVisible = false">取消</el-button>
+          <el-button type="primary" :loading="sessionCreateLoading" @click="handleCreateChatSession">确认创建</el-button>
+        </div>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="sessionKnowledgeBaseVisible" class="session-kb-dialog" width="980px" align-center destroy-on-close>
+      <template #header>
+        <div class="session-dialog__header">
+          <div>
+            <strong>会话知识库</strong>
+            <span>当前选中会话所依据的知识库</span>
+          </div>
+        </div>
+      </template>
+
+      <div v-loading="sessionKnowledgeBaseLoading" class="session-kb-view">
+        <article v-for="item in sessionKnowledgeBases" :key="`session-kb-${item.id}`" class="session-kb-view-card">
+          <div class="session-kb-view-card__cover-wrap">
+            <el-image v-if="item.kbCover" class="session-kb-view-card__cover" :src="coverUrl(item.kbCover)" fit="contain" />
+            <div v-else class="session-kb-view-card__cover session-kb-view-card__cover--empty">
+              <el-icon><PictureFilled /></el-icon>
+            </div>
+          </div>
+
+          <div class="session-kb-view-card__body">
+            <h3>{{ item.kbName }}</h3>
+            <div class="session-kb-view-card__tags">
+              <el-tag size="small">{{ typeName(item.kbType) }}</el-tag>
+              <el-tag size="small" type="info">{{ sourceName(kbSourceType(item)) }}</el-tag>
+            </div>
+          </div>
+        </article>
+
+        <el-empty v-if="!sessionKnowledgeBaseLoading && sessionKnowledgeBases.length === 0" description="暂无会话知识库" />
+      </div>
+
+      <template #footer>
+        <div class="session-dialog__footer">
+          <el-button type="primary" @click="sessionKnowledgeBaseVisible = false">关闭</el-button>
+        </div>
+      </template>
+    </el-dialog>
   </main>
 </template>
 
@@ -1038,6 +1319,13 @@ function handleNewChat() {
   outline: none;
 }
 
+.conversation-list-tip {
+  padding: 8px 0 4px;
+  color: #a0a5ad;
+  font-size: 12px;
+  text-align: center;
+}
+
 .sidebar-footer {
   margin-top: auto;
   border-top: 1px solid #e5e7eb;
@@ -1113,6 +1401,364 @@ function handleNewChat() {
   overflow: hidden;
 }
 
+.session-dialog :deep(.el-dialog) {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.session-dialog :deep(.el-dialog__body) {
+  padding: 0 24px 24px;
+}
+
+.session-dialog :deep(.el-dialog__header) {
+  margin: 0;
+  padding: 22px 24px 16px;
+}
+
+.session-dialog__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.session-dialog__header strong {
+  display: block;
+  color: #0f172a;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.session-dialog__header span {
+  display: block;
+  margin-top: 4px;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.session-dialog__body {
+  display: grid;
+  gap: 18px;
+}
+
+.session-picked {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid #e5ebf3;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.session-field {
+  display: grid;
+  gap: 8px;
+}
+
+.session-field span {
+  color: #1f2937;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.session-picked__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.session-picked-card,
+.session-kb-card {
+  overflow: hidden;
+  border: 1px solid #dce5f1;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.session-picked-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 74px;
+  padding: 8px 10px 8px 8px;
+}
+
+.session-picked-card__cover,
+.session-kb-card__cover {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+}
+
+.session-picked-card__cover {
+  width: 70px;
+  height: 56px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.session-picked-card__cover--empty,
+.session-kb-card__cover--empty {
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #edf4ff 0%, #f7fafc 100%);
+  color: #8aa0c4;
+}
+
+.session-picked-card__cover--empty {
+  width: 70px;
+  height: 56px;
+  border-radius: 6px;
+}
+
+.session-picked-card__info,
+.session-kb-card__body {
+  min-width: 0;
+}
+
+.session-picked-card__info h3,
+.session-kb-card__body h3 {
+  overflow: hidden;
+  margin: 0;
+  color: #111827;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-picked-card__info h3 {
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.session-picked-card__tags,
+.session-kb-card__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.session-picked-card__remove,
+.session-kb-card__add {
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.session-picked-card__remove {
+  width: 30px;
+  height: 30px;
+  border: 1px solid #d7e2ef;
+  border-radius: 6px;
+  background: #f8fbff;
+  color: #9aa0aa;
+  transition: background .18s, border-color .18s, color .18s, box-shadow .18s;
+}
+
+.session-picked-card__remove:hover {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #ef4444;
+  box-shadow: 0 6px 14px rgba(239, 68, 68, .12);
+}
+
+.session-picked-card__remove:focus-visible {
+  outline: none;
+  border-color: #fca5a5;
+  background: #fef2f2;
+  color: #ef4444;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, .16);
+}
+
+.session-select {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 14px;
+  min-height: 0;
+}
+
+.session-select__tabs {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  padding: 12px;
+  border: 1px solid #e5ebf3;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.session-tab {
+  height: 38px;
+  border: 1px solid #d7e2ef;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #374151;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.session-tab.active {
+  border-color: #3b82f6;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.session-select__panel {
+  display: grid;
+  gap: 12px;
+  min-height: 0;
+}
+
+.session-filter-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px;
+  gap: 12px;
+}
+
+.session-kb-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 12px;
+  min-height: 320px;
+  max-height: 420px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.session-kb-card {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.session-kb-card__cover-wrap {
+  overflow: hidden;
+  background: #f4f8ff;
+}
+
+.session-kb-card__cover {
+  display: block;
+  width: 100%;
+}
+
+.session-kb-card__cover--empty {
+  min-height: 118px;
+  font-size: 28px;
+}
+
+.session-kb-card__body {
+  display: grid;
+  gap: 8px;
+  padding: 12px 12px 14px;
+}
+
+.session-kb-card__body h3 {
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.session-kb-card__add {
+  width: 30px;
+  height: 30px;
+  margin-left: auto;
+  border-radius: 6px;
+  border: 1px solid #d7e2ef;
+  background: #f8fbff;
+  color: #2563eb;
+  transition: background .18s, border-color .18s, color .18s, box-shadow .18s;
+}
+
+.session-kb-card__add:hover:not(:disabled) {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  box-shadow: 0 6px 14px rgba(37, 99, 235, .12);
+}
+
+.session-kb-card__add:focus-visible {
+  outline: none;
+  background: #eff6ff;
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, .18);
+}
+
+.session-kb-card__add:disabled {
+  color: #cbd5e1;
+  background: #f8fbff;
+  border-color: #e5ebf3;
+  cursor: not-allowed;
+}
+
+.session-dialog__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.session-kb-view {
+  display: grid;
+  gap: 12px;
+  min-height: 180px;
+  max-height: 560px;
+  overflow: auto;
+}
+
+.session-kb-view-card {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid #dce5f1;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.session-kb-view-card__cover-wrap,
+.session-kb-view-card__cover {
+  width: 120px;
+  aspect-ratio: 16 / 9;
+}
+
+.session-kb-view-card__cover {
+  border-radius: 6px;
+  background: #f4f8ff;
+  object-fit: contain;
+}
+
+.session-kb-view-card__cover--empty {
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #edf4ff 0%, #f7fafc 100%);
+  color: #8aa0c4;
+  font-size: 28px;
+}
+
+.session-kb-view-card__body {
+  min-width: 0;
+}
+
+.session-kb-view-card__body h3 {
+  overflow: hidden;
+  margin: 0;
+  color: #111827;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-kb-view-card__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
 @media (max-width: 980px) {
   .knowledge-base-view {
     grid-template-columns: 1fr;
@@ -1124,6 +1770,27 @@ function handleNewChat() {
 
   .topbar-title span {
     display: none;
+  }
+
+  .session-select {
+    grid-template-columns: 1fr;
+  }
+
+  .session-select__tabs {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .session-filter-bar {
+    grid-template-columns: 1fr;
+  }
+
+  .session-kb-view-card {
+    grid-template-columns: 1fr;
+  }
+
+  .session-kb-view-card__cover-wrap,
+  .session-kb-view-card__cover {
+    width: 100%;
   }
 }
 </style>
