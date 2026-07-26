@@ -1,11 +1,12 @@
 <script setup>
-import { computed, nextTick, onMounted, provide, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, provide, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import {
   createChatSession,
   deleteChatSession,
+  getKnowledgeBaseCollectionStatus,
   listChatMessages,
   listChatSessionKnowledgeBases,
   listMyKnowledgeBases,
@@ -16,6 +17,7 @@ import {
 } from '@/api/rag'
 import {
   ArrowLeft,
+  ArrowRight,
   ChatDotRound,
   ChatLineRound,
   Close,
@@ -28,10 +30,12 @@ import {
   Plus,
   Search,
 } from '@element-plus/icons-vue'
+import KnowledgeBaseDetailDrawer from './KnowledgeBaseDetailDrawer.vue'
 
 const userStore = useUserStore()
 const route = useRoute()
 const router = useRouter()
+const SIDEBAR_BREAKPOINT = 980
 
 const senderRef = ref(null)
 const bubbleListRef = ref(null)
@@ -60,6 +64,10 @@ const sessionCreateLoading = ref(false)
 const sessionKnowledgeBaseVisible = ref(false)
 const sessionKnowledgeBaseLoading = ref(false)
 const sessionKnowledgeBases = ref([])
+const detailVisible = ref(false)
+const detailKnowledgeBase = ref(null)
+const detailCollected = ref(false)
+const detailCollectionLoading = ref(false)
 const sessionTab = ref('all')
 const myKnowledgeBases = ref([])
 const collectedKnowledgeBases = ref([])
@@ -130,6 +138,8 @@ const topbarTips = computed(() => {
 
 const currentUserName = computed(() => userStore.realName || userStore.username || '用户')
 const currentUserInitial = computed(() => currentUserName.value.slice(0, 1).toUpperCase())
+const sidebarCollapsed = ref(false)
+const isCompactSidebar = ref(false)
 const sessionTypeOptions = [
   { label: '全部类型', value: '' },
   { label: '其他', value: 1 },
@@ -168,6 +178,7 @@ const typingTimer = ref(null)
 const typingAssistantMessage = ref(null)
 const typingFinalize = ref(null)
 const typingConversationId = ref('')
+const sessionKnowledgeBaseSessionId = ref('')
 
 provide('knowledgeBaseChat', {
   senderRef,
@@ -193,6 +204,7 @@ provide('knowledgeBaseChat', {
   handleSend,
   copyMessageContent,
   toggleSources,
+  openReferencePreview,
   handleConversationCommand,
   handleSelectConversation,
   handleNewChat,
@@ -204,6 +216,22 @@ provide('knowledgeBaseChat', {
   isMyKnowledgeBasePage,
   isCollectionPage,
 })
+
+function syncSidebarState() {
+  const compact = window.innerWidth <= SIDEBAR_BREAKPOINT
+
+  if (compact !== isCompactSidebar.value) {
+    isCompactSidebar.value = compact
+    sidebarCollapsed.value = compact
+    return
+  }
+
+  isCompactSidebar.value = compact
+}
+
+function toggleSidebar() {
+  sidebarCollapsed.value = !sidebarCollapsed.value
+}
 
 function getBubbleListInstance() {
   return bubbleListRef.value
@@ -427,8 +455,69 @@ function formatMessageTime(value) {
   return new Date(value).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 }
 
+function getFileExtension(value) {
+  const cleanValue = String(value || '').split('?')[0]
+  const index = cleanValue.lastIndexOf('.')
+  return index >= 0 ? cleanValue.slice(index + 1).toLowerCase() : ''
+}
+
 function mapDocRefsToSources(docRefs = []) {
-  return docRefs.map((item) => item.docName || item.contentSource || item.kbName).filter(Boolean)
+  return docRefs
+    .map((item) => ({
+      label: item.docName || item.contentSource || item.kbName,
+      kbName: item.kbName || '',
+      fileUrl: item.fileUrl || '',
+      docType: item.docType || getFileExtension(item.fileUrl || item.docName),
+      description: item.description || null,
+    }))
+    .filter((item) => item.label)
+}
+
+async function ensureSessionKnowledgeBasesLoaded() {
+  if (sessionKnowledgeBases.value.length && sessionKnowledgeBaseSessionId.value === activeConversation.value) {
+    return sessionKnowledgeBases.value
+  }
+
+  if (!activeConversation.value) {
+    return []
+  }
+
+  try {
+    sessionKnowledgeBases.value = await listChatSessionKnowledgeBases(activeConversation.value)
+    sessionKnowledgeBaseSessionId.value = activeConversation.value
+  } catch {
+    sessionKnowledgeBases.value = []
+    sessionKnowledgeBaseSessionId.value = ''
+  }
+
+  return sessionKnowledgeBases.value
+}
+
+async function openReferencePreview(source) {
+  const fileUrl = String(source?.fileUrl || '').trim()
+
+  if (!fileUrl) {
+    return
+  }
+
+  const sessionKbList = await ensureSessionKnowledgeBasesLoaded()
+  const matchedKb = sessionKbList.find((item) => String(item.kbName || '').trim() === String(source.kbName || '').trim())
+  const kbId = Number(matchedKb?.id || route.query.kb_id || 0)
+
+  if (!Number.isInteger(kbId) || kbId <= 0) {
+    ElMessage.warning('当前引用缺少知识库信息，无法打开预览')
+    return
+  }
+
+  router.push({
+    name: 'knowledge-base-preview',
+    query: {
+      kb_id: kbId,
+      file_url: fileUrl,
+      file_name: source.label,
+      doc_type: source.docType,
+    },
+  })
 }
 
 function normalizeChatMessage(item) {
@@ -545,6 +634,12 @@ function kbSourceType(item) {
   const kbUserId = Number(item?.userId)
   const currentUserId = Number(userStore.userId)
   return kbUserId && currentUserId && kbUserId === currentUserId ? 'owned' : 'collected'
+}
+
+function isSelfCreated(item) {
+  const kbUserId = Number(item?.userId)
+  const currentUserId = Number(userStore.userId)
+  return Boolean(kbUserId && currentUserId && kbUserId === currentUserId)
 }
 
 function buildSessionKbParams() {
@@ -918,6 +1013,29 @@ async function deleteConversation(item) {
     }
   }
 }
+
+async function openSessionKnowledgeBaseDetail(item) {
+  detailKnowledgeBase.value = item
+  detailCollected.value = false
+
+  if (userStore.isLoggedIn && item?.id && !isSelfCreated(item)) {
+    detailCollectionLoading.value = true
+    try {
+      detailCollected.value = Boolean(await getKnowledgeBaseCollectionStatus(item.id))
+    } catch (error) {
+      detailCollected.value = false
+      ElMessage.error(error?.message || '收藏状态加载失败')
+    } finally {
+      detailCollectionLoading.value = false
+    }
+  }
+
+  detailVisible.value = true
+}
+
+function handleDetailCollectionChange(value) {
+  detailCollected.value = value
+}
 function createLocalConversation(id, title) {
   cacheConversationMessages()
   conversations.value.unshift({ id, title })
@@ -938,14 +1056,20 @@ function handleNewChat() {
 }
 
 onMounted(() => {
+  syncSidebarState()
+  window.addEventListener('resize', syncSidebarState)
   loadConversationPage(true)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', syncSidebarState)
 })
 </script>
 
 <template>
-  <main class="knowledge-base-view">
+  <main class="knowledge-base-view" :class="{ 'is-compact-sidebar': isCompactSidebar, 'is-sidebar-collapsed': sidebarCollapsed }">
     <aside class="chat-sidebar">
-        <div class="assistant-profile">
+      <div class="assistant-profile">
         <div class="assistant-avatar">AI</div>
         <span>AI知识库助手</span>
       </div>
@@ -1007,9 +1131,23 @@ onMounted(() => {
       </div>
 
       <div class="sidebar-footer">
-        <el-avatar v-if="userStore.avatar" class="user-avatar" :size="24" :src="userStore.avatar" />
-        <div v-else class="user-avatar">{{ currentUserInitial }}</div>
-        <span>{{ currentUserName }}</span>
+        <div class="sidebar-footer__user">
+          <el-avatar v-if="userStore.avatar" class="user-avatar" :size="24" :src="userStore.avatar" />
+          <div v-else class="user-avatar">{{ currentUserInitial }}</div>
+          <span>{{ currentUserName }}</span>
+        </div>
+
+        <button
+          class="sidebar-toggle"
+          type="button"
+          :aria-label="sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'"
+          @click="toggleSidebar"
+        >
+          <el-icon>
+            <ArrowRight v-if="sidebarCollapsed" />
+            <ArrowLeft v-else />
+          </el-icon>
+        </button>
       </div>
     </aside>
 
@@ -1047,7 +1185,16 @@ onMounted(() => {
           </div>
 
           <div class="session-picked__list">
-            <article v-for="item in selectedKnowledgeBases" :key="`picked-${item.id}`" class="session-picked-card">
+            <article
+              v-for="item in selectedKnowledgeBases"
+              :key="`picked-${item.id}`"
+              class="session-picked-card session-picked-card--clickable"
+              role="button"
+              tabindex="0"
+              @click="openSessionKnowledgeBaseDetail(item)"
+              @keydown.enter.prevent="openSessionKnowledgeBaseDetail(item)"
+              @keydown.space.prevent="openSessionKnowledgeBaseDetail(item)"
+            >
               <el-image v-if="item.kbCover" class="session-picked-card__cover" :src="coverUrl(item.kbCover)" fit="contain" />
               <div v-else class="session-picked-card__cover session-picked-card__cover--empty">
                 <el-icon><PictureFilled /></el-icon>
@@ -1061,7 +1208,7 @@ onMounted(() => {
                 </div>
               </div>
 
-              <button class="session-picked-card__remove" type="button" @click="removeSelectedKnowledgeBase(item.id)">
+              <button class="session-picked-card__remove" type="button" @click.stop="removeSelectedKnowledgeBase(item.id)">
                 <el-icon><Close /></el-icon>
               </button>
             </article>
@@ -1090,7 +1237,16 @@ onMounted(() => {
             </div>
 
             <div v-loading="sessionDialogLoading" class="session-kb-grid">
-              <article v-for="item in currentSessionKnowledgeBases" :key="`${sessionTab}-${item.id}`" class="session-kb-card">
+              <article
+                v-for="item in currentSessionKnowledgeBases"
+                :key="`${sessionTab}-${item.id}`"
+                class="session-kb-card session-kb-card--clickable"
+                role="button"
+                tabindex="0"
+                @click="openSessionKnowledgeBaseDetail(item)"
+                @keydown.enter.prevent="openSessionKnowledgeBaseDetail(item)"
+                @keydown.space.prevent="openSessionKnowledgeBaseDetail(item)"
+              >
                 <div class="session-kb-card__cover-wrap">
                   <el-image v-if="item.kbCover" class="session-kb-card__cover" :src="coverUrl(item.kbCover)" fit="contain" />
                   <div v-else class="session-kb-card__cover session-kb-card__cover--empty">
@@ -1104,7 +1260,7 @@ onMounted(() => {
                     <el-tag size="small">{{ typeName(item.kbType) }}</el-tag>
                     <el-tag size="small" type="info">{{ sourceName(item.sourceType) }}</el-tag>
                   </div>
-                  <button class="session-kb-card__add" type="button" :disabled="selectedKbIds.has(item.id)" @click="addSelectedKnowledgeBase(item)">
+                  <button class="session-kb-card__add" type="button" :disabled="selectedKbIds.has(item.id)" @click.stop="addSelectedKnowledgeBase(item)">
                     <el-icon><Plus /></el-icon>
                   </button>
                 </div>
@@ -1135,7 +1291,16 @@ onMounted(() => {
       </template>
 
       <div v-loading="sessionKnowledgeBaseLoading" class="session-kb-view">
-        <article v-for="item in sessionKnowledgeBases" :key="`session-kb-${item.id}`" class="session-kb-view-card">
+        <article
+          v-for="item in sessionKnowledgeBases"
+          :key="`session-kb-${item.id}`"
+          class="session-kb-view-card session-kb-view-card--clickable"
+          role="button"
+          tabindex="0"
+          @click="openSessionKnowledgeBaseDetail(item)"
+          @keydown.enter.prevent="openSessionKnowledgeBaseDetail(item)"
+          @keydown.space.prevent="openSessionKnowledgeBaseDetail(item)"
+        >
           <div class="session-kb-view-card__cover-wrap">
             <el-image v-if="item.kbCover" class="session-kb-view-card__cover" :src="coverUrl(item.kbCover)" fit="contain" />
             <div v-else class="session-kb-view-card__cover session-kb-view-card__cover--empty">
@@ -1161,26 +1326,58 @@ onMounted(() => {
         </div>
       </template>
     </el-dialog>
+
+    <KnowledgeBaseDetailDrawer
+      v-model="detailVisible"
+      :knowledge-base="detailKnowledgeBase"
+      :show-collection-action="false"
+      :collected="detailCollected"
+      :collection-loading="detailCollectionLoading"
+      :show-my-collection="false"
+      @collection-change="handleDetailCollectionChange"
+    />
   </main>
 </template>
 
 <style scoped>
 .knowledge-base-view {
+  position: relative;
   display: grid;
   height: 100%;
   min-height: 0;
-  grid-template-columns: 282px minmax(0, 1fr);
+  --kb-sidebar-width: 282px;
+  --kb-sidebar-collapsed-width: 72px;
+  grid-template-columns: var(--kb-sidebar-width) minmax(0, 1fr);
   overflow: hidden;
   background: #ffffff;
   color: #111827;
 }
 
+.knowledge-base-view.is-sidebar-collapsed {
+  --kb-sidebar-width: var(--kb-sidebar-collapsed-width);
+}
+
 .chat-sidebar {
   display: flex;
+  position: relative;
+  z-index: 2;
   min-height: 0;
   flex-direction: column;
+  width: var(--kb-sidebar-width);
+  overflow: hidden;
   border-right: 1px solid #e5e7eb;
   background: #f7f7f8;
+  transition: width 0.18s ease, box-shadow 0.18s ease;
+}
+
+.knowledge-base-view.is-compact-sidebar {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.knowledge-base-view.is-compact-sidebar .chat-sidebar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  box-shadow: 8px 0 24px rgb(15 23 42 / 10%);
 }
 
 .assistant-profile,
@@ -1195,6 +1392,38 @@ onMounted(() => {
 
 .assistant-profile {
   margin-top: 8px;
+}
+
+.knowledge-base-view.is-sidebar-collapsed .assistant-profile {
+  justify-content: center;
+  padding: 12px 0 8px;
+}
+
+.knowledge-base-view.is-sidebar-collapsed .assistant-profile span,
+.knowledge-base-view.is-sidebar-collapsed .sidebar-footer__user span,
+.knowledge-base-view.is-sidebar-collapsed .history-title,
+.knowledge-base-view.is-sidebar-collapsed .conversation-list,
+.knowledge-base-view.is-sidebar-collapsed .conversation-list-tip {
+  display: none;
+}
+
+.knowledge-base-view.is-sidebar-collapsed .sidebar-actions {
+  gap: 8px;
+  padding: 8px 10px 16px;
+}
+
+.knowledge-base-view.is-sidebar-collapsed .sidebar-actions button {
+  justify-content: center;
+  gap: 0;
+  padding: 0;
+}
+
+.knowledge-base-view.is-sidebar-collapsed .sidebar-actions button span {
+  display: none;
+}
+
+.knowledge-base-view.is-sidebar-collapsed .sidebar-actions button .el-icon {
+  font-size: 18px;
 }
 
 .assistant-avatar,
@@ -1329,7 +1558,48 @@ onMounted(() => {
 .sidebar-footer {
   margin-top: auto;
   border-top: 1px solid #e5e7eb;
+  justify-content: space-between;
   padding-block: 14px;
+}
+
+.sidebar-footer__user {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+}
+
+.sidebar-footer__user span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-toggle {
+  display: grid;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid #d7e2ef;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #64748b;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.sidebar-toggle:hover,
+.sidebar-toggle:focus-visible {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #2563eb;
+  box-shadow: 0 6px 16px rgb(37 99 235 / 10%);
+  outline: none;
+}
+
+.sidebar-toggle .el-icon {
+  font-size: 16px;
 }
 
 .chat-main {
@@ -1485,6 +1755,19 @@ onMounted(() => {
   padding: 8px 10px 8px 8px;
 }
 
+.session-picked-card--clickable {
+  cursor: pointer;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+}
+
+.session-picked-card--clickable:hover,
+.session-picked-card--clickable:focus-visible {
+  border-color: #93c5fd;
+  background: #f8fbff;
+  outline: none;
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.12);
+}
+
 .session-picked-card__cover,
 .session-kb-card__cover {
   width: 100%;
@@ -1635,6 +1918,19 @@ onMounted(() => {
   grid-template-rows: auto minmax(0, 1fr);
 }
 
+.session-kb-card--clickable {
+  cursor: pointer;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+}
+
+.session-kb-card--clickable:hover,
+.session-kb-card--clickable:focus-visible {
+  border-color: #93c5fd;
+  background: #f8fbff;
+  outline: none;
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.12);
+}
+
 .session-kb-card__cover-wrap {
   overflow: hidden;
   background: #f4f8ff;
@@ -1717,6 +2013,19 @@ onMounted(() => {
   background: #ffffff;
 }
 
+.session-kb-view-card--clickable {
+  cursor: pointer;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+}
+
+.session-kb-view-card--clickable:hover,
+.session-kb-view-card--clickable:focus-visible {
+  border-color: #93c5fd;
+  background: #f8fbff;
+  outline: none;
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.12);
+}
+
 .session-kb-view-card__cover-wrap,
 .session-kb-view-card__cover {
   width: 120px;
@@ -1761,11 +2070,7 @@ onMounted(() => {
 
 @media (max-width: 980px) {
   .knowledge-base-view {
-    grid-template-columns: 1fr;
-  }
-
-  .chat-sidebar {
-    display: none;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .topbar-title span {

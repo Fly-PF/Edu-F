@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { CollectionTag, Document, FolderOpened, PictureFilled, Star, Tickets } from '@element-plus/icons-vue'
-import { cancelKnowledgeBaseCollection, collectKnowledgeBase, listPublicKnowledgeBaseDocuments } from '@/api/rag'
+import { cancelKnowledgeBaseCollection, collectKnowledgeBase, listPublicKnowledgeBaseDocuments, pageKnowledgeBaseDocuments } from '@/api/rag'
 import router from '@/router'
 import { useUserStore } from '@/stores/user'
 
@@ -14,6 +14,10 @@ const props = defineProps({
   knowledgeBase: {
     type: Object,
     default: null,
+  },
+  showCollectionAction: {
+    type: Boolean,
+    default: true,
   },
   collected: {
     type: Boolean,
@@ -108,7 +112,10 @@ async function loadDocuments(kbId) {
   loading.value = true
   documents.value = []
   try {
-    documents.value = (await listPublicKnowledgeBaseDocuments({ kb_id: kbId })) || []
+    const result = isSelfCreated.value
+      ? await pageKnowledgeBaseDocuments({ kb_id: kbId, pageNum: 1, pageSize: 1000 })
+      : await listPublicKnowledgeBaseDocuments({ kb_id: kbId })
+    documents.value = Array.isArray(result?.records) ? result.records : (result || [])
     activeGroups.value = groupedDocuments.value.slice(0, 1).map((group) => group.key)
   } catch (error) {
     ElMessage.error(error?.message || '知识库文件加载失败')
@@ -197,6 +204,7 @@ watch(
           </div>
           <div class="detail-actions">
             <el-button
+              v-if="showCollectionAction"
               :type="collectionButtonType"
               :plain="!collected"
               :loading="isCollectionBusy"

@@ -28,6 +28,7 @@ const {
   handleSend,
   copyMessageContent,
   toggleSources,
+  openReferencePreview,
 } = chatState
 
 function syncComposerText() {
@@ -120,16 +121,19 @@ onMounted(async () => {
                     </button>
 
                     <div v-if="expandedSources[item.id]" class="reference-list">
-                      <a
+                      <button
                         v-for="(source, index) in item.sources"
-                        :key="source"
+                        :key="`${source.fileUrl || source.label}-${index}`"
                         class="reference-item"
-                        href="#"
-                        @click.prevent
+                        type="button"
+                        @click="openReferencePreview(source)"
                       >
                         <span class="reference-index">{{ index + 1 }}</span>
-                        <span>{{ source }}</span>
-                      </a>
+                        <el-tooltip v-if="source.description" :content="source.description" effect="light" placement="top-start">
+                          <span>{{ source.label }}</span>
+                        </el-tooltip>
+                        <span v-else>{{ source.label }}</span>
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -563,6 +567,16 @@ onMounted(async () => {
   font-size: 13px;
   line-height: 1.55;
   text-decoration: none;
+}
+
+.reference-item {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
 .reference-item:hover {
