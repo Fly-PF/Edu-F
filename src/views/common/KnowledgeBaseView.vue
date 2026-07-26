@@ -1915,11 +1915,16 @@ onBeforeUnmount(() => {
 }
 
 .session-dialog :deep(.el-dialog) {
+  display: flex;
+  max-height: calc(100vh - 32px);
+  flex-direction: column;
   border-radius: 8px;
   overflow: hidden;
 }
 
 .session-dialog :deep(.el-dialog__body) {
+  min-height: 0;
+  overflow-y: auto;
   padding: 0 24px 24px;
 }
 
@@ -2149,6 +2154,8 @@ onBeforeUnmount(() => {
 .session-kb-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  grid-auto-rows: max-content;
+  align-content: start;
   gap: 12px;
   min-height: 320px;
   max-height: 420px;
@@ -2158,7 +2165,7 @@ onBeforeUnmount(() => {
 
 .session-kb-card {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
 }
 
 .session-kb-card--clickable {
