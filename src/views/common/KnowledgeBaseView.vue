@@ -179,6 +179,19 @@ const typingAssistantMessage = ref(null)
 const typingFinalize = ref(null)
 const typingConversationId = ref('')
 const sessionKnowledgeBaseSessionId = ref('')
+const editingMessageRowId = ref('')
+const editingMessageMessageId = ref('')
+const editingMessageDraft = ref('')
+const editingMessageSubmitting = ref(false)
+const latestUserMessageRowId = computed(() => {
+  for (let index = messages.value.length - 1; index >= 0; index -= 1) {
+    const message = messages.value[index]
+    if (message?.role === 'user') {
+      return message.id || ''
+    }
+  }
+  return ''
+})
 
 provide('knowledgeBaseChat', {
   senderRef,
@@ -205,6 +218,13 @@ provide('knowledgeBaseChat', {
   copyMessageContent,
   toggleSources,
   openReferencePreview,
+  canRewriteMessage,
+  isEditingMessage,
+  editingMessageDraft,
+  editingMessageSubmitting,
+  startMessageEdit,
+  cancelMessageEdit,
+  submitMessageEdit,
   handleConversationCommand,
   handleSelectConversation,
   handleNewChat,
@@ -927,6 +947,229 @@ async function handleSend() {
     if (typingConversationId.value === requestConversationId) {
       typingConversationId.value = ''
     }
+  }
+}
+
+function beginChatStreaming(requestConversationId, assistantMessage) {
+  isNewConversation.value = false
+  composerValue.value = ''
+  senderRef.value?.clear?.()
+  isLoading.value = true
+  loadingConversationId.value = requestConversationId
+  typingConversationId.value = requestConversationId
+  typingQueue.value = []
+  typingAssistantMessage.value = assistantMessage
+  cacheConversationMessages(requestConversationId)
+}
+
+async function executeChatStream({
+  requestConversationId,
+  question,
+  assistantMessage,
+  rewriteMessageId = '',
+  onDoneFrame,
+}) {
+  let receivedStreamChunk = false
+  let typingCompleted = false
+  let finalStatus = ''
+  let resolveTypingDone = () => {}
+  const typingDone = new Promise((resolve) => {
+    resolveTypingDone = resolve
+  })
+
+  function applyAssistantFrame(frame = {}) {
+    assistantMessage.messageId = frame.messageId || assistantMessage.messageId
+    assistantMessage.metadata = frame.metadata ?? assistantMessage.metadata
+
+    if (Array.isArray(frame.docRefInfo)) {
+      assistantMessage.docRefInfo = frame.docRefInfo
+      assistantMessage.docRefCount = frame.docRefCount ?? frame.docRefInfo.length
+      assistantMessage.sources = mapDocRefsToSources(frame.docRefInfo)
+    } else if (frame.docRefCount !== undefined) {
+      assistantMessage.docRefCount = frame.docRefCount
+    }
+
+    if (requestConversationId === activeConversation.value) {
+      messages.value = [...messages.value]
+    }
+  }
+
+  function completeTyping(frame, keepContent = true) {
+    typingCompleted = true
+    finalStatus = frame.status || 'done'
+    assistantMessage.loading = false
+    applyAssistantFrame(frame)
+
+    if (frame.status === 'done') {
+      if (!keepContent) {
+        assistantMessage.content = frame.content || assistantMessage.content
+      }
+      assistantMessage.id = frame.id || assistantMessage.id
+      assistantMessage.time = formatMessageTime(frame.createTime)
+    } else if (frame.status === 'error') {
+      assistantMessage.content = frame.content || 'AI回答生成失败'
+      ElMessage.error(assistantMessage.content)
+    }
+
+    typingQueue.value = []
+    typingFinalize.value = null
+    stopTypingLoop()
+    typingAssistantMessage.value = null
+    resolveTypingDone()
+  }
+
+  try {
+    await sendRagChatStream({
+      sessionId: Number(requestConversationId),
+      message: question,
+      ...(rewriteMessageId ? { rewriteMessageId } : {}),
+    }, async (frame) => {
+      if (frame.status === 'stream') {
+        receivedStreamChunk = true
+        applyAssistantFrame(frame)
+        if (assistantMessage.loading) {
+          assistantMessage.loading = false
+        }
+        pushTypingChunk(frame.content || '')
+      } else if (frame.status === 'done') {
+        if (typeof onDoneFrame === 'function') {
+          onDoneFrame(frame)
+        }
+        applyAssistantFrame(frame)
+        if (!receivedStreamChunk && frame.content) {
+          pushTypingChunk(frame.content)
+        }
+        typingFinalize.value = () => completeTyping(frame, receivedStreamChunk)
+        if (!typingQueue.value.length) {
+          typingFinalize.value()
+        }
+      } else if (frame.status === 'error') {
+        completeTyping(frame)
+      }
+
+      await nextTick()
+      if (requestConversationId === activeConversation.value) {
+        scrollBubbleListToBottom(false)
+      }
+    })
+  } catch (error) {
+    completeTyping({ status: 'error', content: error?.message || 'AI回答生成失败' })
+  } finally {
+    if (!typingCompleted) {
+      if (typingQueue.value.length) {
+        typingFinalize.value = () => completeTyping({ status: 'done' })
+        startTypingLoop()
+      } else {
+        completeTyping({ status: 'done' })
+      }
+    }
+    await typingDone
+    if (loadingConversationId.value === requestConversationId) {
+      isLoading.value = false
+      loadingConversationId.value = ''
+    }
+    if (typingConversationId.value === requestConversationId) {
+      typingConversationId.value = ''
+    }
+  }
+
+  return finalStatus || 'done'
+}
+
+function canRewriteMessage(item) {
+  return item?.role === 'user'
+    && item.id
+    && item.id === latestUserMessageRowId.value
+    && !currentConversationLoading.value
+    && !editingMessageSubmitting.value
+}
+
+function isEditingMessage(item) {
+  return Boolean(editingMessageRowId.value && item?.id === editingMessageRowId.value)
+}
+
+function startMessageEdit(item) {
+  if (!canRewriteMessage(item)) {
+    return
+  }
+
+  editingMessageRowId.value = item.id || ''
+  editingMessageMessageId.value = item.messageId || ''
+  editingMessageDraft.value = item.content || ''
+}
+
+function cancelMessageEdit() {
+  editingMessageRowId.value = ''
+  editingMessageMessageId.value = ''
+  editingMessageDraft.value = ''
+}
+
+async function submitMessageEdit() {
+  const targetRowId = editingMessageRowId.value
+  const rewriteMessageId = editingMessageMessageId.value.trim()
+  const question = editingMessageDraft.value.trim()
+
+  if (!targetRowId || !rewriteMessageId || !question || currentConversationLoading.value) {
+    return
+  }
+
+  const requestConversationId = activeConversation.value
+  if (!requestConversationId) {
+    ElMessage.warning('当前暂无会话，请先新建会话！')
+    return
+  }
+
+  const targetIndex = messages.value.findIndex((item) => item.id === targetRowId && item.role === 'user')
+  const latestUserIndex = latestUserMessageRowId.value
+    ? messages.value.findIndex((item) => item.id === latestUserMessageRowId.value)
+    : -1
+  if (targetIndex < 0 || targetIndex !== latestUserIndex) {
+    ElMessage.warning('仅能修改最新一条提问消息')
+    return
+  }
+
+  editingMessageSubmitting.value = true
+  shouldAutoScroll.value = true
+
+  try {
+    const originalMessages = messages.value.map((item) => ({ ...item }))
+    const targetMessage = messages.value[targetIndex]
+    messages.value = messages.value.slice(0, targetIndex + 1)
+    targetMessage.content = question
+    targetMessage.time = formatMessageTime(new Date())
+
+    const assistantMessage = pushMessage('assistant', '', {
+      role: 'assistant',
+      loading: true,
+      sources: [],
+      docRefInfo: [],
+      docRefCount: 0,
+    })
+
+    beginChatStreaming(requestConversationId, assistantMessage)
+    cancelMessageEdit()
+
+    const streamStatus = await executeChatStream({
+      requestConversationId,
+      question,
+      assistantMessage,
+      rewriteMessageId,
+      onDoneFrame(frame) {
+        const nextUserMessageId = String(frame.messageId || '').replace(/-assistant$/, '-user')
+        if (nextUserMessageId) {
+          targetMessage.messageId = nextUserMessageId
+        }
+        if (frame.createTime) {
+          targetMessage.time = formatMessageTime(frame.createTime)
+        }
+      },
+    })
+
+    if (streamStatus !== 'done') {
+      messages.value = originalMessages
+    }
+  } finally {
+    editingMessageSubmitting.value = false
   }
 }
 

@@ -3,7 +3,7 @@ import { inject, nextTick, onMounted } from 'vue'
 import { MarkdownRenderer } from 'x-markdown-vue'
 import 'x-markdown-vue/style'
 import 'katex/dist/katex.min.css'
-import { ArrowDown, ArrowRight, CopyDocument, Plus } from '@element-plus/icons-vue'
+import { ArrowDown, ArrowRight, Check, Close, CopyDocument, Edit, Plus } from '@element-plus/icons-vue'
 
 const chatState = inject('knowledgeBaseChat')
 
@@ -29,6 +29,13 @@ const {
   copyMessageContent,
   toggleSources,
   openReferencePreview,
+  canRewriteMessage,
+  isEditingMessage,
+  editingMessageDraft,
+  editingMessageSubmitting,
+  startMessageEdit,
+  cancelMessageEdit,
+  submitMessageEdit,
 } = chatState
 
 function syncComposerText() {
@@ -88,28 +95,57 @@ onMounted(async () => {
             <template #header>
               <div class="message-meta">
                 <strong>{{ item.role === 'assistant' ? 'AI' : '用户' }}</strong>
-                <span>{{ item.time }}</span>
+                <span>{{ item.role === 'assistant' && item.loading ? '正在回复' : item.time }}</span>
               </div>
             </template>
 
             <template #content>
               <div class="message-stack">
                 <div class="message-bubble">
-                  <MarkdownRenderer
-                    v-if="!item.loading"
-                    :class="['markdown-body', { 'markdown-body--assistant': item.role === 'assistant' }]"
-                    :markdown="item.content"
-                    :enable-latex="true"
-                    :enable-shiki="true"
-                    :enable-mermaid="true"
-                    :enable-animate="true"
-                  />
-                  <div
-                    v-else
-                    :class="['markdown-body', { 'markdown-body--assistant': item.role === 'assistant' }]"
-                  >
-                    <el-skeleton :rows="2" animated />
+                  <div v-if="isEditingMessage(item)" class="message-edit">
+                    <el-input
+                      v-model="editingMessageDraft"
+                      class="message-edit-input"
+                      type="textarea"
+                      :autosize="{ minRows: 1, maxRows: 6 }"
+                      resize="none"
+                    />
+                    <div class="message-edit-actions">
+                      <button
+                        class="message-edit-action is-cancel"
+                        type="button"
+                        :disabled="editingMessageSubmitting"
+                        @click.stop="cancelMessageEdit"
+                      >
+                        <el-icon><Close /></el-icon>
+                      </button>
+                      <button
+                        class="message-edit-action is-submit"
+                        type="button"
+                        :disabled="editingMessageSubmitting || !editingMessageDraft.trim()"
+                        @click.stop="submitMessageEdit"
+                      >
+                        <el-icon><Check /></el-icon>
+                      </button>
+                    </div>
                   </div>
+                  <template v-else>
+                    <MarkdownRenderer
+                      v-if="!item.loading"
+                      :class="['markdown-body', { 'markdown-body--assistant': item.role === 'assistant' }]"
+                      :markdown="item.content"
+                      :enable-latex="true"
+                      :enable-shiki="true"
+                      :enable-mermaid="true"
+                      :enable-animate="true"
+                    />
+                    <div
+                      v-else
+                      :class="['markdown-body', { 'markdown-body--assistant': item.role === 'assistant' }]"
+                    >
+                      <el-skeleton :rows="2" animated />
+                    </div>
+                  </template>
 
                   <div v-if="item.sources?.length" class="reference-box">
                     <button class="reference-toggle" type="button" @click.stop="toggleSources(item.id)">
@@ -138,9 +174,19 @@ onMounted(async () => {
                   </div>
                 </div>
 
-                <button class="copy-button" type="button" @click.stop="copyMessageContent(item.content)">
-                  <el-icon><CopyDocument /></el-icon>
-                </button>
+                <div v-if="!isEditingMessage(item)" class="message-actions">
+                  <button class="copy-button" type="button" @click.stop="copyMessageContent(item.content)">
+                    <el-icon><CopyDocument /></el-icon>
+                  </button>
+                  <button
+                    v-if="item.role === 'user' && canRewriteMessage(item) && !isEditingMessage(item)"
+                    class="edit-button"
+                    type="button"
+                    @click.stop="startMessageEdit(item)"
+                  >
+                    <el-icon><Edit /></el-icon>
+                  </button>
+                </div>
               </div>
             </template>
 
@@ -150,10 +196,6 @@ onMounted(async () => {
 
             <template #loading>
               <div class="message-loading">
-                <div class="message-meta">
-                  <strong>AI</strong>
-                  <span>正在生成</span>
-                </div>
                 <div class="message-bubble loading-bubble">
                   <el-skeleton :rows="1" animated />
                 </div>
@@ -336,6 +378,75 @@ onMounted(async () => {
   border-radius: 8px;
   background: #ffffff;
   box-shadow: 0 8px 22px rgb(15 23 42 / 5%);
+}
+
+.message-edit {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+}
+
+.message-edit-input {
+  width: 100%;
+}
+
+.message-edit-input :deep(.el-textarea__inner) {
+  min-height: 40px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.message-edit-actions,
+.message-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.message-actions {
+  margin-top: 10px;
+}
+
+.message-item.is-assistant .message-actions {
+  margin-left: auto;
+}
+
+.message-edit-actions {
+  justify-content: flex-end;
+}
+
+.message-edit-action,
+.edit-button {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #7b8492;
+  cursor: pointer;
+  transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease;
+}
+
+.message-edit-action:hover,
+.message-edit-action:focus-visible,
+.edit-button:hover,
+.edit-button:focus-visible {
+  border-color: #bfdbfe;
+  background: #f8fbff;
+  color: #2563eb;
+  outline: none;
+}
+
+.message-edit-action.is-submit {
+  border-color: #bfdbfe;
+  color: #2563eb;
+}
+
+.message-edit-action.is-cancel {
+  color: #9ca3af;
 }
 
 .message-item.is-assistant .message-bubble {
@@ -601,7 +712,6 @@ onMounted(async () => {
   width: 26px;
   height: 26px;
   place-items: center;
-  margin-top: 10px;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   background: #ffffff;
