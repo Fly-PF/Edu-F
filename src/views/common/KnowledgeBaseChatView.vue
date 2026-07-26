@@ -52,6 +52,23 @@ function handleImageChange(event) {
   event.target.value = ''
 }
 
+function handlePasteImages(_, files) {
+  const extensionMap = {
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+  }
+  const timestamp = Date.now()
+  const imageFiles = Array.from(files || []).map((file, index) => {
+    if (file.name && /\.(jpg|jpeg|png|webp)$/i.test(file.name)) return file
+    const extension = extensionMap[file.type]
+    return extension
+      ? new File([file], `clipboard-${timestamp}-${index + 1}.${extension}`, { type: file.type })
+      : file
+  })
+  addChatImages(imageFiles)
+}
+
 function syncComposerText() {
   composerValue.value = senderRef.value?.getModelValue?.()?.text || ''
 }
@@ -247,11 +264,20 @@ onMounted(async () => {
         :custom-style="{ minHeight: '86px' }"
         @submit="handleSend"
         @change="syncComposerText"
+        @paste-file="handlePasteImages"
       >
         <template #header>
           <div v-if="pendingChatImages.length" class="pending-images">
             <div v-for="(image, index) in pendingChatImages" :key="image.url" class="pending-image">
-              <img :src="image.url" :alt="image.fileName">
+              <el-image
+                class="pending-image-preview"
+                :src="image.url"
+                :preview-src-list="pendingChatImages.map((item) => item.url)"
+                :initial-index="index"
+                preview-teleported
+                hide-on-click-modal
+                fit="cover"
+              />
               <button type="button" @click="removeChatImage(index)"><el-icon><Close /></el-icon></button>
             </div>
           </div>
@@ -446,11 +472,13 @@ onMounted(async () => {
   height: 52px;
 }
 
-.pending-image img {
+.pending-image-preview {
   width: 100%;
   height: 100%;
+}
+
+.pending-image-preview :deep(.el-image__inner) {
   border-radius: 6px;
-  object-fit: cover;
 }
 
 .pending-image button {
@@ -466,6 +494,7 @@ onMounted(async () => {
   background: #334155;
   color: #fff;
   cursor: pointer;
+  z-index: 1;
 }
 
 .message-edit {
