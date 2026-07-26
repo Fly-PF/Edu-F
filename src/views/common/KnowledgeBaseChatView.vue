@@ -1,5 +1,5 @@
 <script setup>
-import { inject, nextTick, onMounted } from 'vue'
+import { inject, nextTick, onMounted, ref } from 'vue'
 import { MarkdownRenderer } from 'x-markdown-vue'
 import 'x-markdown-vue/style'
 import 'katex/dist/katex.min.css'
@@ -36,7 +36,21 @@ const {
   startMessageEdit,
   cancelMessageEdit,
   submitMessageEdit,
+  pendingChatImages,
+  addChatImages,
+  removeChatImage,
 } = chatState
+
+const imageInputRef = ref(null)
+
+function chooseImages() {
+  imageInputRef.value?.click()
+}
+
+function handleImageChange(event) {
+  addChatImages(event.target.files)
+  event.target.value = ''
+}
 
 function syncComposerText() {
   composerValue.value = senderRef.value?.getModelValue?.()?.text || ''
@@ -102,6 +116,19 @@ onMounted(async () => {
             <template #content>
               <div class="message-stack">
                 <div class="message-bubble">
+                  <div v-if="item.qaImgs?.length" class="message-images">
+                    <el-image
+                      v-for="(image, index) in item.qaImgs"
+                      :key="`${image.fileUrl || image.url}-${index}`"
+                      class="message-image"
+                      :src="image.url"
+                      :preview-src-list="item.qaImgs.map((item) => item.url)"
+                      :initial-index="index"
+                      preview-teleported
+                      hide-on-click-modal
+                      fit="contain"
+                    />
+                  </div>
                   <div v-if="isEditingMessage(item)" class="message-edit">
                     <el-input
                       v-model="editingMessageDraft"
@@ -207,6 +234,7 @@ onMounted(async () => {
     </BubbleList>
 
     <div class="composer-wrap">
+      <input ref="imageInputRef" class="image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" multiple @change="handleImageChange" />
       <XSender
         :key="activeConversation"
         ref="senderRef"
@@ -220,8 +248,16 @@ onMounted(async () => {
         @submit="handleSend"
         @change="syncComposerText"
       >
+        <template #header>
+          <div v-if="pendingChatImages.length" class="pending-images">
+            <div v-for="(image, index) in pendingChatImages" :key="image.url" class="pending-image">
+              <img :src="image.url" :alt="image.fileName">
+              <button type="button" @click="removeChatImage(index)"><el-icon><Close /></el-icon></button>
+            </div>
+          </div>
+        </template>
         <template #prefix>
-          <el-button :icon="Plus" circle text />
+          <el-button :icon="Plus" circle text @click="chooseImages" />
         </template>
       </XSender>
     </div>
@@ -378,6 +414,58 @@ onMounted(async () => {
   border-radius: 8px;
   background: #ffffff;
   box-shadow: 0 8px 22px rgb(15 23 42 / 5%);
+}
+
+.message-images,
+.pending-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.message-image {
+  width: 112px;
+  height: 84px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #f5f7fa;
+}
+
+.image-input {
+  display: none;
+}
+
+.pending-images {
+  padding: 10px 12px 0;
+}
+
+.pending-image {
+  position: relative;
+  width: 52px;
+  height: 52px;
+}
+
+.pending-image img {
+  width: 100%;
+  height: 100%;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.pending-image button {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: #334155;
+  color: #fff;
+  cursor: pointer;
 }
 
 .message-edit {

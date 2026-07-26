@@ -57,6 +57,7 @@ const conversationLoading = ref(false)
 const conversationLoaded = ref(false)
 const conversationScrollRef = ref(null)
 const messages = ref([])
+const pendingChatImages = ref([])
 const conversationMessageCache = ref({})
 const sessionDialogVisible = ref(false)
 const sessionDialogLoading = ref(false)
@@ -225,6 +226,9 @@ provide('knowledgeBaseChat', {
   startMessageEdit,
   cancelMessageEdit,
   submitMessageEdit,
+  pendingChatImages,
+  addChatImages,
+  removeChatImage,
   handleConversationCommand,
   handleSelectConversation,
   handleNewChat,
@@ -481,6 +485,45 @@ function getFileExtension(value) {
   return index >= 0 ? cleanValue.slice(index + 1).toLowerCase() : ''
 }
 
+function getChatImageUrl(fileUrl) {
+  return `${apiBaseURL}/api/rag/chat/image?objectName=${encodeURIComponent(fileUrl)}`
+}
+
+function parseQaImages(metadata) {
+  try {
+    const qaImg = JSON.parse(metadata || '{}').qaImg
+    return Array.isArray(qaImg)
+      ? qaImg.filter((item) => item?.fileUrl && item?.fileName).map((item) => ({ ...item, url: getChatImageUrl(item.fileUrl) }))
+      : []
+  } catch {
+    return []
+  }
+}
+
+function addChatImages(files) {
+  for (const file of Array.from(files || [])) {
+    const extension = getFileExtension(file.name)
+    if (!['jpg', 'jpeg', 'png', 'webp'].includes(extension) || !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      ElMessage.warning('仅支持jpg、jpeg、png、webp格式图片')
+      continue
+    }
+    if (file.size > 12 * 1024 * 1024) {
+      ElMessage.warning('单张图片不能超过12MB')
+      continue
+    }
+    if (pendingChatImages.value.length >= 10) {
+      ElMessage.warning('一次最多选择10张图片')
+      break
+    }
+    pendingChatImages.value.push({ file, fileName: file.name, url: URL.createObjectURL(file) })
+  }
+}
+
+function removeChatImage(index) {
+  const [image] = pendingChatImages.value.splice(index, 1)
+  if (image?.url) URL.revokeObjectURL(image.url)
+}
+
 function mapDocRefsToSources(docRefs = []) {
   return docRefs
     .map((item) => ({
@@ -551,6 +594,7 @@ function normalizeChatMessage(item) {
     docRefInfo,
     messageId: item.messageId,
     metadata: item.metadata,
+    qaImgs: parseQaImages(item.metadata),
     docRefCount: item.docRefCount || 0,
   }
 }
@@ -837,7 +881,9 @@ async function handleSend() {
 
   const requestConversationId = activeConversation.value
   shouldAutoScroll.value = true
-  pushMessage('user', question)
+  const chatImages = [...pendingChatImages.value]
+  const userMessage = pushMessage('user', question, { qaImgs: chatImages })
+  pendingChatImages.value = []
   const assistantMessage = pushMessage('assistant', '', {
     role: 'assistant',
     loading: true,
@@ -902,7 +948,11 @@ async function handleSend() {
   }
 
   try {
-    await sendRagChatStream({ sessionId: Number(requestConversationId), message: question }, async (frame) => {
+    await sendRagChatStream({
+      sessionId: Number(requestConversationId),
+      message: question,
+      imgFiles: chatImages.map((item) => item.file),
+    }, async (frame) => {
       if (frame.status === 'stream') {
         receivedStreamChunk = true
         applyAssistantFrame(frame)
@@ -911,6 +961,7 @@ async function handleSend() {
         }
         pushTypingChunk(frame.content || '')
       } else if (frame.status === 'done') {
+        userMessage.messageId = String(frame.messageId || '').replace(/-assistant$/, '-user')
         applyAssistantFrame(frame)
         if (!receivedStreamChunk && frame.content) {
           pushTypingChunk(frame.content)

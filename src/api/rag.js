@@ -93,14 +93,20 @@ export function listChatMessages(sessionId) {
 
 export async function sendRagChatStream(data, onMessage) {
   const userStore = useUserStore()
+  const formData = new FormData()
+  formData.append('sessionId', data.sessionId)
+  formData.append('message', data.message)
+  if (data.rewriteMessageId) {
+    formData.append('rewriteMessageId', data.rewriteMessageId)
+  }
+  ;(data.imgFiles || []).forEach((file) => formData.append('imgFiles', file))
   const response = await fetch(`${baseURL}/api/rag/chat`, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
       Accept: 'text/event-stream',
       ...(userStore.token ? { Authorization: userStore.token } : {}),
     },
-    body: JSON.stringify(data),
+    body: formData,
   })
 
   if (!response.ok || !response.body) {
