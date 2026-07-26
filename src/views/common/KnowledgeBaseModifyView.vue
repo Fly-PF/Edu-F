@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, genFileId } from 'element-plus'
 import { ArrowLeft, Delete, Edit, Files, Plus, PictureFilled, Refresh, Search, UploadFilled, View } from '@element-plus/icons-vue'
-import { deleteRagDocument, getMyKnowledgeBase, pageKnowledgeBaseDocuments, updateKnowledgeBase, updateRagDocument, uploadRagFile } from '@/api/rag'
+import { deleteKnowledgeBaseDocument, getMyKnowledgeBase, pageKnowledgeBaseDocuments, updateKnowledgeBase, updateKnowledgeBaseDocument, uploadKnowledgeBaseDocument } from '@/api/rag'
 
 const route = useRoute()
 const router = useRouter()
@@ -381,7 +381,7 @@ async function handleUploadSubmit() {
       data.append('description', uploadForm.description.trim())
     }
 
-    await uploadRagFile(data)
+    await uploadKnowledgeBaseDocument(data)
     ElMessage.success('上传成功')
     uploadDialogVisible.value = false
     uploadRef.value?.clearFiles()
@@ -454,7 +454,7 @@ async function handleDocumentEditSubmit() {
       data.append('description', documentEditForm.description.trim())
     }
 
-    await updateRagDocument(data)
+    await updateKnowledgeBaseDocument(data)
     ElMessage.success('更新成功')
     documentEditDialogVisible.value = false
     editingDocument.value = null
@@ -488,7 +488,7 @@ async function handleDeleteDocument(row) {
     const data = new FormData()
     data.append('kb_id', String(kbId))
     data.append('doc_id', String(row.id))
-    await deleteRagDocument(data)
+    await deleteKnowledgeBaseDocument(data)
     ElMessage.success('删除成功')
     if (documentRecords.value.length === 1 && documentQuery.pageNum > 1) {
       documentQuery.pageNum -= 1

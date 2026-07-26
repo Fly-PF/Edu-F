@@ -5,7 +5,7 @@ import { ElMessage } from 'element-plus'
 import { ArrowLeft, Document, Refresh, Picture } from '@element-plus/icons-vue'
 import { MarkdownRenderer } from 'x-markdown-vue'
 import 'x-markdown-vue/style'
-import { getRagFilePreviewContent, getRagFilePreviewImages } from '@/api/rag'
+import { getKnowledgeBaseDocumentPreviewContent, getKnowledgeBaseDocumentPreviewImages } from '@/api/rag'
 
 const route = useRoute()
 const router = useRouter()
@@ -97,7 +97,7 @@ async function loadPreview() {
     }
 
     if (previewType.value === 'pages') {
-      const data = await getRagFilePreviewImages({
+    const data = await getKnowledgeBaseDocumentPreviewImages({
         kb_id: kbId.value,
         file_url: fileUrl.value,
       })
@@ -105,7 +105,7 @@ async function loadPreview() {
       return
     }
 
-    const data = await getRagFilePreviewContent({
+    const data = await getKnowledgeBaseDocumentPreviewContent({
       kb_id: kbId.value,
       file_url: fileUrl.value,
     })

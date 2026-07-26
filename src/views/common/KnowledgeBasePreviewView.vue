@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft, Document, Picture } from '@element-plus/icons-vue'
 import { MarkdownRenderer } from 'x-markdown-vue'
 import 'x-markdown-vue/style'
-import { getRagFilePreviewContent, getRagFilePreviewImages } from '@/api/rag'
+import { getKnowledgeBaseDocumentPreviewContent, getKnowledgeBaseDocumentPreviewImages } from '@/api/rag'
 
 const apiBaseURL = 'http://localhost:8080'
 const supportedExtensions = ['pdf', 'ppt', 'pptx', 'txt', 'md', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'webp']
@@ -100,7 +100,7 @@ async function loadPreview() {
     }
 
     if (previewType.value === 'pages') {
-      const data = await getRagFilePreviewImages({
+    const data = await getKnowledgeBaseDocumentPreviewImages({
         kb_id: kbId.value,
         file_url: fileUrl.value,
       })
@@ -108,7 +108,7 @@ async function loadPreview() {
       return
     }
 
-    previewData.value = await getRagFilePreviewContent({
+    previewData.value = await getKnowledgeBaseDocumentPreviewContent({
       kb_id: kbId.value,
       file_url: fileUrl.value,
     })

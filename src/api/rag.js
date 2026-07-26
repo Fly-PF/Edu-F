@@ -1,7 +1,7 @@
 import request from '@/utils/request'
 import { useUserStore } from '@/stores/user'
 
-const baseURL = 'http://localhost:8080'
+const RAG_API_BASE_URL = 'http://localhost:8080'
 
 function unwrap(response) {
   if (!response || typeof response !== 'object' || !Object.prototype.hasOwnProperty.call(response, 'code')) {
@@ -19,6 +19,7 @@ function resolve(promise) {
   return promise.then(unwrap)
 }
 
+// Knowledge bases
 export function createKnowledgeBase(data) {
   return resolve(request.post('/api/rag/kb', data))
 }
@@ -43,16 +44,9 @@ export function pagePublicKnowledgeBases(params = {}) {
   return resolve(request.get('/api/rag/kb/public/page', { params }))
 }
 
+// Knowledge base collections
 export function pageCollectedKnowledgeBases(params = {}) {
   return resolve(request.get('/api/rag/kb/collection/page', { params }))
-}
-
-export function pageKnowledgeBaseDocuments(params = {}) {
-  return resolve(request.get('/api/rag/kb/documents', { params }))
-}
-
-export function listPublicKnowledgeBaseDocuments(params = {}) {
-  return resolve(request.get('/api/rag/kb/public/documents', { params }))
 }
 
 export function getKnowledgeBaseCollectionStatus(kbId) {
@@ -67,6 +61,36 @@ export function cancelKnowledgeBaseCollection(kbId) {
   return resolve(request.post('/api/rag/kb/collection/cancel', null, { params: { kb_id: kbId } }))
 }
 
+// Knowledge base documents
+export function pageKnowledgeBaseDocuments(params = {}) {
+  return resolve(request.get('/api/rag/kb/documents', { params }))
+}
+
+export function listPublicKnowledgeBaseDocuments(params = {}) {
+  return resolve(request.get('/api/rag/kb/public/documents', { params }))
+}
+
+export function uploadKnowledgeBaseDocument(data) {
+  return resolve(request.post('/api/rag/files/upload', data, { timeout: 60000 }))
+}
+
+export function updateKnowledgeBaseDocument(data) {
+  return resolve(request.post('/api/rag/files/update', data))
+}
+
+export function deleteKnowledgeBaseDocument(data) {
+  return resolve(request.post('/api/rag/files/delete', data))
+}
+
+export function getKnowledgeBaseDocumentPreviewContent(params = {}) {
+  return resolve(request.get('/api/rag/files/preview-content', { params, timeout: 60000 }))
+}
+
+export function getKnowledgeBaseDocumentPreviewImages(params = {}) {
+  return resolve(request.get('/api/rag/files/preview-images', { params, timeout: 60000 }))
+}
+
+// Chats
 export function pageChatSessions(params = {}) {
   return resolve(request.get('/api/rag/chat/session/page', { params }))
 }
@@ -100,7 +124,7 @@ export async function sendRagChatStream(data, onMessage) {
     formData.append('rewriteMessageId', data.rewriteMessageId)
   }
   ;(data.imgFiles || []).forEach((file) => formData.append('imgFiles', file))
-  const response = await fetch(`${baseURL}/api/rag/chat`, {
+  const response = await fetch(`${RAG_API_BASE_URL}/api/rag/chat`, {
     method: 'POST',
     headers: {
       Accept: 'text/event-stream',
@@ -150,24 +174,4 @@ async function handleSseEvent(eventText, onMessage) {
   }
 
   await onMessage?.(JSON.parse(text))
-}
-
-export function uploadRagFile(data) {
-  return resolve(request.post('/api/rag/files/upload', data, { timeout: 60000 }))
-}
-
-export function updateRagDocument(data) {
-  return resolve(request.post('/api/rag/files/update', data))
-}
-
-export function deleteRagDocument(data) {
-  return resolve(request.post('/api/rag/files/delete', data))
-}
-
-export function getRagFilePreviewContent(params = {}) {
-  return resolve(request.get('/api/rag/files/preview-content', { params, timeout: 60000 }))
-}
-
-export function getRagFilePreviewImages(params = {}) {
-  return resolve(request.get('/api/rag/files/preview-images', { params, timeout: 60000 }))
 }
