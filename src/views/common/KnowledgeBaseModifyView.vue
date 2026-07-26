@@ -541,7 +541,7 @@ onBeforeUnmount(revokeCoverPreview)
               v-if="coverPreviewUrl"
               class="cover-preview"
               :src="coverPreviewUrl"
-              fit="cover"
+              fit="contain"
               :preview-src-list="[coverPreviewUrl]"
               :initial-index="0"
               preview-teleported
@@ -1066,8 +1066,13 @@ onBeforeUnmount(revokeCoverPreview)
   display: block;
   overflow: hidden;
   border: 1px solid #dbeafe;
+  background: #f8fafc;
   box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
   cursor: zoom-in;
+}
+
+.cover-preview :deep(.el-image__inner) {
+  object-fit: contain;
 }
 
 .cover-empty {
