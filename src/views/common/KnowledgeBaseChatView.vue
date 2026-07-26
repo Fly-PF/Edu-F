@@ -84,7 +84,6 @@ onMounted(async () => {
     <div v-if="isNewConversation" class="welcome-block">
       <div class="welcome-logo">AI</div>
       <h1>知识库问答</h1>
-      <p>查课程、查班级、查学习流程，先用模拟后端数据演示历史会话切换和 Markdown 渲染。</p>
       <div class="prompt-row">
         <button v-for="prompt in promptCards" :key="prompt" type="button" @click="setComposerText(prompt)">
           {{ prompt }}

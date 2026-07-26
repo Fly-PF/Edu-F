@@ -323,26 +323,6 @@ function removeConversationMessageCache(sessionId) {
   conversationMessageCache.value = nextCache
 }
 
-function wait(ms) {
-  return new Promise((resolve) => window.setTimeout(resolve, ms))
-}
-
-function buildReply(question) {
-  if (question.includes('后端') || question.includes('接口')) {
-    return '后续接后端时，可以把当前模拟数据替换为会话列表接口、历史消息接口和发送消息接口。发送消息后，后端返回 AI 答案和引用来源，前端追加到当前会话即可。'
-  }
-
-  if (question.includes('学生') || question.includes('学习')) {
-    return '学生侧可以围绕课程学习、章节资源、练习提交和反馈复盘来回答。接入真实数据后，还可以结合学生自己的学习记录生成个性化建议。'
-  }
-
-  if (question.includes('老师') || question.includes('课程') || question.includes('班级')) {
-    return '老师侧的核心路径是创建课程、维护章节资源、关联班级、查看学习反馈。知识库问答可以把这些操作步骤整理成更容易执行的说明。'
-  }
-
-  return '我先按当前模拟知识库理解：这个问题可以从平台入口、角色权限、课程流程和学习反馈四个方向继续拆解。'
-}
-
 function pushMessage(role, content, extra = {}) {
   const message = {
     id: `${role}-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`,
@@ -354,28 +334,6 @@ function pushMessage(role, content, extra = {}) {
 
   messages.value.push(message)
   return message
-}
-
-async function streamAssistantReply(content, extra = {}) {
-  const assistantMessage = pushMessage('assistant', '', {
-    ...extra,
-    loading: true,
-  })
-
-  await wait(220)
-  assistantMessage.loading = false
-
-  const text = String(content ?? '')
-  const segmentSize = 4
-
-  for (let index = 0; index < text.length; index += segmentSize) {
-    assistantMessage.content += text.slice(index, index + segmentSize)
-    await nextTick()
-    scrollBubbleListToBottom(false)
-    await wait(24)
-  }
-
-  saveCurrentMessages()
 }
 
 function stopTypingLoop() {
