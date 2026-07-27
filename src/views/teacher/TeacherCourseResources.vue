@@ -57,6 +57,9 @@ const courseForm = reactive({
   difficulty: 1,
   courseType: 1,
   isPublic: 0,
+  tags: [],
+  seriesName: '',
+  seriesOrder: 0,
 })
 
 const chapterDraft = reactive({ title: '', duration: 0 })
@@ -133,6 +136,9 @@ function syncCourseForm(courseData) {
     difficulty: courseData?.difficulty || 1,
     courseType: courseData?.courseType || 1,
     isPublic: Number(courseData?.isPublic ?? (courseData?.publicCourse ? 1 : 0)),
+    tags: [...(courseData?.tags || [])],
+    seriesName: courseData?.seriesName || '',
+    seriesOrder: Number(courseData?.seriesOrder || 0),
   })
 }
 
@@ -190,6 +196,9 @@ async function saveCourse() {
       grade: courseForm.grade,
       difficulty: courseForm.difficulty,
       courseType: courseForm.courseType,
+      tags: courseForm.tags.map((tag) => tag.trim()).filter(Boolean),
+      seriesName: courseForm.seriesName.trim(),
+      seriesOrder: Number(courseForm.seriesOrder || 0),
     })
     syncCourseForm(course.value)
     ElMessage.success('课程信息已保存')
@@ -575,6 +584,12 @@ onMounted(loadAll)
                   inactive-text="不公开"
                 />
               </el-form-item>
+              <el-form-item label="课程系列">
+                <el-input v-model.trim="courseForm.seriesName" maxlength="100" placeholder="例如：AI 入门第 1 季" />
+              </el-form-item>
+              <el-form-item label="系列内排序">
+                <el-input-number v-model="courseForm.seriesOrder" :min="0" :step="1" controls-position="right" />
+              </el-form-item>
             </div>
             <el-form-item label="课程介绍">
               <el-input
@@ -584,6 +599,20 @@ onMounted(loadAll)
                 maxlength="3000"
                 show-word-limit
                 placeholder="填写课程目标、内容范围和适合人群"
+              />
+            </el-form-item>
+            <el-form-item label="课程标签">
+              <el-select
+                v-model="courseForm.tags"
+                multiple
+                filterable
+                allow-create
+                default-first-option
+                clearable
+                collapse-tags
+                collapse-tags-tooltip
+                class="full-width"
+                placeholder="输入后回车创建标签，例如：AI 入门"
               />
             </el-form-item>
           </el-form>

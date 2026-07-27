@@ -45,6 +45,7 @@ const createForm = reactive({
   difficulty: 1,
   courseType: 1,
   isPublic: 0,
+  tags: [],
 })
 
 const previewVisible = ref(false)
@@ -125,6 +126,7 @@ function openCreateDialog() {
     difficulty: 1,
     courseType: 1,
     isPublic: 0,
+    tags: [],
   })
   createVisible.value = true
 }
@@ -142,6 +144,7 @@ async function submitCreate() {
       grade: createForm.grade,
       difficulty: createForm.difficulty,
       courseType: createForm.courseType,
+      tags: createForm.tags.map((tag) => tag.trim()).filter(Boolean),
     })
     ElMessage.success('课程草稿已创建')
     createVisible.value = false
@@ -422,6 +425,20 @@ onMounted(async () => {
             :inactive-value="0"
             active-text="公开"
             inactive-text="不公开"
+          />
+        </el-form-item>
+        <el-form-item label="课程标签">
+          <el-select
+            v-model="createForm.tags"
+            multiple
+            filterable
+            allow-create
+            default-first-option
+            clearable
+            collapse-tags
+            collapse-tags-tooltip
+            class="full-width"
+            placeholder="输入后回车创建标签，例如：AI 入门"
           />
         </el-form-item>
       </el-form>

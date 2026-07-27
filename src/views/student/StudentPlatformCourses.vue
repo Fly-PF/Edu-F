@@ -1,6 +1,6 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   Clock,
@@ -14,7 +14,7 @@ import {
   User,
   VideoPlay,
 } from '@element-plus/icons-vue'
-import { getCourse, getCourseChapters, listPublicCourses } from '@/api/course'
+import { getCourse, getCourseChapters, listCourseTags, listPublicCourses } from '@/api/course'
 import cover1 from '@/assets/course/img1.webp'
 import cover2 from '@/assets/course/img2.webp'
 import cover3 from '@/assets/course/img3.webp'
@@ -22,25 +22,24 @@ import cover4 from '@/assets/course/img4.webp'
 
 const covers = [cover1, cover2, cover3, cover4]
 const router = useRouter()
+const route = useRoute()
 const loading = ref(false)
 const courses = ref([])
+const availableTags = ref([])
+const selectedTags = ref([])
+const matchAll = ref(false)
 const filters = reactive({
   keyword: '',
   grade: '',
   difficulty: null,
   courseType: null,
+  sortBy: 'publishedDesc',
 })
 
 const detailVisible = ref(false)
 const detailLoading = ref(false)
 const detailCourse = ref(null)
 const detailChapters = ref([])
-
-const summary = computed(() => ({
-  courses: courses.value.length,
-  chapters: courses.value.reduce((total, item) => total + Number(item.totalChapter || 0), 0),
-  resources: courses.value.reduce((total, item) => total + Number(item.resourceCount || 0), 0),
-}))
 
 function fallbackCover(course) {
   return covers[Math.abs(Number(course?.id || 0)) % covers.length]
@@ -65,13 +64,15 @@ function resourceTypeText(type) {
 async function loadCourses() {
   loading.value = true
   try {
-    courses.value =
-      (await listPublicCourses({
+    const data = await listPublicCourses({
         keyword: filters.keyword.trim() || undefined,
         grade: filters.grade || undefined,
         difficulty: filters.difficulty || undefined,
         courseType: filters.courseType || undefined,
-      })) || []
+        tags: selectedTags.value.join(',') || undefined,
+        matchAll: matchAll.value || undefined,
+      })
+    courses.value = sortCourses(data || [])
   } catch (error) {
     ElMessage.error(error?.message || '课程列表加载失败')
   } finally {
@@ -80,8 +81,29 @@ async function loadCourses() {
 }
 
 function resetFilters() {
-  Object.assign(filters, { keyword: '', grade: '', difficulty: null, courseType: null })
+  Object.assign(filters, { keyword: '', grade: '', difficulty: null, courseType: null, sortBy: 'publishedDesc' })
+  selectedTags.value = []
+  matchAll.value = false
   loadCourses()
+}
+
+function sortCourses(list) {
+  return [...list].sort((left, right) => {
+    if (filters.sortBy === 'likes') {
+      return Number(right.likeCount || 0) - Number(left.likeCount || 0)
+    }
+    const leftTime = new Date(left.publishedTime || left.updatedTime || left.createdTime || 0).getTime()
+    const rightTime = new Date(right.publishedTime || right.updatedTime || right.createdTime || 0).getTime()
+    return filters.sortBy === 'publishedAsc' ? leftTime - rightTime : rightTime - leftTime
+  })
+}
+
+function syncRouteFilters() {
+  const tagQuery = Array.isArray(route.query.tags) ? route.query.tags.join(',') : route.query.tags
+  selectedTags.value = typeof tagQuery === 'string'
+    ? tagQuery.split(',').map((tag) => tag.trim()).filter(Boolean)
+    : []
+  matchAll.value = route.query.matchAll === 'true'
 }
 
 async function openDetail(course) {
@@ -108,40 +130,26 @@ function startLearning(course) {
   router.push({ name: 'course-learn', params: { courseId: course.id } })
 }
 
-onMounted(loadCourses)
+watch(selectedTags, () => loadCourses(), { deep: true })
+onMounted(async () => {
+  syncRouteFilters()
+  try {
+    availableTags.value = (await listCourseTags()) || []
+  } catch {
+    availableTags.value = []
+  }
+  await loadCourses()
+})
 </script>
 
 <template>
   <main class="platform-course-page">
-    <header class="course-list-header">
-      <div>
-        <p class="eyebrow">COURSE CATALOG</p>
-        <h1>平台课程列表</h1>
-        <p>浏览教师已发布的课程与章节资源。</p>
+    <section class="catalog-browser" aria-label="课程筛选">
+      <div class="browser-heading">
+        <p>COURSE SEARCH</p>
+        <h1>找到下一门想学的课</h1>
       </div>
-      <el-tooltip content="刷新课程" placement="bottom">
-        <el-button circle aria-label="刷新课程" :loading="loading" @click="loadCourses">
-          <el-icon><Refresh /></el-icon>
-        </el-button>
-      </el-tooltip>
-    </header>
-
-    <section class="catalog-summary" aria-label="课程列表统计">
-      <div>
-        <span>公开课程</span>
-        <strong>{{ summary.courses }}</strong>
-      </div>
-      <div>
-        <span>课程章节</span>
-        <strong>{{ summary.chapters }}</strong>
-      </div>
-      <div>
-        <span>学习资源</span>
-        <strong>{{ summary.resources }}</strong>
-      </div>
-    </section>
-
-    <section class="catalog-toolbar">
+      <div class="catalog-toolbar">
       <el-input
         v-model="filters.keyword"
         clearable
@@ -152,6 +160,19 @@ onMounted(loadCourses)
       >
         <template #prefix><el-icon><Search /></el-icon></template>
       </el-input>
+      <el-select
+        v-model="selectedTags"
+        class="course-tag-picker"
+        multiple
+        filterable
+        clearable
+        collapse-tags
+        collapse-tags-tooltip
+        placeholder="课程标签"
+        @change="loadCourses"
+      >
+        <el-option v-for="tag in availableTags" :key="tag" :label="tag" :value="tag" />
+      </el-select>
       <el-select v-model="filters.grade" clearable placeholder="适配学段" @change="loadCourses">
         <el-option label="通用" value="通用" />
         <el-option label="小学" value="小学" />
@@ -169,14 +190,38 @@ onMounted(loadCourses)
         <el-option label="项目实践课" :value="2" />
         <el-option label="实验课" :value="3" />
       </el-select>
-      <el-button @click="resetFilters">重置</el-button>
+      <el-select v-model="filters.sortBy" class="course-sort-picker" @change="loadCourses">
+        <el-option label="最新发布" value="publishedDesc" />
+        <el-option label="最早发布" value="publishedAsc" />
+        <el-option label="点赞最多" value="likes" />
+      </el-select>
+        <el-tooltip content="清除筛选" placement="bottom">
+          <el-button class="reset-button" circle aria-label="清除筛选" @click="resetFilters">
+            <el-icon><Refresh /></el-icon>
+          </el-button>
+        </el-tooltip>
+      </div>
+      <div v-if="selectedTags.length > 1" class="tag-filter-row">
+        <el-switch v-model="matchAll" active-text="同时匹配全部标签" inactive-text="匹配任意一个标签" @change="loadCourses" />
+      </div>
     </section>
 
     <section v-loading="loading" class="catalog-grid" aria-live="polite">
-      <article v-for="course in courses" :key="course.id" class="catalog-card" @click="openDetail(course)">
+      <article
+        v-for="(course, index) in courses"
+        :key="course.id"
+        class="catalog-card"
+        :class="`card-tone-${index % 4}`"
+        role="button"
+        tabindex="0"
+        @click="openDetail(course)"
+        @keydown.enter="openDetail(course)"
+        @keydown.space.prevent="openDetail(course)"
+      >
         <div class="catalog-cover">
           <el-image :src="course.coverUrl || fallbackCover(course)" fit="cover" />
-          <span>{{ courseTypeText(course.courseType) }}</span>
+          <span class="course-type">{{ courseTypeText(course.courseType) }}</span>
+          <span class="cover-scribble"></span>
         </div>
         <div class="catalog-card-body">
           <div class="catalog-tags">
@@ -188,9 +233,12 @@ onMounted(loadCourses)
           <p>{{ course.description || '老师暂未填写课程介绍。' }}</p>
           <div class="catalog-meta">
             <span><el-icon><User /></el-icon>{{ course.teacherName || '平台教师' }}</span>
-            <span><el-icon><FolderOpened /></el-icon>{{ course.totalChapter || 0 }} 章</span>
+            <span><el-icon><FolderOpened /></el-icon>{{ course.totalChapter || 0 }} 个任务站</span>
+          </div>
+          <div class="catalog-footer">
             <span><el-icon><Collection /></el-icon>{{ course.resourceCount || 0 }} 个资源</span>
             <span><el-icon><Clock /></el-icon>{{ course.totalDuration || 0 }} 分钟</span>
+            <b>去探索 <i></i></b>
           </div>
         </div>
       </article>
@@ -200,7 +248,7 @@ onMounted(loadCourses)
       <el-button @click="resetFilters">清除筛选</el-button>
     </el-empty>
 
-    <el-drawer v-model="detailVisible" size="min(760px, 94vw)" title="课程详情">
+    <el-drawer v-model="detailVisible" class="course-drawer" size="min(760px, 94vw)" title="课程详情">
       <div v-loading="detailLoading" class="course-detail-drawer">
         <template v-if="detailCourse">
           <img :src="detailCourse.coverUrl || fallbackCover(detailCourse)" alt="课程封面" />
@@ -253,112 +301,414 @@ onMounted(loadCourses)
 
 <style scoped>
 .platform-course-page {
+  --ink: #3d3564;
+  --purple: #8178cf;
+  --pink: #ee91bb;
+  --yellow: #fff1a8;
+  --cyan: #9de4eb;
   min-height: 100%;
-  padding: 30px clamp(18px, 4vw, 54px) 48px;
-  background: #f5f7fa;
-  color: #172033;
+  padding: 30px clamp(18px, 5vw, 80px) 68px;
+  overflow: hidden;
+  background-color: #fbfbff;
+  background-image:
+    linear-gradient(90deg, rgb(129 120 207 / 5%) 1px, transparent 1px),
+    linear-gradient(rgb(238 145 187 / 5%) 1px, transparent 1px);
+  background-size: 32px 32px;
+  color: var(--ink);
 }
 
-.course-list-header {
+.course-hero {
+  position: relative;
   display: flex;
-  align-items: flex-start;
+  min-height: 294px;
+  align-items: stretch;
   justify-content: space-between;
-  gap: 24px;
+  gap: 30px;
+  padding: clamp(28px, 4vw, 54px) clamp(26px, 5vw, 76px);
+  overflow: hidden;
+  border: 1px solid rgb(88 77 137 / 26%);
+  border-radius: 14px;
+  background:
+    linear-gradient(118deg, #e8e4ff 0%, #f9ddec 43%, #d3f2f2 100%);
+  box-shadow: 0 18px 38px rgb(91 77 148 / 13%);
+  isolation: isolate;
 }
 
-.eyebrow {
-  margin: 0 0 7px;
-  color: #2c69bd;
-  font-size: 11px;
-  font-weight: 750;
+.course-hero::before,
+.course-hero::after {
+  position: absolute;
+  z-index: -1;
+  display: block;
+  content: '';
 }
 
-.course-list-header h1 {
+.course-hero::before {
+  width: 430px;
+  height: 430px;
+  top: -220px;
+  left: 43%;
+  border: 2px solid rgb(255 255 255 / 72%);
+  border-radius: 43% 57% 62% 38% / 42% 42% 58% 58%;
+  transform: rotate(13deg);
+}
+
+.course-hero::after {
+  width: 75%;
+  height: 66px;
+  right: -7%;
+  bottom: -28px;
+  border-top: 3px dashed rgb(87 75 137 / 38%);
+  transform: rotate(-4deg);
+}
+
+.hero-copy {
+  position: relative;
+  z-index: 1;
+  max-width: 560px;
+}
+
+.hero-kicker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin: 0;
-  font-size: 28px;
-  font-weight: 720;
+  color: #6f649a;
+  font-family: 'Trebuchet MS', sans-serif;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+}
+
+.hero-kicker span {
+  width: 9px;
+  height: 9px;
+  border: 1px solid #766b9e;
+  border-radius: 50%;
+  background: var(--yellow);
+  box-shadow: 2px 2px 0 rgb(61 53 100 / 28%);
+}
+
+.course-hero h1 {
+  margin: 0;
+  padding-top: 17px;
+  color: #3e3564;
+  font-family: 'Trebuchet MS', 'Microsoft YaHei', sans-serif;
+  font-size: clamp(38px, 5vw, 66px);
+  font-weight: 900;
+  letter-spacing: 0;
+  line-height: 1.04;
+  text-shadow: 2px 2px 0 rgb(255 255 255 / 72%);
+}
+
+.hero-description {
+  max-width: 395px;
+  margin: 18px 0 0;
+  color: #615783;
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.75;
+}
+
+.hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 23px;
+}
+
+.hero-note {
+  padding: 7px 11px;
+  border: 1px solid rgb(78 68 121 / 52%);
+  border-radius: 4px;
+  background: var(--yellow);
+  box-shadow: 2px 3px 0 rgb(61 53 100 / 25%);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 800;
+  transform: rotate(-2deg);
+}
+
+.refresh-button {
+  width: 38px;
+  height: 38px;
+  border: 1px solid rgb(78 68 121 / 48%) !important;
+  background: #ffffff !important;
+  color: var(--purple) !important;
+  box-shadow: 2px 3px 0 rgb(61 53 100 / 25%);
+}
+
+.refresh-button:hover,
+.refresh-button:focus-visible {
+  transform: translate(-1px, -1px) rotate(12deg);
+  box-shadow: 3px 4px 0 rgb(61 53 100 / 25%);
+}
+
+.hero-art {
+  position: relative;
+  width: min(37%, 370px);
+  min-width: 285px;
+  z-index: 1;
+}
+
+.hero-art p {
+  position: absolute;
+  z-index: 2;
+  top: 57px;
+  right: 19%;
+  margin: 0;
+  color: var(--ink);
+  font-family: Impact, 'Arial Black', sans-serif;
+  font-size: clamp(26px, 3vw, 43px);
+  line-height: 0.87;
+  text-align: right;
+  transform: rotate(-9deg);
+}
+
+.hero-spray {
+  position: absolute;
+  border: 2px solid #4e4473;
+}
+
+.spray-one {
+  width: 172px;
+  height: 172px;
+  top: 14px;
+  right: 8px;
+  border-radius: 62% 38% 36% 64% / 44% 55% 45% 56%;
+  background: var(--yellow);
+  transform: rotate(-18deg);
+}
+
+.spray-two {
+  width: 103px;
+  height: 103px;
+  right: 183px;
+  bottom: 2px;
+  border-radius: 41% 59% 67% 33% / 57% 37% 63% 43%;
+  background: var(--cyan);
+  transform: rotate(25deg);
+}
+
+.hero-grid-mark {
+  position: absolute;
+  z-index: -1;
+  width: 145px;
+  height: 122px;
+  right: 4px;
+  bottom: 5px;
+  background-image: radial-gradient(#766a9b 1.7px, transparent 2px);
+  background-size: 13px 13px;
+  opacity: 0.72;
+  transform: rotate(8deg);
+}
+
+.hero-sticker {
+  position: absolute;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  border: 2px solid #4e4473;
+  color: #4e4473;
+  font-family: Impact, 'Arial Black', sans-serif;
+  font-size: 21px;
+  line-height: 1;
+  box-shadow: 2px 3px 0 rgb(61 53 100 / 27%);
+}
+
+.sticker-one {
+  width: 50px;
+  height: 50px;
+  top: 3px;
+  right: 0;
+  border-radius: 50%;
+  background: #ffffff;
+  transform: rotate(13deg);
+}
+
+.sticker-two {
+  width: 57px;
+  height: 40px;
+  bottom: 22px;
+  left: 35px;
+  border-radius: 6px;
+  background: var(--pink);
+  color: #ffffff;
+  transform: rotate(-11deg);
+}
+
+.catalog-browser {
+  padding-top: 8px;
+}
+
+.browser-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.browser-heading p {
+  margin: 0;
+  color: #d3759f;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 1px;
+}
+
+.browser-heading h1 {
+  flex: 1;
+  margin: 0;
+  color: var(--ink);
+  font-family: 'Trebuchet MS', 'Microsoft YaHei', sans-serif;
+  font-size: clamp(25px, 3vw, 36px);
+  font-weight: 900;
   letter-spacing: 0;
 }
 
-.course-list-header p:last-child {
-  margin: 8px 0 0;
-  color: #768195;
-  font-size: 14px;
-}
-
-.catalog-summary {
-  display: grid;
-  width: min(660px, 100%);
-  margin-top: 24px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  border: 1px solid #e1e6ed;
-  border-radius: 8px;
-  background: #ffffff;
-}
-
-.catalog-summary > div {
-  padding: 17px 20px;
-  border-right: 1px solid #e7ebf0;
-}
-
-.catalog-summary > div:last-child {
-  border-right: 0;
-}
-
-.catalog-summary span,
-.catalog-summary strong {
-  display: block;
-}
-
-.catalog-summary span {
-  color: #7c8798;
+.tag-filter-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 0;
+  margin: -10px 0 17px;
+  padding: 7px 10px;
+  width: fit-content;
+  border: 1px solid #ded7ed;
+  border-radius: 7px;
+  background: rgb(255 255 255 / 72%);
+  box-shadow: 1px 2px 0 rgb(105 94 150 / 10%);
+  color: #746b91;
   font-size: 12px;
+  font-weight: 750;
 }
 
-.catalog-summary strong {
-  margin-top: 4px;
-  font-size: 22px;
+.tag-filter-row :deep(.el-switch) {
+  margin-left: 2px;
+  --el-switch-on-color: #8b81cc;
+  --el-switch-off-color: #ddd8e9;
+  --el-switch-border-color: #c8bfdf;
+}
+
+.tag-filter-row :deep(.el-switch__label) {
+  color: #7a7193;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.tag-filter-row :deep(.el-switch__label.is-active) {
+  color: #635993;
 }
 
 .catalog-toolbar {
   display: grid;
-  margin: 24px 0 18px;
-  grid-template-columns: minmax(240px, 1.5fr) repeat(3, minmax(130px, 0.55fr)) auto;
-  gap: 10px;
+  margin: 17px 0 25px;
+  grid-template-columns: minmax(200px, 1.12fr) minmax(145px, 0.68fr) repeat(4, minmax(108px, 0.44fr)) auto;
+  gap: 12px;
 }
 
 .catalog-search {
   min-width: 0;
 }
 
+.course-tag-picker {
+  min-width: 0;
+}
+
+.course-sort-picker {
+  min-width: 0;
+}
+
+.catalog-toolbar :deep(.el-input__wrapper),
+.catalog-toolbar :deep(.el-select__wrapper) {
+  min-height: 42px;
+  border: 1px solid #857bad;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 2px 3px 0 rgb(105 94 150 / 15%);
+}
+
+.catalog-toolbar :deep(.el-input__wrapper.is-focus),
+.catalog-toolbar :deep(.el-select__wrapper.is-focused) {
+  box-shadow: 3px 4px 0 rgb(238 145 187 / 45%);
+}
+
+.catalog-toolbar :deep(.el-input__inner),
+.catalog-toolbar :deep(.el-select__placeholder),
+.catalog-toolbar :deep(.el-select__selected-item) {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.catalog-toolbar :deep(.el-input__prefix-inner),
+.catalog-toolbar :deep(.el-select__caret) {
+  color: var(--purple);
+}
+
+.reset-button {
+  width: 42px;
+  height: 42px;
+  border: 1px solid #776d9e !important;
+  border-radius: 8px !important;
+  background: var(--yellow) !important;
+  color: var(--ink) !important;
+  box-shadow: 2px 3px 0 rgb(61 53 100 / 22%);
+}
+
+.reset-button:hover,
+.reset-button:focus-visible {
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 4px 0 rgb(61 53 100 / 26%);
+}
+
 .catalog-grid {
   display: grid;
   min-height: 180px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(16px, 1.4vw, 24px);
 }
 
 .catalog-card {
+  --card-accent: #8178cf;
+  --card-soft: #eeebff;
   min-width: 0;
   overflow: hidden;
-  border: 1px solid #e0e5ec;
-  border-radius: 8px;
+  border: 2px solid var(--ink);
+  border-radius: 7px;
   background: #ffffff;
   cursor: pointer;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+  box-shadow: 5px 5px 0 rgb(61 53 100 / 78%);
+  outline: none;
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
 }
 
-.catalog-card:hover {
-  transform: translateY(-2px);
-  border-color: #c6d8ed;
-  box-shadow: 0 11px 26px rgb(32 62 98 / 9%);
+.catalog-card:hover,
+.catalog-card:focus-visible {
+  transform: translate(-3px, -5px) rotate(-0.6deg);
+  box-shadow: 8px 10px 0 rgb(61 53 100 / 82%);
+}
+
+.card-tone-1 {
+  --card-accent: #e68db5;
+  --card-soft: #ffedf4;
+}
+
+.card-tone-2 {
+  --card-accent: #52bbc4;
+  --card-soft: #e4faf9;
+}
+
+.card-tone-3 {
+  --card-accent: #e0a153;
+  --card-soft: #fff6dc;
 }
 
 .catalog-cover {
   position: relative;
   aspect-ratio: 16 / 9;
   overflow: hidden;
-  background: #e9eef4;
+  background: var(--card-soft);
 }
 
 .catalog-cover .el-image {
@@ -366,20 +716,35 @@ onMounted(loadCourses)
   height: 100%;
 }
 
-.catalog-cover > span {
+.catalog-cover .course-type {
   position: absolute;
-  top: 12px;
-  left: 12px;
-  padding: 5px 9px;
+  top: 11px;
+  left: 11px;
+  z-index: 2;
+  padding: 5px 9px 4px;
+  border: 1px solid var(--ink);
   border-radius: 4px;
-  background: rgb(20 35 56 / 78%);
-  color: #ffffff;
+  background: var(--yellow);
+  box-shadow: 2px 2px 0 rgb(61 53 100 / 45%);
+  color: var(--ink);
   font-size: 11px;
-  font-weight: 650;
+  font-weight: 800;
+  transform: rotate(-2deg);
+}
+
+.cover-scribble {
+  position: absolute;
+  width: 74px;
+  height: 19px;
+  right: -8px;
+  bottom: 12px;
+  border-top: 4px dashed #ffffff;
+  border-bottom: 4px dotted var(--card-accent);
+  transform: rotate(-23deg);
 }
 
 .catalog-card-body {
-  padding: 17px;
+  padding: 15px 15px 13px;
 }
 
 .catalog-tags {
@@ -390,18 +755,22 @@ onMounted(loadCourses)
 }
 
 .catalog-tags span {
-  padding: 3px 7px;
-  border-radius: 4px;
-  background: #edf3f8;
-  color: #5f7085;
+  padding: 3px 7px 2px;
+  border: 1px solid rgb(61 53 100 / 72%);
+  border-radius: 3px;
+  background: var(--card-soft);
+  color: var(--ink);
   font-size: 10px;
+  font-weight: 750;
 }
 
 .catalog-card h2 {
-  margin: 12px 0 0;
+  margin: 11px 0 0;
   overflow: hidden;
-  font-size: 17px;
-  font-weight: 680;
+  color: var(--ink);
+  font-family: 'Trebuchet MS', 'Microsoft YaHei', sans-serif;
+  font-size: 18px;
+  font-weight: 900;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -411,21 +780,22 @@ onMounted(loadCourses)
   min-height: 42px;
   margin: 8px 0 0;
   overflow: hidden;
-  color: #748094;
+  color: #655d7d;
   font-size: 13px;
-  line-height: 21px;
+  line-height: 1.65;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
 
 .catalog-meta {
-  display: grid;
+  display: flex;
+  min-width: 0;
+  justify-content: space-between;
+  gap: 10px;
   margin-top: 15px;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px 10px;
-  padding-top: 14px;
-  border-top: 1px solid #edf0f4;
-  color: #788497;
+  padding-top: 12px;
+  border-top: 1px solid rgb(61 53 100 / 42%);
+  color: #51486f;
   font-size: 11px;
 }
 
@@ -439,10 +809,54 @@ onMounted(loadCourses)
   white-space: nowrap;
 }
 
+.catalog-meta span:last-child {
+  flex: 0 0 auto;
+}
+
+.catalog-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  color: #5a5273;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.catalog-footer > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.catalog-footer > span :deep(svg),
+.catalog-meta :deep(svg) {
+  color: var(--card-accent);
+}
+
+.catalog-footer b {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  color: var(--card-accent);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.catalog-footer b i {
+  width: 8px;
+  height: 8px;
+  border-top: 2px solid currentcolor;
+  border-right: 2px solid currentcolor;
+  transform: rotate(45deg);
+}
+
 .course-detail-drawer > img {
   width: 100%;
   aspect-ratio: 16 / 8;
-  border-radius: 8px;
+  border: 2px solid var(--ink);
+  border-radius: 6px;
   object-fit: cover;
 }
 
@@ -456,13 +870,17 @@ onMounted(loadCourses)
 
 .detail-heading p {
   margin: 0 0 5px;
-  color: #6e7d91;
+  color: var(--purple);
   font-size: 12px;
+  font-weight: 750;
 }
 
 .detail-heading h2 {
   margin: 0;
+  color: var(--ink);
+  font-family: 'Trebuchet MS', 'Microsoft YaHei', sans-serif;
   font-size: 24px;
+  font-weight: 900;
 }
 
 .detail-facts {
@@ -470,7 +888,7 @@ onMounted(loadCourses)
   flex-wrap: wrap;
   gap: 15px;
   margin-top: 15px;
-  color: #6e7b8f;
+  color: #5e5576;
   font-size: 13px;
 }
 
@@ -482,6 +900,17 @@ onMounted(loadCourses)
 
 .detail-actions {
   margin-top: 18px;
+}
+
+.detail-actions :deep(.el-button) {
+  height: 40px;
+  padding: 0 19px;
+  border: 1px solid var(--ink);
+  border-radius: 5px;
+  background: var(--pink);
+  box-shadow: 2px 3px 0 rgb(61 53 100 / 24%);
+  color: #ffffff;
+  font-weight: 800;
 }
 
 .detail-intro,
@@ -497,7 +926,7 @@ onMounted(loadCourses)
 
 .detail-intro p {
   margin: 0;
-  color: #5f6d80;
+  color: #5d5575;
   line-height: 1.8;
   white-space: pre-wrap;
 }
@@ -524,9 +953,10 @@ onMounted(loadCourses)
   width: 32px;
   height: 32px;
   place-items: center;
-  border-radius: 6px;
-  background: #edf4fb;
-  color: #2f69ad;
+  border: 2px solid var(--ink);
+  border-radius: 5px;
+  background: var(--yellow);
+  color: var(--ink);
 }
 
 .detail-resource-icon :deep(svg) {
@@ -539,17 +969,22 @@ onMounted(loadCourses)
 }
 
 .detail-resource strong {
-  color: #344054;
+  color: var(--ink);
   font-size: 13px;
 }
 
 .detail-resource small {
   margin-top: 3px;
-  color: #8b95a5;
+  color: #756c8d;
   font-size: 11px;
 }
 
 @media (max-width: 1100px) {
+  .hero-art {
+    width: 31%;
+    min-width: 230px;
+  }
+
   .catalog-toolbar {
     grid-template-columns: 1fr 1fr 1fr;
   }
@@ -558,31 +993,66 @@ onMounted(loadCourses)
     grid-column: span 2;
   }
 
+  .course-tag-picker {
+    grid-column: span 1;
+  }
+
   .catalog-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
+@media (min-width: 1101px) and (max-width: 1480px) {
+  .catalog-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 680px) {
   .platform-course-page {
-    padding: 22px 16px 36px;
+    padding: 18px 16px 42px;
   }
 
-  .course-list-header h1 {
-    font-size: 24px;
+  .course-hero {
+    min-height: 395px;
+    padding: 29px 23px;
   }
 
-  .catalog-summary {
-    grid-template-columns: 1fr;
+  .course-hero h1 {
+    font-size: 40px;
   }
 
-  .catalog-summary > div {
-    border-right: 0;
-    border-bottom: 1px solid #e7ebf0;
+  .hero-art {
+    position: absolute;
+    width: 260px;
+    min-width: 0;
+    height: 185px;
+    right: -26px;
+    bottom: -20px;
+    opacity: 0.94;
   }
 
-  .catalog-summary > div:last-child {
-    border-bottom: 0;
+  .hero-description,
+  .hero-actions {
+    position: relative;
+    z-index: 3;
+  }
+
+  .catalog-browser {
+    padding-top: 4px;
+  }
+
+  .browser-heading {
+    display: block;
+  }
+
+  .browser-heading p {
+    margin-bottom: 4px;
+  }
+
+  .tag-filter-row {
+    align-items: flex-start;
+    margin-top: 0;
   }
 
   .catalog-toolbar,
@@ -592,6 +1062,14 @@ onMounted(loadCourses)
 
   .catalog-search {
     grid-column: auto;
+  }
+
+  .course-tag-picker {
+    grid-column: auto;
+  }
+
+  .reset-button {
+    justify-self: end;
   }
 }
 </style>

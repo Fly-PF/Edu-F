@@ -144,6 +144,56 @@ const studentRoutes = [
   },
 ]
 
+const toolRoutes = [
+  {
+    path: '',
+    name: 'online-tools',
+    component: () => import('@/views/tools/OnlineToolsView.vue'),
+    meta: {
+      title: '在线工具',
+      allowAnonymous: true,
+    },
+  },
+  {
+    path: 'python',
+    name: 'python-workshop',
+    component: () => import('@/views/tools/PythonWorkshopView.vue'),
+    meta: {
+      title: 'Python工坊',
+      toolType: 'python',
+      allowAnonymous: true,
+    },
+  },
+  {
+    path: 'ai',
+    name: 'ai-workshop',
+    component: () => import('@/views/tools/ToolPlaceholderView.vue'),
+    meta: {
+      title: '人工智能工坊',
+      toolType: 'ai',
+      allowAnonymous: true,
+    },
+  },
+  {
+    path: 'blocks',
+    name: 'block-workshop',
+    component: () => import('@/views/tools/BlockWorkshopView.vue'),
+    meta: {
+      title: '积木工坊',
+      allowAnonymous: true,
+    },
+  },
+  {
+    path: 'blocks/projects',
+    name: 'block-project-gallery',
+    redirect: '/main/projects?type=blocks',
+    meta: {
+      title: '积木项目',
+      allowAnonymous: true,
+    },
+  },
+]
+
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
@@ -194,9 +244,17 @@ const router = createRouter({
         {
           path: 'courses',
           name: 'course-list',
+          component: () => import('@/views/student/StudentCourseCategories.vue'),
+          meta: {
+            title: '课程分类',
+          },
+        },
+        {
+          path: 'courses/search',
+          name: 'course-search',
           component: () => import('@/views/student/StudentPlatformCourses.vue'),
           meta: {
-            title: '课程列表',
+            title: '课程搜索',
           },
         },
         {
@@ -205,6 +263,46 @@ const router = createRouter({
           component: () => import('@/views/student/StudentCourseStudy.vue'),
           meta: {
             title: '课程学习',
+          },
+        },
+        {
+          path: 'projects',
+          name: 'project-center',
+          component: () => import('@/views/common/ProjectCenterView.vue'),
+          meta: {
+            title: '项目中心',
+          },
+        },
+        {
+          path: 'ai-exhibit',
+          name: 'ai-exhibit',
+          component: () => import('@/views/aiExhibit/AiExhibitView.vue'),
+          meta: {
+            title: 'AI展馆',
+          },
+        },
+        {
+          path: 'ai-exhibit/:caseId/practice',
+          name: 'ai-experience',
+          component: () => import('@/views/aiExhibit/AiExperienceView.vue'),
+          meta: {
+            title: 'AI体验',
+          },
+        },
+        {
+          path: 'ai-exhibit/draw-guess',
+          name: 'ai-draw-guess',
+          component: () => import('@/views/aiExhibit/AiDrawGuessView.vue'),
+          meta: {
+            title: '你画我猜',
+          },
+        },
+        {
+          path: 'ai-exhibit/face-recognition',
+          name: 'ai-face-recognition',
+          component: () => import('@/views/aiExhibit/AiFaceRecognitionView.vue'),
+          meta: {
+            title: '人脸识别',
           },
         },
         {
@@ -236,6 +334,11 @@ const router = createRouter({
           children: personnelRoutes,
         },
       ],
+    },
+    {
+      path: '/tools',
+      component: () => import('@/views/layout/MainView.vue'),
+      children: toolRoutes,
     },
     {
       path: '/personnel/managers',
@@ -275,4 +378,4 @@ router.beforeEach((to) => {
 })
 
 export default router
-export { personnelRoutes, studentRoutes, teacherRoutes }
+export { personnelRoutes, studentRoutes, teacherRoutes, toolRoutes }

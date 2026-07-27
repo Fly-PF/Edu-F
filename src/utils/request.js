@@ -90,7 +90,8 @@ instance.interceptors.response.use(
       return handleAuthExpired(error?.response?.data?.message)
     }
 
-    return Promise.reject(error)
+    const message = error?.response?.data?.message || error?.response?.data?.msg || error?.message || '请求失败'
+    return Promise.reject(new Error(message))
   },
 )
 

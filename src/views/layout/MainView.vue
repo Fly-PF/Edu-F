@@ -22,11 +22,13 @@ const userTypeMap = {
 
 const studentNavItems = [
   { label: '班级', path: '/main/student/classes', roles: ['STUDENT'] },
+  { label: 'AI展馆', path: '/main/ai-exhibit', roles: ['STUDENT'] },
 ]
 
 const teacherNavItems = [
   { label: '班级管理', path: '/main/teacher/classes', roles: ['TEACHER'] },
   { label: '课程管理', path: '/main/teacher/courses', roles: ['TEACHER'] },
+  { label: 'AI展馆', path: '/main/ai-exhibit', roles: ['TEACHER'] },
 ]
 
 const navItems = computed(() => {
@@ -44,6 +46,16 @@ const navItems = computed(() => {
     {
       label: '知识库',
       path: '/main/knowledge-qa',
+      roles: [],
+    },
+    {
+      label: '项目',
+      path: '/main/projects',
+      roles: [],
+    },
+    {
+      label: '在线工具',
+      path: '/tools',
       roles: [],
     },
   ]
@@ -90,7 +102,7 @@ const activePath = computed(() => {
     return '/main/teacher/classes'
   }
 
-  if (route.name === 'student-platform-courses' || route.name === 'course-learn') {
+  if (route.name === 'student-platform-courses' || route.name === 'course-search' || route.name === 'course-learn') {
     return '/main/courses'
   }
 
@@ -98,8 +110,22 @@ const activePath = computed(() => {
     return '/main/student/classes'
   }
 
+  if (route.path.startsWith('/main/ai-exhibit')) {
+    return '/main/ai-exhibit'
+  }
+
+  if (route.path.startsWith('/tools')) {
+    return '/tools'
+  }
+
+  if (route.path.startsWith('/main/projects')) {
+    return '/main/projects'
+  }
+
   return route.path
 })
+
+const isFullscreenRoute = computed(() => route.name === 'python-workshop')
 
 const headerAvatar = computed(() => {
   if (headerAvatarLoadFailed.value || !userStore.avatar) {
@@ -174,7 +200,9 @@ onMounted(loadCurrentUserProfile)
 </script>
 
 <template>
-  <el-container class="main-shell">
+  <RouterView v-if="isFullscreenRoute" />
+
+  <el-container v-else class="main-shell">
     <el-header class="main-header" height="64px">
       <div class="header-left">
         <div class="brand-mark">E</div>
