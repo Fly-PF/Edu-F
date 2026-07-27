@@ -1,5 +1,5 @@
 <script setup>
-import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Back, Brush, Document, FolderOpened, Headset, Hide, MagicStick, Picture, Plus, RefreshRight, Setting, Share, VideoPause, VideoPlay, View } from '@element-plus/icons-vue'
 import * as Blockly from 'blockly'
@@ -28,7 +28,12 @@ const saving = ref(false)
 const running = ref(false)
 const isPublished = ref(false)
 const workbenchTab = ref('code')
+const showTemplatePicker = ref(false)
+const projectTemplate = ref('free')
+const projectBase = ref(null)
 const stage = ref({ x: 0, y: 0, rotation: 0, message: '你好！拖一块积木来试试吧。', color: '#ee91bb', backdrop: '#ffffff', size: 100, visible: true, spriteName: '探索星', costume: 'star', sound: 'pop', volume: 70 })
+const actors = ref([{ id: 'sprite-1', state: { ...stage.value }, workspaceJson: null }])
+const selectedActorId = ref('sprite-1')
 const aiStatus = ref('等待 AI 积木运行')
 const sketching = ref(false)
 const inputState = ref({ key: '', mouseX: 0, mouseY: 0 })
@@ -44,11 +49,45 @@ const backdropOptions = [
   { id: 'yellow', label: '阳光任务', color: '#fff8d8' },
   { id: 'pink', label: '粉色创意', color: '#ffedf4' },
 ]
+const taskPresets = [
+  { id: 'reach', label: '到达目标', hint: '规划动作，让角色到达目标星。', target: { x: 120, y: -45 }, limit: 8 },
+  { id: 'corner', label: '转弯任务', hint: '转向后前进，寻找任务目标。', target: { x: -125, y: 65 }, limit: 10 },
+  { id: 'precision', label: '精准定位', hint: '用坐标与运算积木完成定位。', target: { x: 55, y: 80 }, limit: 6 },
+]
+
+function createTaskState(presetId = 'reach') {
+  const preset = taskPresets.find((item) => item.id === presetId) || taskPresets[0]
+  return { presetId: preset.id, label: preset.label, hint: preset.hint, target: { ...preset.target }, limit: preset.limit, moves: 0, completed: false }
+}
+
+const task = ref(createTaskState())
+
+const baseCatalog = [
+  { id: 'free', tag: 'SCENE', title: '自由创作基座', description: '角色、舞台、造型和声音自由组合，适合故事、动画和互动作品。' },
+  { id: 'interactive', tag: 'RULES', title: '互动任务基座', description: '在场景上配置目标、规则与完成条件，适合迷宫、收集、闯关和答题。' },
+  { id: 'ai', tag: 'AI LAB', title: 'AI 交互基座', description: '把人脸识别、你画我猜等 AI 能力作为作品中的可调用积木。' },
+]
+
+function createProjectBase(kind = 'free') {
+  const catalog = baseCatalog?.find((item) => item.id === kind)
+  return {
+    version: 1,
+    kind,
+    label: catalog?.title || '自由创作基座',
+    scene: { actors: ['default-sprite'], props: [], background: '#ffffff' },
+    capabilities: kind === 'ai' ? ['motion', 'looks', 'sound', 'ai'] : ['motion', 'looks', 'sound'],
+    rules: kind === 'interactive' ? { completion: 'reach-target', moveLimit: 8 } : { completion: 'manual' },
+  }
+}
+
+projectBase.value = createProjectBase()
 
 let workspace = null
 let resizeObserver = null
 let sketchingPointerId = null
 let stopRequested = false
+let switchingActor = false
+let actorDragState = null
 
 const toolbox = {
   kind: 'categoryToolbox',
@@ -114,6 +153,13 @@ const toolbox = {
         { kind: 'block', type: 'ai_draw_guess' },
       ],
     },
+    {
+      kind: 'category', name: '任务工具', colour: '#8178cf', contents: [
+        { kind: 'block', type: 'task_forward' },
+        { kind: 'block', type: 'task_turn' },
+        { kind: 'block', type: 'task_repeat_target' },
+      ],
+    },
   ],
 }
 
@@ -125,6 +171,16 @@ const starterWorkspace = {
       x: 70,
       y: 70,
       next: { block: { type: 'motion_move', inputs: { STEPS: { block: { type: 'math_number', fields: { NUM: 80 } } } }, next: { block: { type: 'looks_say', inputs: { TEXT: { block: { type: 'text', fields: { TEXT: '我会动起来！' } } } } } } } },
+    }],
+  },
+}
+
+const taskStarterWorkspace = {
+  blocks: {
+    languageVersion: 0,
+    blocks: [{
+      type: 'event_when_run', x: 80, y: 80,
+      next: { block: { type: 'task_repeat_target', inputs: { DO: { block: { type: 'task_forward' } } } } },
     }],
   },
 }
@@ -164,6 +220,94 @@ function ensureDefaultInputs() {
   })
 }
 
+function createActor(name = '新角色', index = actors.value.length + 1) {
+  return {
+    id: `sprite-${Date.now()}-${index}`,
+    state: {
+      x: 0,
+      y: 0,
+      rotation: 0,
+      message: '',
+      color: ['#ee91bb', '#52bbc4', '#8178cf', '#f2a54a'][index % 4],
+      backdrop: stage.value.backdrop,
+      size: 86,
+      visible: true,
+      spriteName: name,
+      costume: index % 2 ? 'bot' : 'dot',
+      sound: 'pop',
+      volume: 70,
+    },
+    workspaceJson: JSON.stringify(starterWorkspace),
+  }
+}
+
+function getSelectedActor() {
+  return actors.value.find((actor) => actor.id === selectedActorId.value) || actors.value[0]
+}
+
+function persistSelectedActor() {
+  const actor = getSelectedActor()
+  if (!actor) return
+  actor.state = { ...stage.value }
+  if (workspace) actor.workspaceJson = JSON.stringify(Blockly.serialization.workspaces.save(workspace))
+}
+
+function loadActorWorkspace(actor) {
+  if (!workspace || !actor) return
+  workspace.clear()
+  Blockly.serialization.workspaces.load(JSON.parse(actor.workspaceJson || JSON.stringify(starterWorkspace)), workspace)
+  ensureDefaultInputs()
+  window.requestAnimationFrame(resizeWorkspace)
+}
+
+function selectActor(actorId) {
+  if (actorId === selectedActorId.value) return
+  persistSelectedActor()
+  const nextActor = actors.value.find((actor) => actor.id === actorId)
+  if (!nextActor) return
+  switchingActor = true
+  selectedActorId.value = actorId
+  stage.value = { ...stage.value, ...nextActor.state }
+  switchingActor = false
+  loadActorWorkspace(nextActor)
+}
+
+function addActor() {
+  persistSelectedActor()
+  const actor = createActor(`角色 ${actors.value.length + 1}`)
+  actors.value.push(actor)
+  selectActor(actor.id)
+}
+
+function removeActor(actorId) {
+  if (actors.value.length <= 1) {
+    ElMessage.warning('至少保留一个角色。')
+    return
+  }
+  const index = actors.value.findIndex((actor) => actor.id === actorId)
+  if (index === -1) return
+  actors.value.splice(index, 1)
+  if (selectedActorId.value === actorId) {
+    const nextActor = actors.value[Math.max(0, index - 1)]
+    switchingActor = true
+    selectedActorId.value = nextActor.id
+    stage.value = { ...stage.value, ...nextActor.state }
+    switchingActor = false
+    loadActorWorkspace(nextActor)
+  }
+}
+
+function resetActors() {
+  actors.value = [{ id: 'sprite-1', state: { ...stage.value }, workspaceJson: JSON.stringify(starterWorkspace) }]
+  selectedActorId.value = 'sprite-1'
+}
+
+watch(stage, (value) => {
+  if (switchingActor) return
+  const actor = getSelectedActor()
+  if (actor) actor.state = { ...value }
+}, { deep: true })
+
 function defineBlocks() {
   if (Blockly.Blocks.event_when_run) return
   Blockly.common.defineBlocksWithJsonArray([
@@ -194,6 +338,9 @@ function defineBlocks() {
     { type: 'variable_set', message0: '将 %1 设为 %2', args0: [{ type: 'field_dropdown', name: 'NAME', options: [['分数', '分数'], ['计时', '计时']] }, { type: 'input_value', name: 'VALUE' }], previousStatement: null, nextStatement: null, colour: '#ef6687' },
     { type: 'variable_change', message0: '将 %1 增加 %2', args0: [{ type: 'field_dropdown', name: 'NAME', options: [['分数', '分数'], ['计时', '计时']] }, { type: 'input_value', name: 'VALUE', check: 'Number' }], previousStatement: null, nextStatement: null, colour: '#ef6687' },
     { type: 'variable_get', message0: '%1', args0: [{ type: 'field_dropdown', name: 'NAME', options: [['分数', '分数'], ['计时', '计时']] }], output: null, colour: '#ef6687' },
+    { type: 'task_forward', message0: '向前走 1 格', previousStatement: null, nextStatement: null, colour: '#8178cf' },
+    { type: 'task_turn', message0: '向 %1 转', args0: [{ type: 'field_dropdown', name: 'SIDE', options: [['左', 'left'], ['右', 'right']] }], previousStatement: null, nextStatement: null, colour: '#8178cf' },
+    { type: 'task_repeat_target', message0: '重复直到到达目标 %1', args0: [{ type: 'input_statement', name: 'DO' }], previousStatement: null, nextStatement: null, colour: '#8178cf' },
     { type: 'ai_face_check', message0: 'AI 识别人脸', previousStatement: null, nextStatement: null, colour: '#52bbc4', tooltip: '打开摄像头拍照后，调用平台人脸识别能力。' },
     { type: 'ai_draw_guess', message0: 'AI 猜一猜画板', previousStatement: null, nextStatement: null, colour: '#52bbc4', tooltip: '识别右侧画板中的涂鸦。' },
   ])
@@ -211,10 +358,12 @@ function initWorkspace() {
     theme: Blockly.Theme.defineTheme('eduWorkshop', {
       base: Blockly.Themes.Classic,
       componentStyles: { workspaceBackgroundColour: '#fbfbff', toolboxBackgroundColour: '#fff', toolboxForegroundColour: '#3d3564', flyoutBackgroundColour: '#f6f4ff', flyoutForegroundColour: '#3d3564' },
+      fontStyle: { family: 'Microsoft YaHei, sans-serif', weight: '600', size: 12 },
     }),
   })
   Blockly.serialization.workspaces.load(starterWorkspace, workspace)
   ensureDefaultInputs()
+  actors.value[0].workspaceJson = JSON.stringify(Blockly.serialization.workspaces.save(workspace))
   resizeObserver = new ResizeObserver(resizeWorkspace)
   resizeObserver.observe(blocklyRef.value)
   window.requestAnimationFrame(resizeWorkspace)
@@ -266,6 +415,19 @@ function pause(ms) {
   return new Promise((resolve) => window.setTimeout(resolve, Math.max(0, ms)))
 }
 
+function checkTaskProgress() {
+  if (projectTemplate.value !== 'interactive' || task.value.completed) return
+  const distance = Math.hypot(stage.value.x - task.value.target.x, stage.value.y - task.value.target.y)
+  if (distance <= 30) {
+    task.value.completed = true
+    stage.value.message = `任务完成！用了 ${task.value.moves} 步。`
+    return
+  }
+  if (task.value.moves >= task.value.limit) {
+    stage.value.message = `已经用了 ${task.value.moves} 步，试着用更少的积木完成任务。`
+  }
+}
+
 async function executeSequence(block) {
   let current = block
   while (current && !stopRequested) {
@@ -281,6 +443,7 @@ async function executeBlock(block) {
       const radians = (stage.value.rotation * Math.PI) / 180
       stage.value.x = Math.max(-180, Math.min(180, stage.value.x + Math.cos(radians) * steps))
       stage.value.y = Math.max(-115, Math.min(115, stage.value.y - Math.sin(radians) * steps))
+      checkTaskProgress()
       break
     }
     case 'motion_turn':
@@ -289,12 +452,15 @@ async function executeBlock(block) {
     case 'motion_goto':
       stage.value.x = Math.max(-180, Math.min(180, valueOf(block, 'X', 0)))
       stage.value.y = Math.max(-115, Math.min(115, valueOf(block, 'Y', 0)))
+      checkTaskProgress()
       break
     case 'motion_change_x':
       stage.value.x = Math.max(-180, Math.min(180, stage.value.x + Number(valueOf(block, 'VALUE', 10))))
+      checkTaskProgress()
       break
     case 'motion_change_y':
       stage.value.y = Math.max(-115, Math.min(115, stage.value.y + Number(valueOf(block, 'VALUE', 10))))
+      checkTaskProgress()
       break
     case 'motion_bounce':
       if (Math.abs(stage.value.x) >= 175 || Math.abs(stage.value.y) >= 110) stage.value.rotation = (stage.value.rotation + 180) % 360
@@ -335,6 +501,26 @@ async function executeBlock(block) {
       variables.value[name] = Number(variables.value[name] || 0) + Number(valueOf(block, 'VALUE', 1))
       break
     }
+    case 'task_forward': {
+      if (projectTemplate.value !== 'interactive') {
+        stage.value.message = '请先用“互动任务基座”创建项目。'
+        break
+      }
+      const radians = (stage.value.rotation * Math.PI) / 180
+      stage.value.x = Math.max(-180, Math.min(180, stage.value.x + Math.cos(radians) * 45))
+      stage.value.y = Math.max(-115, Math.min(115, stage.value.y - Math.sin(radians) * 45))
+      task.value.moves += 1
+      checkTaskProgress()
+      break
+    }
+    case 'task_turn':
+      stage.value.rotation = (stage.value.rotation + (block.getFieldValue('SIDE') === 'left' ? -90 : 90) + 360) % 360
+      break
+    case 'task_repeat_target': {
+      const loop = block.getInputTargetBlock('DO')
+      for (let index = 0; index < 50 && !stopRequested && !task.value.completed && task.value.moves < task.value.limit; index += 1) await executeSequence(loop)
+      break
+    }
     case 'ai_face_check':
       await runFaceCheck()
       break
@@ -347,19 +533,31 @@ async function executeBlock(block) {
 
 async function runProject() {
   if (!workspace || running.value) return
+  persistSelectedActor()
   running.value = true
   stopRequested = false
-  stage.value.message = '开始运行！'
+  if (projectTemplate.value === 'interactive') {
+    task.value.moves = 0
+    task.value.completed = false
+  }
+  const originalActorId = selectedActorId.value
+  let executed = false
   try {
-    const triggers = workspace.getTopBlocks(true).filter((block) => block.type === 'event_when_run')
-    if (!triggers.length) {
-      ElMessage.warning('先放入“当点击开始按钮”积木。')
-      return
+    for (const actor of actors.value) {
+      if (stopRequested) break
+      if (actor.id !== selectedActorId.value) selectActor(actor.id)
+      stage.value.message = `${stage.value.spriteName} 开始运行！`
+      const triggers = workspace.getTopBlocks(true).filter((block) => block.type === 'event_when_run')
+      if (!triggers.length) continue
+      executed = true
+      for (const trigger of triggers) await executeSequence(trigger.getNextBlock())
+      persistSelectedActor()
     }
-    for (const trigger of triggers) await executeSequence(trigger.getNextBlock())
+    if (!executed) ElMessage.warning('至少给一个角色放入“当点击开始按钮”积木。')
   } catch (error) {
     ElMessage.error(error?.message || '运行时出现了问题')
   } finally {
+    if (originalActorId !== selectedActorId.value) selectActor(originalActorId)
     running.value = false
   }
 }
@@ -373,13 +571,19 @@ function stopProject() {
 async function runKeyEvent(event) {
   inputState.value.key = event.key
   if (!workspace || running.value) return
-  const trigger = workspace.getTopBlocks(true).find((block) => block.type === 'event_when_key' && block.getFieldValue('KEY') === event.key)
-  if (!trigger) return
+  persistSelectedActor()
   running.value = true
   stopRequested = false
+  const originalActorId = selectedActorId.value
   try {
-    await executeSequence(trigger.getNextBlock())
+    for (const actor of actors.value) {
+      if (actor.id !== selectedActorId.value) selectActor(actor.id)
+      const trigger = workspace.getTopBlocks(true).find((block) => block.type === 'event_when_key' && block.getFieldValue('KEY') === event.key)
+      if (trigger) await executeSequence(trigger.getNextBlock())
+      persistSelectedActor()
+    }
   } finally {
+    if (originalActorId !== selectedActorId.value) selectActor(originalActorId)
     running.value = false
   }
 }
@@ -388,6 +592,33 @@ function updateStagePointer(event) {
   const rect = event.currentTarget.getBoundingClientRect()
   inputState.value.mouseX = ((event.clientX - rect.left) / rect.width - 0.5) * 360
   inputState.value.mouseY = -((event.clientY - rect.top) / rect.height - 0.5) * 240
+}
+
+function startActorDrag(event, actorId) {
+  event.preventDefault()
+  event.stopPropagation()
+  selectActor(actorId)
+  const scene = event.currentTarget.closest('.stage-scene')
+  if (!scene) return
+  const rect = scene.getBoundingClientRect()
+  actorDragState = { actorId, pointerId: event.pointerId, rect }
+  event.currentTarget.setPointerCapture?.(event.pointerId)
+}
+
+function handleStagePointerMove(event) {
+  updateStagePointer(event)
+  if (!actorDragState || actorDragState.pointerId !== event.pointerId) return
+  const rect = actorDragState.rect
+  const x = Math.max(-180, Math.min(180, event.clientX - rect.left - rect.width / 2))
+  const y = Math.max(-115, Math.min(115, event.clientY - rect.top - rect.height * 0.58))
+  stage.value.x = Math.round(x)
+  stage.value.y = Math.round(y)
+}
+
+function endActorDrag(event) {
+  if (!actorDragState || actorDragState.pointerId !== event.pointerId) return
+  actorDragState = null
+  persistSelectedActor()
 }
 
 async function runFaceCheck() {
@@ -473,11 +704,20 @@ function setupSketch() {
 
 function projectPayload() {
   const stageCanvas = document.querySelector('.stage-scene')
+  persistSelectedActor()
+  projectBase.value.scene = {
+    actors: actors.value.map((actor) => actor.id),
+    props: [],
+    background: stage.value.backdrop,
+  }
+  if (projectTemplate.value === 'interactive') {
+    projectBase.value.rules = { completion: 'reach-target', moveLimit: task.value.limit }
+  }
   return {
     title: title.value.trim() || '未命名积木作品',
     description: description.value.trim(),
-    workspaceJson: JSON.stringify(Blockly.serialization.workspaces.save(workspace)),
-    stageJson: JSON.stringify({ ...stage.value, variables: variables.value }),
+    workspaceJson: getSelectedActor()?.workspaceJson || JSON.stringify(starterWorkspace),
+    stageJson: JSON.stringify({ variables: variables.value, projectBase: projectBase.value, task: task.value, actors: actors.value, selectedActorId: selectedActorId.value }),
     thumbnailData: stageCanvas ? null : null,
   }
 }
@@ -521,11 +761,26 @@ function loadProjectData(project) {
   isPublished.value = Boolean(project.published)
   const workspaceData = JSON.parse(project.workspaceJson || JSON.stringify(starterWorkspace))
   const stageData = JSON.parse(project.stageJson || '{}')
-  workspace.clear()
-  Blockly.serialization.workspaces.load(workspaceData, workspace)
-  ensureDefaultInputs()
-  stage.value = { ...stage.value, ...stageData }
+  const legacyState = { ...stageData }
+  delete legacyState.variables
+  delete legacyState.projectBase
+  delete legacyState.task
+  delete legacyState.actors
+  delete legacyState.selectedActorId
+  actors.value = Array.isArray(stageData.actors) && stageData.actors.length
+    ? stageData.actors
+    : [{ id: 'sprite-1', state: { ...stage.value, ...legacyState }, workspaceJson: JSON.stringify(workspaceData) }]
+  selectedActorId.value = stageData.selectedActorId && actors.value.some((actor) => actor.id === stageData.selectedActorId)
+    ? stageData.selectedActorId
+    : actors.value[0].id
+  switchingActor = true
+  stage.value = { ...stage.value, ...actors.value.find((actor) => actor.id === selectedActorId.value).state }
+  switchingActor = false
+  loadActorWorkspace(getSelectedActor())
   variables.value = { ...variables.value, ...(stageData.variables || {}) }
+  projectBase.value = stageData.projectBase || createProjectBase('free')
+  projectTemplate.value = projectBase.value.kind || 'free'
+  task.value = { ...createTaskState(), ...(stageData.task || {}) }
 }
 
 async function openProject(id) {
@@ -539,16 +794,27 @@ async function openProject(id) {
 }
 
 function newProject() {
+  showTemplatePicker.value = true
+}
+
+function startNewProject(baseKind) {
   projectId.value = null
   isPublished.value = false
-  title.value = '我的积木作品'
+  projectTemplate.value = baseKind
+  projectBase.value = createProjectBase(baseKind)
+  title.value = baseKind === 'interactive' ? '我的互动任务' : baseKind === 'ai' ? '我的 AI 创作' : '我的积木作品'
   description.value = ''
   stage.value = { x: 0, y: 0, rotation: 0, message: '你好！拖一块积木来试试吧。', color: '#ee91bb', backdrop: '#ffffff', size: 100, visible: true, spriteName: '探索星', costume: 'star', sound: 'pop', volume: 70 }
   variables.value = { 分数: 0, 计时: 0 }
+  task.value = createTaskState()
   workspace.clear()
-  Blockly.serialization.workspaces.load(starterWorkspace, workspace)
+  Blockly.serialization.workspaces.load(baseKind === 'interactive' ? taskStarterWorkspace : starterWorkspace, workspace)
   ensureDefaultInputs()
+  resetActors()
+  actors.value[0].workspaceJson = JSON.stringify(Blockly.serialization.workspaces.save(workspace))
   clearSketch()
+  showTemplatePicker.value = false
+  ElMessage.success('项目基座已创建，开始动手搭建吧。')
 }
 
 function selectWorkbenchTab(tab) {
@@ -564,6 +830,14 @@ function setSpriteColor(color) {
 function setBackdrop(color) {
   stage.value.backdrop = color
   stage.value.message = '舞台背景更新好了！'
+}
+
+function selectTaskPreset(presetId) {
+  task.value = createTaskState(presetId)
+  stage.value.x = 0
+  stage.value.y = 0
+  stage.value.rotation = 0
+  stage.value.message = task.value.hint
 }
 
 function resetSprite() {
@@ -666,15 +940,21 @@ onBeforeUnmount(() => {
 
       <aside class="stage-panel" aria-label="互动舞台">
         <div class="stage-toolbar"><strong>互动舞台</strong><span class="live-dot">LIVE</span></div>
-        <div class="stage-scene" :style="{ background: stage.backdrop }" @pointermove="updateStagePointer">
+        <div class="stage-scene" :style="{ background: stage.backdrop }" @pointermove="handleStagePointerMove" @pointerup="endActorDrag" @pointercancel="endActorDrag">
           <div class="stage-stars" aria-hidden="true">+ * +</div>
           <div class="speech-bubble">{{ stage.message }}</div>
-          <div :class="['default-sprite', stage.costume]" :style="{ left: `calc(50% + ${stage.x}px)`, top: `calc(58% + ${stage.y}px)`, transform: `translate(-50%, -50%) rotate(${stage.rotation}deg)`, background: stage.color, width: `${Math.max(30, Math.min(130, 65 * stage.size / 100))}px`, height: `${Math.max(30, Math.min(130, 65 * stage.size / 100))}px`, visibility: stage.visible ? 'visible' : 'hidden' }">✦</div>
+          <div v-if="projectTemplate === 'interactive'" class="task-goal" :style="{ left: `calc(50% + ${task.target.x}px)`, top: `calc(58% + ${task.target.y}px)` }" title="任务目标">★</div>
+          <div v-if="projectTemplate === 'interactive'" class="task-status">{{ task.label }} · {{ task.moves }} / {{ task.limit }} 步</div>
+          <div v-for="actor in actors" :key="actor.id" :class="['default-sprite', actor.state.costume, { selected: actor.id === selectedActorId }]" :style="{ left: `calc(50% + ${actor.state.x}px)`, top: `calc(58% + ${actor.state.y}px)`, transform: `translate(-50%, -50%) rotate(${actor.state.rotation}deg)`, background: actor.state.color, width: `${Math.max(30, Math.min(130, 65 * actor.state.size / 100))}px`, height: `${Math.max(30, Math.min(130, 65 * actor.state.size / 100))}px`, visibility: actor.state.visible ? 'visible' : 'hidden' }" @pointerdown="startActorDrag($event, actor.id)" @click.stop="selectActor(actor.id)">✦</div>
         </div>
         <div class="runner-actions">
           <el-button class="run-button" :loading="running" @click="runProject"><el-icon><VideoPlay /></el-icon>开始运行</el-button>
           <el-button class="stop-button" :disabled="!running" @click="stopProject"><el-icon><VideoPause /></el-icon>停止</el-button>
         </div>
+        <section v-if="projectTemplate === 'interactive'" class="task-config" aria-label="任务规则">
+          <div><strong>任务规则</strong><span>到达目标星即可完成</span></div>
+          <button v-for="preset in taskPresets" :key="preset.id" :class="{ active: task.presetId === preset.id }" type="button" @click="selectTaskPreset(preset.id)"><span>{{ preset.label }}</span><small>{{ preset.limit }} 步</small></button>
+        </section>
         <section class="sprite-inspector" aria-label="角色属性">
           <div class="inspector-heading"><span><el-icon><Setting /></el-icon>角色与舞台</span><button type="button" title="重置角色" @click="resetSprite"><el-icon><RefreshRight /></el-icon></button></div>
           <label class="sprite-name">角色 <input v-model="stage.spriteName" maxlength="30" /></label>
@@ -682,7 +962,7 @@ onBeforeUnmount(() => {
           <div class="sprite-visibility"><span>显示</span><button :class="{ active: stage.visible }" type="button" @click="stage.visible = true"><el-icon><View /></el-icon></button><button :class="{ active: !stage.visible }" type="button" @click="stage.visible = false"><el-icon><Hide /></el-icon></button><span class="score-label">分数 {{ variables.分数 }}</span></div>
         </section>
         <section class="asset-tray" aria-label="角色与舞台资源">
-          <div class="asset-list"><strong>角色</strong><button class="sprite-tile active" type="button"><span :class="['mini-sprite', stage.costume]" :style="{ background: stage.color }">✦</span>{{ stage.spriteName || '探索星' }}</button></div>
+          <div class="asset-list"><strong>角色</strong><div class="sprite-cards"><button v-for="actor in actors" :key="actor.id" :class="['sprite-tile', { active: actor.id === selectedActorId }]" type="button" @click="selectActor(actor.id)"><span :class="['mini-sprite', actor.state.costume]" :style="{ background: actor.state.color }">✦</span>{{ actor.state.spriteName || '未命名角色' }}<i v-if="actors.length > 1" role="button" tabindex="0" title="删除角色" @click.stop="removeActor(actor.id)" @keydown.enter.stop.prevent="removeActor(actor.id)">×</i></button><button class="add-sprite" type="button" title="添加角色" @click="addActor"><el-icon><Plus /></el-icon></button></div></div>
           <div class="backdrop-list"><strong>舞台背景</strong><button v-for="item in backdropOptions" :key="item.id" :class="{ selected: stage.backdrop === item.color }" :style="{ background: item.color }" type="button" :title="item.label" @click="setBackdrop(item.color)"><el-icon v-if="stage.backdrop === item.color"><Picture /></el-icon></button></div>
         </section>
         <div class="sketch-panel">
@@ -693,6 +973,13 @@ onBeforeUnmount(() => {
         <label class="description-field">作品简介<textarea v-model="description" maxlength="500" placeholder="介绍一下你的创意吧"></textarea></label>
       </aside>
     </section>
+
+    <div v-if="showTemplatePicker" class="base-dialog-backdrop" role="presentation" @click.self="showTemplatePicker = false">
+      <section class="base-dialog" role="dialog" aria-modal="true" aria-label="选择项目基座">
+        <div class="base-dialog-heading"><div><span class="editor-sticker">PROJECT BASE</span><h2>选择你的项目基座</h2></div><button type="button" aria-label="关闭" @click="showTemplatePicker = false">×</button></div>
+        <div class="base-options"><article v-for="base in baseCatalog" :key="base.id" :class="['base-option', base.id]"><span>{{ base.tag }}</span><h3>{{ base.title }}</h3><p>{{ base.description }}</p><button type="button" @click="startNewProject(base.id)">用这个基座开始</button></article></div>
+      </section>
+    </div>
   </main>
 </template>
 
@@ -707,6 +994,10 @@ onBeforeUnmount(() => {
 .blockly-host :deep(.blocklyToolboxDiv) { border-right:1px solid rgb(61 53 100 / 22%); background:#fff; }.blockly-host :deep(.blocklyTreeRow) { height:43px; margin:3px 5px; border-radius:5px; }.blockly-host :deep(.blocklyTreeLabel) { color:var(--ink); font-family:'Microsoft YaHei',sans-serif; font-size:13px; font-weight:800; }.blockly-host :deep(.blocklyTreeSelected) { background:#ece9ff!important; box-shadow:2px 2px 0 rgb(61 53 100 / 15%); }.blockly-host :deep(.blocklyFlyoutBackground) { fill:#fff!important; fill-opacity:1!important; }.blockly-host :deep(.blocklyFlyout) { border-right:1px solid rgb(61 53 100 / 18%); }
 .asset-editor { display:block; min-height:610px; padding:clamp(28px,5vw,64px); background:linear-gradient(135deg,#fff 0%,#e8e4ff 58%,#d3f2f2 100%); }.asset-editor-heading h2 { margin:14px 0 0; }.asset-editor-heading p { margin:10px 0 0; }.costume-studio { display:grid; grid-template-columns:minmax(210px,.85fr) minmax(240px,1fr); gap:24px; width:min(700px,100%); margin-top:28px; }.costume-preview { display:grid; min-height:260px; place-items:center; border:2px solid var(--ink); border-radius:7px; box-shadow:4px 5px 0 rgb(61 53 100 / 28%); }.costume-sprite { display:grid; width:110px; height:110px; place-items:center; border:3px solid var(--ink); border-radius:47% 53% 44% 56%; box-shadow:6px 7px 0 rgb(61 53 100 / 23%); color:#fff; font-size:54px; }.costume-sprite.bot,.default-sprite.bot,.mini-sprite.bot { border-radius:15px; }.costume-sprite.dot,.default-sprite.dot,.mini-sprite.dot { border-radius:50%; }.costume-controls { display:grid; align-content:start; gap:12px; }.costume-controls strong { margin-top:2px; font-size:14px; }.costume-controls .color-swatches { margin:0 0 10px; }.costume-options,.sound-studio { display:flex; flex-wrap:wrap; gap:8px; }.costume-options button,.sound-studio button { display:inline-flex; align-items:center; gap:6px; padding:9px 11px; border:1px solid var(--ink); border-radius:5px; background:#fff; color:var(--ink); box-shadow:2px 3px 0 rgb(61 53 100 / 17%); font-weight:800; white-space:nowrap; cursor:pointer; }.costume-options button.selected,.sound-studio button.selected { background:#e8e4ff; box-shadow:3px 4px 0 rgb(61 53 100 / 28%); }.sound-studio { margin-top:30px; }.volume-control { display:flex; width:min(460px,100%); align-items:center; gap:12px; margin-top:25px; color:#625878; font-size:14px; font-weight:900; }.volume-control input { flex:1; accent-color:var(--purple); }.volume-control output { min-width:40px; color:var(--ink); }.asset-button { display:inline-flex; align-items:center; gap:6px; }
 .sprite-inspector { padding:11px; border:1px solid rgb(61 53 100 / 30%); border-radius:6px; background:#fff; }.inspector-heading,.sprite-visibility { display:flex; align-items:center; }.inspector-heading { justify-content:space-between; gap:10px; font-weight:900; }.inspector-heading span { display:flex; align-items:center; gap:5px; }.inspector-heading button { display:grid; width:28px; height:28px; place-items:center; border:1px solid var(--ink); border-radius:4px; background:var(--yellow); color:var(--ink); cursor:pointer; }.sprite-name { display:flex; align-items:center; gap:8px; margin-top:10px; color:#625878; font-size:12px; font-weight:800; }.sprite-name input { min-width:0; flex:1; padding:6px 7px; border:1px solid rgb(61 53 100 / 28%); border-radius:4px; color:var(--ink); font:inherit; }.sprite-fields { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; margin-top:8px; }.sprite-fields label { display:grid; gap:4px; color:#756a94; font-size:11px; font-weight:800; }.sprite-fields input { width:100%; min-width:0; padding:5px; border:1px solid rgb(61 53 100 / 28%); border-radius:4px; color:var(--ink); font:inherit; }.sprite-visibility { gap:5px; margin-top:10px; color:#756a94; font-size:11px; font-weight:800; }.sprite-visibility button { display:grid; width:27px; height:27px; place-items:center; border:1px solid rgb(61 53 100 / 32%); border-radius:4px; background:#fff; color:#756a94; cursor:pointer; }.sprite-visibility button.active { background:var(--mint); color:var(--ink); }.score-label { margin-left:auto; color:var(--purple); white-space:nowrap; }.asset-tray { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; padding:11px; border:1px solid rgb(61 53 100 / 30%); border-radius:6px; background:#f7f5ff; }.asset-list,.backdrop-list { display:flex; align-items:center; gap:7px; min-width:0; }.asset-list { flex-wrap:wrap; }.asset-list strong,.backdrop-list strong { width:100%; font-size:11px; }.sprite-tile { display:flex; max-width:132px; align-items:center; gap:7px; overflow:hidden; padding:6px; border:2px solid var(--purple); border-radius:5px; background:#e8e4ff; color:var(--ink); font-size:11px; font-weight:800; text-overflow:ellipsis; white-space:nowrap; cursor:pointer; }.mini-sprite { display:grid; width:26px; height:26px; flex:0 0 26px; place-items:center; border:1px solid var(--ink); border-radius:47% 53% 44% 56%; color:#fff; font-size:15px; }.backdrop-list { align-content:start; flex-wrap:wrap; max-width:150px; }.backdrop-list button { display:grid; width:27px; height:27px; place-items:center; border:1px solid rgb(61 53 100 / 33%); border-radius:4px; color:var(--ink); cursor:pointer; }.backdrop-list button.selected { outline:2px solid var(--purple); outline-offset:2px; }
+.blockly-host :deep(.blocklyFlyout) { transform:scale(.84); transform-origin:top left; }.blockly-host :deep(.blocklyFlyoutBackground) { width:350px!important; }.blockly-host :deep(.blocklyFlyout .blocklyText) { font-size:14px!important; font-weight:700; }.blockly-host :deep(.blocklyToolboxDiv) { min-width:118px; }.blockly-host :deep(.blocklyTreeRow) { height:35px; margin:2px 4px; }.blockly-host :deep(.blocklyTreeLabel) { font-size:12px; }
+.stage-scene { touch-action:none; }.default-sprite { cursor:grab; touch-action:none; }.default-sprite:active { cursor:grabbing; }.default-sprite.selected { outline:3px solid var(--yellow); outline-offset:4px; }.sprite-cards { display:flex; width:100%; align-items:center; gap:6px; overflow-x:auto; padding:2px 0; }.sprite-tile { position:relative; flex:0 0 auto; }.sprite-tile:not(.active) { border-color:rgb(61 53 100 / 28%); background:#fff; }.sprite-tile i { position:absolute; top:-7px; right:-7px; display:grid; width:17px; height:17px; place-items:center; border:1px solid var(--ink); border-radius:50%; background:var(--pink); color:#fff; font-size:14px; font-style:normal; line-height:1; }.add-sprite { display:grid; width:34px; height:34px; flex:0 0 34px; place-items:center; border:1px dashed var(--ink); border-radius:5px; background:#fff; color:var(--purple); cursor:pointer; }
+.task-goal { position:absolute; z-index:2; display:grid; width:39px; height:39px; place-items:center; border:2px solid var(--ink); border-radius:50%; background:var(--yellow); box-shadow:3px 4px 0 rgb(61 53 100 / 24%); color:#d77ba5; font-size:24px; transform:translate(-50%,-50%); }.task-status { position:absolute; z-index:3; bottom:11px; left:11px; padding:5px 8px; border:1px solid var(--ink); border-radius:4px; background:#fff; box-shadow:2px 3px 0 rgb(61 53 100 / 18%); font-size:11px; font-weight:900; }.task-config { display:grid; gap:7px; padding:10px; border:1px solid rgb(61 53 100 / 30%); border-radius:6px; background:#f7f5ff; }.task-config > div { display:flex; align-items:center; justify-content:space-between; gap:10px; }.task-config strong { font-size:13px; }.task-config > div span { color:#756a94; font-size:10px; font-weight:700; }.task-config button { display:flex; align-items:center; justify-content:space-between; padding:7px 8px; border:1px solid rgb(61 53 100 / 20%); border-radius:4px; background:#fff; color:#625878; font-size:11px; font-weight:800; cursor:pointer; }.task-config button.active { border-color:var(--purple); background:#e8e4ff; color:var(--ink); }.task-config button small { color:var(--purple); font-weight:900; }
+.base-dialog-backdrop { position:fixed; z-index:50; display:grid; inset:0; place-items:center; padding:18px; background:rgb(61 53 100 / 25%); }.base-dialog { width:min(860px,100%); padding:25px; border:2px solid var(--ink); border-radius:9px; background:#fbfbff; box-shadow:8px 9px 0 rgb(61 53 100 / 50%); }.base-dialog-heading { display:flex; align-items:start; justify-content:space-between; gap:16px; }.base-dialog-heading h2 { margin:11px 0 0; font-family:'Trebuchet MS','Microsoft YaHei',sans-serif; font-size:28px; font-weight:900; }.base-dialog-heading > button { display:grid; width:34px; height:34px; place-items:center; border:1px solid var(--ink); border-radius:5px; background:#fff; color:var(--ink); font-size:24px; cursor:pointer; }.base-options { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; margin-top:22px; }.base-option { display:flex; min-height:236px; flex-direction:column; padding:16px; border:2px solid var(--ink); border-radius:7px; background:#fff; box-shadow:4px 5px 0 rgb(61 53 100 / 20%); }.base-option.interactive { background:#e8e4ff; }.base-option.ai { background:#e4faf9; }.base-option > span { align-self:start; padding:4px 6px; border:1px solid var(--ink); border-radius:3px; background:var(--yellow); font-family:'Trebuchet MS',sans-serif; font-size:10px; font-weight:900; transform:rotate(-2deg); }.base-option h3 { margin:15px 0 0; font-family:'Trebuchet MS','Microsoft YaHei',sans-serif; font-size:19px; font-weight:900; }.base-option p { margin:10px 0 0; color:#625878; font-size:13px; line-height:1.65; }.base-option button { margin-top:auto; padding:9px 8px; border:1px solid #4e4473; border-radius:5px; background:var(--purple); box-shadow:2px 3px 0 rgb(61 53 100 / 25%); color:#fff; font-weight:900; white-space:nowrap; cursor:pointer; }
 @media (max-width:1120px) { .workshop-layout { grid-template-columns:1fr; }.stage-panel { grid-template-columns:minmax(0,1fr) minmax(230px,.8fr); align-items:start; border-top:1px solid rgb(61 53 100 / 30%); border-left:0; }.stage-toolbar { grid-column:1 / -1; }.stage-scene { height:260px; }.runner-actions,.sketch-panel,.description-field { grid-column:2; }.runner-actions { grid-row:2; }.sketch-panel { grid-row:3; }.description-field { grid-row:4; } }
 @media (max-width:720px) { .workshop-header { height:auto; min-height:65px; flex-wrap:wrap; padding:11px 14px; }.project-title { flex:1; }.project-title input { width:100%; font-size:17px; }.header-actions { width:100%; margin-left:0; }.header-actions :deep(.el-button) { flex:1; margin-left:0!important; padding:8px 7px; }.workshop-layout { display:flex; min-height:0; flex-direction:column; }.workspace-panel { min-height:544px; padding:10px; }.workbench-tabs { padding-left:0; }.workbench-tabs button { flex:1; min-width:0; padding:10px 7px; }.blockly-host,.asset-editor { min-height:480px; }.asset-editor { padding:30px; }.stage-panel { display:grid; grid-template-columns:1fr; }.stage-toolbar,.stage-scene,.runner-actions,.sketch-panel,.description-field { grid-column:auto; grid-row:auto; }.stage-scene { height:240px; } }
 @media (prefers-reduced-motion: reduce) { *,*::before,*::after { animation-duration:.01ms!important; animation-iteration-count:1!important; transition-duration:.01ms!important; } }
