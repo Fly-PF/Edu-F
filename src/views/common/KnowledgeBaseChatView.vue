@@ -4,6 +4,7 @@ import { MarkdownRenderer } from 'x-markdown-vue'
 import 'x-markdown-vue/style'
 import 'katex/dist/katex.min.css'
 import { ArrowDown, ArrowRight, Check, Close, CopyDocument, Edit, Plus } from '@element-plus/icons-vue'
+import KnowledgeBaseWelcome from './KnowledgeBaseWelcome.vue'
 
 const chatState = inject('knowledgeBaseChat')
 
@@ -17,7 +18,7 @@ const {
   composerValue,
   isLoading,
   activeConversation,
-  isNewConversation,
+  showWelcome,
   expandedSources,
   bubbleItems,
   promptCards,
@@ -73,6 +74,13 @@ function syncComposerText() {
   composerValue.value = senderRef.value?.getModelValue?.()?.text || ''
 }
 
+function focusComposer(event) {
+  if (event.target.closest('button, input, [role="button"], .pending-image')) {
+    return
+  }
+  senderRef.value?.focus?.('end')
+}
+
 onMounted(async () => {
   await nextTick()
   scrollBubbleListToBottom(false)
@@ -81,15 +89,7 @@ onMounted(async () => {
 
 <template>
   <div class="knowledge-base-chat">
-    <div v-if="isNewConversation" class="welcome-block">
-      <div class="welcome-logo">AI</div>
-      <h1>知识库问答</h1>
-      <div class="prompt-row">
-        <button v-for="prompt in promptCards" :key="prompt" type="button" @click="setComposerText(prompt)">
-          {{ prompt }}
-        </button>
-      </div>
-    </div>
+    <KnowledgeBaseWelcome v-if="showWelcome" :prompts="promptCards" @select-prompt="setComposerText" />
 
     <BubbleList
       ref="bubbleListRef"
@@ -209,9 +209,10 @@ onMounted(async () => {
                       >
                         <span class="reference-index">{{ index + 1 }}</span>
                         <el-tooltip v-if="source.description" :content="source.description" effect="light" placement="top-start">
-                          <span>{{ source.label }}</span>
+                          <span class="reference-label">{{ source.label }}</span>
                         </el-tooltip>
-                        <span v-else>{{ source.label }}</span>
+                        <span v-else class="reference-label">{{ source.label }}</span>
+                        <span v-if="source.contentSource" class="reference-source">{{ source.contentSource }}</span>
                       </button>
                     </div>
                   </div>
@@ -249,7 +250,7 @@ onMounted(async () => {
       </template>
     </BubbleList>
 
-    <div class="composer-wrap">
+    <div class="composer-wrap" @click="focusComposer">
       <input ref="imageInputRef" class="image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" multiple @change="handleImageChange" />
       <XSender
         :key="activeConversation"
@@ -298,63 +299,6 @@ onMounted(async () => {
   grid-template-rows: minmax(0, 1fr) auto;
   overflow: hidden;
   --kb-composer-space: 196px;
-}
-
-.welcome-block {
-  width: min(820px, 100%);
-  margin: 10px auto 24px;
-  text-align: center;
-}
-
-.welcome-logo {
-  display: grid;
-  width: 48px;
-  height: 48px;
-  margin: 0 auto 14px;
-  place-items: center;
-  border-radius: 14px;
-  background: #2f80ed;
-  color: #ffffff;
-  font-size: 20px;
-  font-weight: 800;
-}
-
-.welcome-block h1 {
-  margin: 0;
-  font-size: 28px;
-  line-height: 1.25;
-}
-
-.welcome-block p {
-  margin: 8px 0 0;
-  color: #6b7280;
-  font-size: 14px;
-}
-
-.prompt-row {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 10px;
-  margin-top: 18px;
-}
-
-.prompt-row button {
-  max-width: 260px;
-  min-height: 36px;
-  padding: 0 14px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #fbfbfc;
-  color: #4b5563;
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.prompt-row button:hover {
-  border-color: #bad6ff;
-  color: #1d4ed8;
 }
 
 .bubble-list {
@@ -786,10 +730,9 @@ onMounted(async () => {
 }
 
 .reference-item {
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr);
+  display: flex;
   gap: 7px;
-  align-items: start;
+  align-items: center;
   color: #0b63e5;
   font-size: 13px;
   line-height: 1.55;
@@ -811,6 +754,7 @@ onMounted(async () => {
 }
 
 .reference-index {
+  flex: 0 0 16px;
   display: grid;
   width: 16px;
   height: 16px;
@@ -821,6 +765,20 @@ onMounted(async () => {
   font-size: 11px;
   font-weight: 700;
   line-height: 1;
+}
+
+.reference-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reference-source {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: #6b7280;
+  white-space: nowrap;
 }
 
 .copy-button {

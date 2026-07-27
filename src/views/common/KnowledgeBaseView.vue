@@ -1,4 +1,4 @@
-<script setup>
+﻿<script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, provide, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -43,9 +43,10 @@ const apiBaseURL = 'http://localhost:8080'
 const composerValue = ref('')
 const isLoading = ref(false)
 const loadingConversationId = ref('')
+const chatMessageLoading = ref(false)
+const chatMessagesLoaded = ref(false)
 const shouldAutoScroll = ref(true)
 const activeConversation = ref('')
-const isNewConversation = ref(false)
 const expandedSources = ref({})
 const conversations = ref([])
 const conversationPage = reactive({
@@ -92,9 +93,9 @@ const bubbleItems = computed(() =>
 )
 
 const promptCards = [
-  '老师如何发布课程并关联班级？',
-  '学生进入课程学习页后能做什么？',
-  '知识库问答后续怎么接后端接口？',
+  '请解释【课程名称】中【具体知识点】的定义、原理和应用。',
+  '请总结【课程名称】的【具体知识点】部分的重点、难点和易错点。',
+  '关于【具体题目或场景】，请根据知识库给出解题思路和关键依据。',
 ]
 
 const currentConversationTitle = computed(() => {
@@ -174,6 +175,11 @@ const currentSessionKnowledgeBases = computed(() => {
 })
 const selectedKbIds = computed(() => new Set(selectedKnowledgeBases.value.map((item) => item.id)))
 const currentConversationLoading = computed(() => isLoading.value && loadingConversationId.value === activeConversation.value)
+const showWelcome = computed(() => {
+  const hasNoConversation = conversationLoaded.value && !conversationLoading.value && conversations.value.length === 0
+  const hasEmptyActiveConversation = Boolean(activeConversation.value) && chatMessagesLoaded.value && !chatMessageLoading.value && messages.value.length === 0
+  return hasNoConversation || hasEmptyActiveConversation
+})
 const typingQueue = ref([])
 const typingTimer = ref(null)
 const typingAssistantMessage = ref(null)
@@ -200,7 +206,7 @@ provide('knowledgeBaseChat', {
   composerValue,
   isLoading: currentConversationLoading,
   activeConversation,
-  isNewConversation,
+  showWelcome,
   expandedSources,
   conversations,
   messages,
@@ -486,6 +492,7 @@ function mapDocRefsToSources(docRefs = []) {
   return docRefs
     .map((item) => ({
       label: item.docName || item.contentSource || item.kbName,
+      contentSource: item.contentSource || '',
       kbName: item.kbName || '',
       fileUrl: item.fileUrl || '',
       docType: item.docType || getFileExtension(item.fileUrl || item.docName),
@@ -560,12 +567,18 @@ function normalizeChatMessage(item) {
 async function loadChatMessages(sessionId) {
   if (!sessionId) {
     messages.value = []
+    chatMessagesLoaded.value = false
     return
   }
 
+  chatMessageLoading.value = true
+  chatMessagesLoaded.value = false
+  messages.value = []
   const cachedMessages = conversationMessageCache.value[String(sessionId)]
   if (cachedMessages) {
     messages.value = cachedMessages
+    chatMessagesLoaded.value = true
+    chatMessageLoading.value = false
     return
   }
 
@@ -573,9 +586,12 @@ async function loadChatMessages(sessionId) {
     const result = await listChatMessages(sessionId)
     messages.value = (result || []).map(normalizeChatMessage)
     cacheConversationMessages(sessionId)
+    chatMessagesLoaded.value = true
   } catch (error) {
     messages.value = []
     ElMessage.error(error?.message || '历史消息加载失败')
+  } finally {
+    chatMessageLoading.value = false
   }
 }
 
@@ -764,7 +780,6 @@ async function handleCreateChatSession() {
 }
 
 async function handleSelectConversation(id) {
-  isNewConversation.value = false
   cacheConversationMessages()
   activeConversation.value = id
   senderRef.value?.setLoading?.(false)
@@ -818,10 +833,22 @@ function handleBackToKnowledgeBaseShow() {
 }
 
 async function setComposerText(text) {
+  composerValue.value = ''
+  const sender = senderRef.value?.getSender?.()
+  if (sender) {
+    await sender.reset({ clearHistory: true })
+  } else {
+    senderRef.value?.clear?.()
+    await nextTick()
+  }
   composerValue.value = text
-  await nextTick()
-  senderRef.value?.setText(text)
-  senderRef.value?.focus?.('end')
+  if (sender) {
+    await sender.setText(text)
+    sender.focus('end')
+  } else {
+    senderRef.value?.setText(text)
+    senderRef.value?.focus?.('end')
+  }
 }
 
 async function handleSend() {
@@ -849,7 +876,6 @@ async function handleSend() {
     docRefInfo: [],
     docRefCount: 0,
   })
-  isNewConversation.value = false
   composerValue.value = ''
   senderRef.value?.clear?.()
   isLoading.value = true
@@ -960,7 +986,6 @@ async function handleSend() {
 }
 
 function beginChatStreaming(requestConversationId, assistantMessage) {
-  isNewConversation.value = false
   composerValue.value = ''
   senderRef.value?.clear?.()
   isLoading.value = true
@@ -1292,10 +1317,10 @@ function createLocalConversation(id, title) {
   cacheConversationMessages()
   conversations.value.unshift({ id, title })
   conversationPage.total += 1
-  isNewConversation.value = true
   activeConversation.value = id
   senderRef.value?.setLoading?.(false)
   messages.value = []
+  chatMessagesLoaded.value = true
   cacheConversationMessages(id)
   expandedSources.value = {}
   composerValue.value = ''
