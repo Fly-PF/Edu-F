@@ -115,6 +115,15 @@ export function listChatMessages(sessionId) {
   return resolve(request.get('/api/rag/chat/message', { params: { session_id: sessionId } }))
 }
 
+export function deleteChatMessagePair(data) {
+  return resolve(request.post('/api/rag/chat/message/delete', null, {
+    params: {
+      session_id: data.sessionId,
+      message_id: data.messageId,
+    },
+  }))
+}
+
 export async function sendRagChatStream(data, onMessage) {
   const userStore = useUserStore()
   const formData = new FormData()

@@ -5,6 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import {
   createChatSession,
+  deleteChatMessagePair,
   deleteChatSession,
   getKnowledgeBaseCollectionStatus,
   listChatMessages,
@@ -190,6 +191,7 @@ const editingMessageRowId = ref('')
 const editingMessageMessageId = ref('')
 const editingMessageDraft = ref('')
 const editingMessageSubmitting = ref(false)
+const deletingMessageRowIds = ref(new Set())
 const latestUserMessageRowId = computed(() => {
   for (let index = messages.value.length - 1; index >= 0; index -= 1) {
     const message = messages.value[index]
@@ -226,6 +228,9 @@ provide('knowledgeBaseChat', {
   toggleSources,
   openReferencePreview,
   canRewriteMessage,
+  canDeleteMessage,
+  isDeletingMessage,
+  deleteMessagePair,
   isEditingMessage,
   editingMessageDraft,
   editingMessageSubmitting,
@@ -867,10 +872,15 @@ async function handleSend() {
   const requestConversationId = activeConversation.value
   shouldAutoScroll.value = true
   const chatImages = [...pendingChatImages.value]
-  const userMessage = pushMessage('user', question, { qaImgs: chatImages })
+  const temporaryMessageId = crypto.randomUUID()
+  const userMessage = pushMessage('user', question, {
+    messageId: `${temporaryMessageId}-user`,
+    qaImgs: chatImages,
+  })
   pendingChatImages.value = []
   const assistantMessage = pushMessage('assistant', '', {
     role: 'assistant',
+    messageId: `${temporaryMessageId}-assistant`,
     loading: true,
     sources: [],
     docRefInfo: [],
@@ -1116,6 +1126,77 @@ function canRewriteMessage(item) {
     && item.id === latestUserMessageRowId.value
     && !currentConversationLoading.value
     && !editingMessageSubmitting.value
+}
+
+function getPairedAssistantMessage(item) {
+  const userIndex = messages.value.findIndex((message) => message?.id === item?.id)
+  const assistantMessage = messages.value[userIndex + 1]
+  return assistantMessage?.role === 'assistant' ? assistantMessage : null
+}
+
+function getMessagePairId(item) {
+  const assistantMessage = getPairedAssistantMessage(item)
+  const messageId = [item?.messageId, assistantMessage?.messageId]
+    .find((value) => /-(user|assistant)$/.test(String(value || '')))
+  return String(messageId || '').replace(/-(user|assistant)$/, '-user')
+}
+
+function isDeletingMessage(item) {
+  return deletingMessageRowIds.value.has(item?.id)
+}
+
+function canDeleteMessage(item) {
+  const assistantMessage = getPairedAssistantMessage(item)
+  return item?.role === 'user'
+    && Boolean(assistantMessage)
+    && !assistantMessage.loading
+    && assistantMessage !== typingAssistantMessage.value
+    && Boolean(getMessagePairId(item))
+    && !isDeletingMessage(item)
+}
+
+async function deleteMessagePair(item) {
+  if (!canDeleteMessage(item)) {
+    return
+  }
+
+  const sessionId = activeConversation.value
+  const userRowId = item.id
+  const assistantRowId = getPairedAssistantMessage(item)?.id
+  const messageId = getMessagePairId(item)
+  if (!sessionId || !userRowId || !assistantRowId || !messageId) {
+    ElMessage.error('消息删除失败')
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm('删除后无法恢复，确定删除这组问答吗？', '删除消息', {
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      confirmButtonClass: 'el-button--danger',
+      type: 'warning',
+    })
+
+    deletingMessageRowIds.value = new Set([...deletingMessageRowIds.value, userRowId])
+    await deleteChatMessagePair({ sessionId: Number(sessionId), messageId })
+
+    const removeMessagePair = (list) => list.filter((message) => message.id !== userRowId && message.id !== assistantRowId)
+    if (activeConversation.value === sessionId) {
+      messages.value = removeMessagePair(messages.value)
+      cacheConversationMessages(sessionId, messages.value)
+    } else if (conversationMessageCache.value[String(sessionId)]) {
+      cacheConversationMessages(sessionId, removeMessagePair(conversationMessageCache.value[String(sessionId)]))
+    }
+    ElMessage.success('删除成功')
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') {
+      ElMessage.error(error?.message || '删除失败')
+    }
+  } finally {
+    const nextDeletingMessageRowIds = new Set(deletingMessageRowIds.value)
+    nextDeletingMessageRowIds.delete(userRowId)
+    deletingMessageRowIds.value = nextDeletingMessageRowIds
+  }
 }
 
 function isEditingMessage(item) {

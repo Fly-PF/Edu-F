@@ -3,7 +3,7 @@ import { inject, nextTick, onMounted, ref } from 'vue'
 import { MarkdownRenderer } from 'x-markdown-vue'
 import 'x-markdown-vue/style'
 import 'katex/dist/katex.min.css'
-import { ArrowDown, ArrowRight, Check, Close, CopyDocument, Edit, Plus } from '@element-plus/icons-vue'
+import { ArrowDown, ArrowRight, Check, Close, CopyDocument, Delete, Edit, Plus } from '@element-plus/icons-vue'
 import KnowledgeBaseWelcome from './KnowledgeBaseWelcome.vue'
 
 const chatState = inject('knowledgeBaseChat')
@@ -31,6 +31,9 @@ const {
   toggleSources,
   openReferencePreview,
   canRewriteMessage,
+  canDeleteMessage,
+  isDeletingMessage,
+  deleteMessagePair,
   isEditingMessage,
   editingMessageDraft,
   editingMessageSubmitting,
@@ -230,6 +233,17 @@ onMounted(async () => {
                   >
                     <el-icon><Edit /></el-icon>
                   </button>
+                  <el-tooltip v-if="item.role === 'user' && canDeleteMessage(item)" content="删除这组问答" placement="top">
+                    <button
+                      class="delete-button"
+                      type="button"
+                      :disabled="isDeletingMessage(item)"
+                      aria-label="删除这组问答"
+                      @click.stop="deleteMessagePair(item)"
+                    >
+                      <el-icon><Delete /></el-icon>
+                    </button>
+                  </el-tooltip>
                 </div>
               </div>
             </template>
@@ -477,7 +491,8 @@ onMounted(async () => {
 }
 
 .message-edit-action,
-.edit-button {
+.edit-button,
+.delete-button {
   display: grid;
   width: 26px;
   height: 26px;
@@ -765,6 +780,19 @@ onMounted(async () => {
   font-size: 11px;
   font-weight: 700;
   line-height: 1;
+}
+
+.delete-button:hover,
+.delete-button:focus-visible {
+  border-color: #fecaca;
+  background: #fff7f7;
+  color: #dc2626;
+  outline: none;
+}
+
+.delete-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .reference-label {
