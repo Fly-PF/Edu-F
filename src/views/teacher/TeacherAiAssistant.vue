@@ -63,7 +63,7 @@ const lessonRules = {
   grade: [{ required: true, message: '请选择或输入学段', trigger: 'change' }],
   durationMinutes: [
     { required: true, message: '请输入课时分钟数', trigger: 'change' },
-    { type: 'number', min: 20, max: 240, message: '课时应为20至240分钟', trigger: 'change' },
+    { type: 'number', min: 20, max: 240, message: '课时应为20到240分钟', trigger: 'change' },
   ],
   objectives: [
     { required: true, message: '请输入教学目标', trigger: 'blur' },
@@ -129,6 +129,182 @@ const scorePercent = computed(() => {
   const total = Number(gradingResult.value?.totalScore || 0)
   return Math.max(0, Math.min(100, Math.round((total / Number(gradingResultMaxScore.value || 1)) * 100)))
 })
+
+function normalizeList(value) {
+  return Array.isArray(value) ? value.filter((item) => item !== null && item !== undefined && item !== '') : []
+}
+
+function formatScore(value) {
+  const numericValue = Number(value)
+  if (!Number.isFinite(numericValue)) return '--'
+  return Number.isInteger(numericValue) ? String(numericValue) : numericValue.toFixed(1).replace(/\.0$/, '')
+}
+
+const lessonModuleCards = computed(() => [
+  {
+    key: 'objectives',
+    title: '教学目标',
+    description: '围绕知识、能力与素养形成可执行目标',
+    items: normalizeList(lessonResult.value?.objectives),
+  },
+  {
+    key: 'keyPoints',
+    title: '教学重点',
+    description: '突出本节课必须掌握的核心内容',
+    items: normalizeList(lessonResult.value?.keyPoints),
+  },
+  {
+    key: 'difficultPoints',
+    title: '教学难点',
+    description: '提前标出学生容易卡住的环节',
+    items: normalizeList(lessonResult.value?.difficultPoints),
+  },
+  {
+    key: 'preparations',
+    title: '教学准备',
+    description: '课前资源、素材与设备准备提示',
+    items: normalizeList(lessonResult.value?.preparations),
+  },
+  {
+    key: 'notes',
+    title: '教学提醒',
+    description: '帮助教师快速把握课堂节奏',
+    items: normalizeList(lessonResult.value?.notes),
+  },
+])
+
+const lessonTeachingSteps = computed(() => normalizeList(lessonResult.value?.teachingSteps))
+const lessonActivities = computed(() => normalizeList(lessonResult.value?.activities))
+const lessonExercises = computed(() => normalizeList(lessonResult.value?.exercises))
+const lessonRubric = computed(() => normalizeList(lessonResult.value?.rubric))
+const lessonCoreCards = computed(() =>
+  lessonModuleCards.value.filter((card) => ['objectives', 'keyPoints', 'difficultPoints'].includes(card.key)),
+)
+const lessonSupplementCards = computed(() =>
+  lessonModuleCards.value.filter((card) => !['objectives', 'keyPoints', 'difficultPoints'].includes(card.key)),
+)
+const gradingDimensionScores = computed(() => normalizeList(gradingResult.value?.dimensionScores))
+const gradingStrengths = computed(() => normalizeList(gradingResult.value?.strengths))
+const gradingDeductions = computed(() => normalizeList(gradingResult.value?.deductions))
+const gradingSuggestions = computed(() => normalizeList(gradingResult.value?.suggestions))
+const lessonResultReady = computed(() => Boolean(lessonResult.value))
+const gradingResultReady = computed(() => Boolean(gradingResult.value))
+const lessonStatusText = computed(() =>
+  lessonLoading.value ? 'AI正在生成教案' : lessonResultReady.value ? '教案已完成' : '等待AI生成教学内容',
+)
+const gradingStatusText = computed(() =>
+  gradingLoading.value ? 'AI正在分析答案' : gradingResultReady.value ? '批改报告已完成' : '等待AI生成批改报告',
+)
+const gradingReferenceAnswer = computed(() => gradingResult.value?.referenceAnswer || gradingForm.referenceAnswer)
+const activeHeroMetrics = computed(() =>
+  activeTab.value === 'lesson'
+    ? [
+        {
+          label: '核心产出',
+          value: '结构化教案',
+          note: '目标、重点、难点与准备建议',
+        },
+        {
+          label: '教学编排',
+          value: '流程与活动',
+          note: '课堂阶段、时长与设计意图',
+        },
+        {
+          label: '评价补充',
+          value: '练习与 Rubric',
+          note: '兼顾课堂练习与评分建议',
+        },
+      ]
+    : [
+        {
+          label: '核心产出',
+          value: '批改反馈报告',
+          note: '总评分、分项评分与改进建议',
+        },
+        {
+          label: '评价依据',
+          value: 'Rubric 对齐',
+          note: '评分更透明，便于教师复核',
+        },
+        {
+          label: '讲评支持',
+          value: '参考改写答案',
+          note: '适合讲评反馈与二次修订',
+        },
+      ],
+)
+const activeHeroOverview = computed(() =>
+  activeTab.value === 'lesson'
+    ? {
+        eyebrow: '智能备课引擎',
+        title: '教学设计工作流',
+        description: '聚焦课程背景、目标与课堂流程，输出更适合教师二次调整的教案方案。',
+        badge: '备课模式',
+      }
+    : {
+        eyebrow: '智能批改引擎',
+        title: '教学评价工作流',
+        description: '围绕题目、Rubric 与学生答案生成更完整的评分报告与反馈建议。',
+        badge: '批改模式',
+      },
+)
+const activeHeroSideCards = computed(() =>
+  activeTab.value === 'lesson'
+    ? [
+        {
+          label: '本次输出',
+          value: '卡片化教案报告',
+          note: '标题、目标、流程、练习与 Rubric 一体呈现',
+        },
+        {
+          label: '适用环节',
+          value: '课前设计与课堂准备',
+          note: '帮助教师更快完成成稿、讲授与讲评前整理',
+        },
+      ]
+    : [
+        {
+          label: '本次输出',
+          value: '评分卡与反馈报告',
+          note: '分项评分、扣分原因与修改建议同步生成',
+        },
+        {
+          label: '适用环节',
+          value: '作业批改与讲评反馈',
+          note: '更适合日常批改复核与课堂讲评场景',
+        },
+      ],
+)
+const lessonLoadingStages = [
+  {
+    title: '解析教学背景',
+    description: '识别课题、学段、目标与难度偏好',
+  },
+  {
+    title: '编排课堂结构',
+    description: '生成教学流程、活动设计与环节时长',
+  },
+  {
+    title: '补全评价内容',
+    description: '输出练习题与 Rubric 评分建议',
+  },
+]
+const gradingLoadingStages = [
+  {
+    title: '理解题目要求',
+    description: '对齐题干、题型与参考答案要点',
+  },
+  {
+    title: '核对评分标准',
+    description: '依据 Rubric 拆解分项得分与失分点',
+  },
+  {
+    title: '生成反馈报告',
+    description: '整理修改建议与参考改写答案',
+  },
+]
+const lessonEmptyHints = ['将输出模块化教案', '包含流程、活动、练习与 Rubric']
+const gradingEmptyHints = ['将输出评分反馈报告', '包含扣分原因、建议与改写答案']
 
 async function loadCourses() {
   courseLoading.value = true
@@ -263,15 +439,57 @@ async function copyResult(result, successMessage) {
 
 onMounted(loadCourses)
 </script>
-
 <template>
   <main class="ai-assistant-page">
-    <header class="page-header">
-      <div class="page-title">
-        <span class="title-icon"><MagicStick /></span>
-        <div>
+    <header class="workspace-hero">
+      <div class="workspace-hero__main">
+        <div class="hero-icon-shell">
+          <MagicStick />
+        </div>
+        <div class="hero-copy">
+          <div class="hero-meta-row">
+            <span class="hero-kicker">TEACHER AI WORKSPACE</span>
+            <span class="hero-state-pill">
+              <span class="status-dot"></span>
+              {{ lessonLoading || gradingLoading ? 'AI 正在处理中' : '工作台已就绪' }}
+            </span>
+          </div>
           <h1>AI备课与批改</h1>
-          <p>教师工作台</p>
+          <p>面向教师的 AI 工作台，整合智能备课、智能批改与教学评价辅助，让课程设计、评分反馈与课堂准备更高效。</p>
+          <div class="hero-chip-row" aria-label="AI能力标签">
+            <span class="hero-chip"><MagicStick /> 智能生成</span>
+            <span class="hero-chip"><EditPen /> Rubric评分</span>
+            <span class="hero-chip"><Document /> 教学辅助</span>
+          </div>
+          <div class="hero-metric-strip">
+            <article v-for="item in activeHeroMetrics" :key="item.label" class="hero-metric-card">
+              <span>{{ item.label }}</span>
+              <strong>{{ item.value }}</strong>
+              <small>{{ item.note }}</small>
+            </article>
+          </div>
+        </div>
+      </div>
+
+      <div class="workspace-hero__side">
+        <div class="hero-side-card hero-side-card--primary">
+          <span class="hero-side-card__eyebrow">{{ activeHeroOverview.eyebrow }}</span>
+          <div class="hero-side-card__title-row">
+            <strong>{{ activeHeroOverview.title }}</strong>
+            <em>{{ activeHeroOverview.badge }}</em>
+          </div>
+          <p>{{ activeHeroOverview.description }}</p>
+          <div class="hero-side-card__status">
+            <span>当前状态</span>
+            <strong>{{ activeTab === 'lesson' ? lessonStatusText : gradingStatusText }}</strong>
+          </div>
+        </div>
+        <div class="hero-side-grid">
+          <div v-for="item in activeHeroSideCards" :key="item.label" class="hero-mini-card">
+            <span>{{ item.label }}</span>
+            <strong>{{ item.value }}</strong>
+            <small>{{ item.note }}</small>
+          </div>
         </div>
       </div>
     </header>
@@ -279,15 +497,24 @@ onMounted(loadCourses)
     <el-tabs v-model="activeTab" class="assistant-tabs">
       <el-tab-pane name="lesson">
         <template #label>
-          <span class="tab-label"><Document />智能备课</span>
+          <span class="tab-switch-card">
+            <span class="tab-switch-card__icon"><Document /></span>
+            <span class="tab-switch-card__copy">
+              <strong>智能备课</strong>
+              <small>教学目标 · 流程 · 练习题</small>
+            </span>
+          </span>
         </template>
 
         <div class="assistant-workspace">
-          <section class="input-panel">
-            <div class="panel-heading">
-              <div>
+          <section class="workspace-card input-panel">
+            <div class="panel-heading panel-heading--stack">
+              <div class="panel-heading__main">
                 <span class="panel-index">01</span>
-                <h2>备课参数</h2>
+                <div>
+                  <h2>备课参数配置</h2>
+                  <p>围绕课程主题、目标与课堂要求，生成更清晰的教案结构。</p>
+                </div>
               </div>
               <el-tooltip content="清空表单" placement="bottom">
                 <el-button circle aria-label="清空备课表单" :disabled="lessonLoading" @click="clearLessonForm">
@@ -303,90 +530,119 @@ onMounted(loadCourses)
               label-position="top"
               class="assistant-form lesson-form"
             >
-              <el-form-item label="关联课程" prop="courseId">
-                <el-select
-                  v-model="lessonForm.courseId"
-                  clearable
-                  filterable
-                  :loading="courseLoading"
-                  placeholder="可选"
-                  class="full-width"
-                >
-                  <el-option
-                    v-for="course in courseOptions"
-                    :key="course.value"
-                    :label="course.label"
-                    :value="course.value"
-                  />
-                </el-select>
-              </el-form-item>
+              <section class="form-block form-span-full">
+                <div class="form-block__header">
+                  <span class="block-step">01</span>
+                  <div>
+                    <h3>基础信息</h3>
+                    <p>先设置课程、课题与授课范围，帮助 AI 快速理解教学背景。</p>
+                  </div>
+                </div>
+                <div class="form-block__grid">
+                  <el-form-item label="关联课程" prop="courseId">
+                    <el-select
+                      v-model="lessonForm.courseId"
+                      clearable
+                      filterable
+                      :loading="courseLoading"
+                      placeholder="可选：从已有课程中带入背景"
+                      class="full-width"
+                    >
+                      <el-option
+                        v-for="course in courseOptions"
+                        :key="course.value"
+                        :label="course.label"
+                        :value="course.value"
+                      />
+                    </el-select>
+                  </el-form-item>
 
-              <el-form-item label="课题名称" prop="topic">
-                <el-input
-                  v-model="lessonForm.topic"
-                  maxlength="200"
-                  placeholder="例如：线性回归的基本原理"
-                />
-              </el-form-item>
+                  <el-form-item label="课题名称" prop="topic">
+                    <el-input v-model="lessonForm.topic" maxlength="200" placeholder="例如：线性回归的基本原理" />
+                  </el-form-item>
 
-              <el-form-item label="学段" prop="grade">
-                <el-select
-                  v-model="lessonForm.grade"
-                  filterable
-                  allow-create
-                  default-first-option
-                  class="full-width"
-                  placeholder="选择或输入学段"
-                >
-                  <el-option label="小学" value="小学" />
-                  <el-option label="初中" value="初中" />
-                  <el-option label="高中" value="高中" />
-                  <el-option label="大学" value="大学" />
-                  <el-option label="研一" value="研一" />
-                  <el-option label="研二" value="研二" />
-                </el-select>
-              </el-form-item>
+                  <el-form-item label="学段" prop="grade">
+                    <el-select
+                      v-model="lessonForm.grade"
+                      filterable
+                      allow-create
+                      default-first-option
+                      class="full-width"
+                      placeholder="选择或输入学段"
+                    >
+                      <el-option label="小学" value="小学" />
+                      <el-option label="初中" value="初中" />
+                      <el-option label="高中" value="高中" />
+                      <el-option label="大学" value="大学" />
+                      <el-option label="研一" value="研一" />
+                      <el-option label="研二" value="研二" />
+                    </el-select>
+                  </el-form-item>
 
-              <el-form-item label="课时分钟数" prop="durationMinutes">
-                <el-input-number
-                  v-model="lessonForm.durationMinutes"
-                  :min="20"
-                  :max="240"
-                  :step="5"
-                  controls-position="right"
-                  class="full-width"
-                />
-              </el-form-item>
+                  <el-form-item label="课时分钟数" prop="durationMinutes">
+                    <el-input-number
+                      v-model="lessonForm.durationMinutes"
+                      :min="20"
+                      :max="240"
+                      :step="5"
+                      controls-position="right"
+                      class="full-width"
+                    />
+                  </el-form-item>
+                </div>
+              </section>
 
-              <el-form-item label="教学目标" prop="objectives" class="form-span-full">
-                <el-input
-                  v-model="lessonForm.objectives"
-                  type="textarea"
-                  :rows="4"
-                  maxlength="2000"
-                  show-word-limit
-                  placeholder="每行填写一个教学目标"
-                />
-              </el-form-item>
+              <section class="form-block form-span-full">
+                <div class="form-block__header">
+                  <span class="block-step">02</span>
+                  <div>
+                    <h3>教学设计</h3>
+                    <p>补充教学目标与难度偏好，帮助 AI 生成更适配课堂节奏的方案。</p>
+                  </div>
+                </div>
+                <div class="form-block__grid">
+                  <el-form-item label="教学目标" prop="objectives" class="form-span-full">
+                    <el-input
+                      v-model="lessonForm.objectives"
+                      type="textarea"
+                      :rows="4"
+                      maxlength="2000"
+                      show-word-limit
+                      placeholder="建议按条目输入，例如：理解概念、掌握方法、能够迁移应用"
+                    />
+                  </el-form-item>
 
-              <el-form-item label="难度" prop="difficulty" class="form-span-full">
-                <el-segmented
-                  v-model="lessonForm.difficulty"
-                  :options="['基础', '进阶', '高阶']"
-                  class="difficulty-control"
-                />
-              </el-form-item>
+                  <el-form-item label="难度" prop="difficulty" class="form-span-full">
+                    <el-segmented
+                      v-model="lessonForm.difficulty"
+                      :options="['基础', '进阶', '高阶']"
+                      class="difficulty-control"
+                    />
+                  </el-form-item>
+                </div>
+              </section>
 
-              <el-form-item label="补充要求" prop="requirements" class="form-span-full">
-                <el-input
-                  v-model="lessonForm.requirements"
-                  type="textarea"
-                  :rows="3"
-                  maxlength="2000"
-                  show-word-limit
-                  placeholder="可选"
-                />
-              </el-form-item>
+              <section class="form-block form-span-full">
+                <div class="form-block__header">
+                  <span class="block-step">03</span>
+                  <div>
+                    <h3>补充要求</h3>
+                    <p>可补充课堂形式、资源限制或希望强调的教学风格。</p>
+                  </div>
+                </div>
+                <div class="form-block__grid">
+                  <el-form-item label="补充要求" prop="requirements" class="form-span-full">
+                    <el-input
+                      v-model="lessonForm.requirements"
+                      type="textarea"
+                      :rows="3"
+                      maxlength="2000"
+                      show-word-limit
+                      placeholder="例如：希望加入讨论活动、实验案例或板书设计提醒"
+                    />
+                  </el-form-item>
+                </div>
+              </section>
 
               <div class="form-actions form-span-full">
                 <el-button :disabled="lessonLoading" @click="clearLessonForm">
@@ -401,104 +657,253 @@ onMounted(loadCourses)
             </el-form>
           </section>
 
-          <section v-loading="lessonLoading" class="result-panel" aria-live="polite">
+          <section class="workspace-card result-panel" aria-live="polite">
             <div class="panel-heading result-heading">
-              <div>
+              <div class="panel-heading__main">
                 <span class="panel-index">02</span>
-                <h2>教案结果</h2>
+                <div>
+                  <h2>备课结果</h2>
+                  <p>以模块化卡片展示教案结构，便于快速浏览与二次调整。</p>
+                </div>
+              </div>
+              <div class="generation-status" :class="{ 'is-loading': lessonLoading, 'is-ready': lessonResultReady }">
+                <span class="status-dot"></span>
+                {{ lessonStatusText }}
               </div>
               <el-button
                 :icon="CopyDocument"
-                :disabled="!lessonResult || lessonLoading"
+                :disabled="!lessonResultReady || lessonLoading"
                 @click="copyResult(lessonResult, '教案结果已复制')"
               >
                 复制结果
               </el-button>
             </div>
 
-            <el-empty v-if="!lessonResult && !lessonLoading" description="暂无教案结果" :image-size="88" />
-
-            <div v-else-if="lessonResult" class="structured-result">
-              <div class="result-title-band">
-                <span>教案标题</span>
-                <h2>{{ lessonResult.title }}</h2>
+            <div v-if="lessonLoading && !lessonResultReady" class="result-state result-state--loading">
+              <div class="loading-badge">AI 深度生成中</div>
+              <div class="state-orb state-orb--loading">
+                <span></span>
+                <span></span>
+                <span></span>
               </div>
-
-              <div class="overview-grid">
-                <section class="result-section">
-                  <h3>教学目标</h3>
-                  <ul><li v-for="item in lessonResult.objectives" :key="item">{{ item }}</li></ul>
-                </section>
-                <section class="result-section">
-                  <h3>教学重点</h3>
-                  <ul><li v-for="item in lessonResult.keyPoints" :key="item">{{ item }}</li></ul>
-                </section>
-                <section class="result-section">
-                  <h3>教学难点</h3>
-                  <ul><li v-for="item in lessonResult.difficultPoints" :key="item">{{ item }}</li></ul>
-                </section>
-                <section class="result-section">
-                  <h3>教学准备</h3>
-                  <ul><li v-for="item in lessonResult.preparations" :key="item">{{ item }}</li></ul>
-                </section>
+              <h3>AI正在组织教案结构与课堂节奏</h3>
+              <p>系统会先理解教学背景，再生成流程、活动、练习与评价内容，输出更完整的教学方案。</p>
+              <div class="loading-progress-bar" aria-hidden="true">
+                <span></span>
               </div>
+              <div class="loading-step-list loading-step-list--cards">
+                <article
+                  v-for="(item, index) in lessonLoadingStages"
+                  :key="item.title"
+                  class="loading-step-card"
+                  :class="{ 'is-active': index === 0 }"
+                >
+                  <i>{{ String(index + 1).padStart(2, '0') }}</i>
+                  <div>
+                    <strong>{{ item.title }}</strong>
+                    <p>{{ item.description }}</p>
+                  </div>
+                </article>
+              </div>
+            </div>
 
-              <section class="result-section wide-section">
-                <h3>教学流程</h3>
-                <el-table :data="lessonResult.teachingSteps" border class="result-table">
-                  <el-table-column prop="stage" label="阶段" width="96" />
-                  <el-table-column prop="durationMinutes" label="时长" width="72">
-                    <template #default="{ row }">{{ row.durationMinutes }} 分钟</template>
-                  </el-table-column>
-                  <el-table-column prop="teacherActivity" label="教师活动" min-width="210" />
-                  <el-table-column prop="studentActivity" label="学生活动" min-width="210" />
-                  <el-table-column prop="purpose" label="设计意图" min-width="170" />
-                </el-table>
+            <div v-else-if="lessonResultReady" class="structured-result lesson-result">
+              <section class="result-hero-card lesson-result-hero">
+                <div class="result-hero-card__header">
+                  <div class="result-hero-card__copy">
+                    <span class="result-hero-card__label">教案标题</span>
+                    <h2>{{ lessonResult.title }}</h2>
+                    <p>产品化教案摘要，便于教师快速浏览、二次编辑与课堂使用。</p>
+                  </div>
+                  <div class="result-hero-card__status">
+                    <span>输出状态</span>
+                    <strong>{{ lessonStatusText }}</strong>
+                    <small>结构化教案已生成</small>
+                  </div>
+                </div>
+                <div class="result-meta-tags result-meta-tags--dense">
+                  <span>{{ lessonForm.grade }}</span>
+                  <span>{{ lessonForm.durationMinutes }} 分钟</span>
+                  <span>{{ lessonForm.difficulty }}</span>
+                  <span>模块 {{ lessonModuleCards.length }} 项</span>
+                </div>
               </section>
 
-              <section class="result-section wide-section">
-                <h3>课堂活动</h3>
-                <ol class="activity-list">
-                  <li v-for="(item, index) in lessonResult.activities" :key="item">
-                    <span>{{ String(index + 1).padStart(2, '0') }}</span>
-                    <p>{{ item }}</p>
-                  </li>
-                </ol>
-              </section>
-
-              <section class="result-section wide-section">
-                <h3>练习题</h3>
-                <div class="exercise-list">
-                  <article v-for="(exercise, index) in lessonResult.exercises" :key="`${exercise.question}-${index}`">
-                    <div class="exercise-heading">
-                      <strong>练习 {{ index + 1 }}</strong>
+              <section class="result-surface">
+                <div class="surface-head">
+                  <div>
+                    <h3>教学核心模块</h3>
+                    <p>优先呈现目标、重点与难点，支持教师快速扫读教案骨架。</p>
+                  </div>
+                </div>
+                <div class="lesson-module-grid">
+                  <article
+                    v-for="(card, index) in lessonCoreCards"
+                    :key="card.key"
+                    class="lesson-module-card lesson-module-card--featured"
+                  >
+                    <div class="lesson-module-card__head">
+                      <span class="lesson-module-card__index">{{ String(index + 1).padStart(2, '0') }}</span>
                       <div>
-                        <el-tag size="small" effect="plain">{{ exercise.type }}</el-tag>
-                        <el-tag size="small" type="warning" effect="plain">{{ exercise.difficulty }}</el-tag>
+                        <h3>{{ card.title }}</h3>
+                        <p>{{ card.description }}</p>
                       </div>
                     </div>
-                    <p class="exercise-question">{{ exercise.question }}</p>
-                    <dl>
-                      <dt>参考答案</dt>
-                      <dd>{{ exercise.referenceAnswer }}</dd>
-                    </dl>
+                    <ul v-if="card.items.length" class="bullet-list">
+                      <li v-for="(item, itemIndex) in card.items" :key="`${card.key}-${itemIndex}`">{{ item }}</li>
+                    </ul>
+                    <p v-else class="card-empty-text">当前结果中暂无该模块内容。</p>
                   </article>
                 </div>
               </section>
 
-              <section class="result-section wide-section">
-                <h3>评分 Rubric</h3>
-                <el-table :data="lessonResult.rubric" border class="result-table">
-                  <el-table-column prop="criterion" label="评分维度" width="130" />
-                  <el-table-column prop="description" label="评分说明" min-width="280" />
-                  <el-table-column prop="maxScore" label="满分" width="80" />
-                </el-table>
+              <section class="result-surface">
+                <div class="surface-head">
+                  <div>
+                    <h3>补充模块</h3>
+                    <p>补足教学准备与教学提醒，形成完整教案闭环。</p>
+                  </div>
+                </div>
+                <div class="lesson-module-grid lesson-module-grid--secondary">
+                  <article
+                    v-for="(card, index) in lessonSupplementCards"
+                    :key="card.key"
+                    class="lesson-module-card"
+                  >
+                    <div class="lesson-module-card__head">
+                      <span class="lesson-module-card__index lesson-module-card__index--soft">
+                        {{ String(lessonCoreCards.length + index + 1).padStart(2, '0') }}
+                      </span>
+                      <div>
+                        <h3>{{ card.title }}</h3>
+                        <p>{{ card.description }}</p>
+                      </div>
+                    </div>
+                    <ul v-if="card.items.length" class="bullet-list">
+                      <li v-for="(item, itemIndex) in card.items" :key="`${card.key}-${itemIndex}`">{{ item }}</li>
+                    </ul>
+                    <p v-else class="card-empty-text">当前结果中暂无该模块内容。</p>
+                  </article>
+                </div>
               </section>
 
-              <section class="result-section wide-section notes-section">
-                <h3>教学注意事项</h3>
-                <ul><li v-for="item in lessonResult.notes" :key="item">{{ item }}</li></ul>
+              <section class="result-surface timeline-surface">
+                <div class="surface-head">
+                  <div>
+                    <h3>教学时间轴</h3>
+                    <p>按课堂推进顺序组织阶段、时间、活动与教学目的。</p>
+                  </div>
+                </div>
+                <div v-if="lessonTeachingSteps.length" class="timeline-list">
+                  <article
+                    v-for="(step, index) in lessonTeachingSteps"
+                    :key="`${step.stage}-${index}`"
+                    class="timeline-item"
+                  >
+                    <div class="timeline-marker">
+                      <span class="timeline-marker__index">{{ String(index + 1).padStart(2, '0') }}</span>
+                      <span
+                        v-if="index !== lessonTeachingSteps.length - 1"
+                        class="timeline-marker__line"
+                        aria-hidden="true"
+                      ></span>
+                    </div>
+                    <div class="timeline-card">
+                      <div class="timeline-card__top">
+                        <div>
+                          <span class="timeline-card__eyebrow">阶段 {{ index + 1 }}</span>
+                          <h3>{{ step.stage }}</h3>
+                        </div>
+                        <span class="timeline-time-pill">{{ formatScore(step.durationMinutes) }} 分钟</span>
+                      </div>
+                      <div class="timeline-card__grid">
+                        <article class="timeline-card__panel">
+                          <span>教师活动</span>
+                          <p>{{ step.teacherActivity }}</p>
+                        </article>
+                        <article class="timeline-card__panel">
+                          <span>学生活动</span>
+                          <p>{{ step.studentActivity }}</p>
+                        </article>
+                        <article class="timeline-card__panel timeline-card__panel--wide">
+                          <span>教学目的</span>
+                          <p>{{ step.purpose }}</p>
+                        </article>
+                      </div>
+                    </div>
+                  </article>
+                </div>
+                <p v-else class="card-empty-text">暂无教学流程。</p>
               </section>
+
+              <section class="result-surface">
+                <div class="surface-head">
+                  <div>
+                    <h3>题目卡片</h3>
+                    <p>将练习题整理为可直接用于课堂练习的卡片化内容。</p>
+                  </div>
+                </div>
+                <div v-if="lessonExercises.length" class="exercise-card-grid">
+                  <article
+                    v-for="(exercise, index) in lessonExercises"
+                    :key="`${exercise.question}-${index}`"
+                    class="exercise-card exercise-card--question"
+                  >
+                    <div class="exercise-card__head">
+                      <div class="exercise-card__title">
+                        <span class="exercise-card__index">题目 {{ index + 1 }}</span>
+                        <p class="exercise-card__question">{{ exercise.question }}</p>
+                      </div>
+                      <div class="inline-tags exercise-card__tags">
+                        <el-tag v-if="exercise.type" size="small" effect="plain">{{ exercise.type }}</el-tag>
+                        <el-tag v-if="exercise.difficulty" size="small" type="warning" effect="plain">
+                          {{ exercise.difficulty }}
+                        </el-tag>
+                      </div>
+                    </div>
+                    <div class="answer-block answer-block--product">
+                      <span>参考答案</span>
+                      <p>{{ exercise.referenceAnswer }}</p>
+                    </div>
+                  </article>
+                </div>
+                <p v-else class="card-empty-text">暂无练习题内容。</p>
+              </section>
+
+              <section class="result-surface">
+                <div class="surface-head">
+                  <div>
+                    <h3>Rubric 评分维度</h3>
+                    <p>将评分标准整理成维度卡片，便于课堂展示与复核。</p>
+                  </div>
+                </div>
+                <div v-if="lessonRubric.length" class="rubric-card-grid rubric-card-grid--product">
+                  <article
+                    v-for="(item, index) in lessonRubric"
+                    :key="`${item.criterion}-${index}`"
+                    class="rubric-card rubric-card--product"
+                  >
+                    <div class="rubric-card__head">
+                      <div>
+                        <span class="rubric-card__index">{{ String(index + 1).padStart(2, '0') }}</span>
+                        <strong>{{ item.criterion }}</strong>
+                      </div>
+                      <span>{{ formatScore(item.maxScore) }} 分</span>
+                    </div>
+                    <p>{{ item.description }}</p>
+                  </article>
+                </div>
+                <p v-else class="card-empty-text">暂无 Rubric 评分内容。</p>
+              </section>
+            </div>
+
+            <div v-else class="result-state">
+              <div class="state-orb state-orb--idle"></div>
+              <h3>等待AI生成教学内容</h3>
+              <p>填写左侧备课参数后，系统会输出模块化教案、教学流程、练习题与 Rubric 建议。</p>
+              <div class="state-hint-row">
+                <span v-for="item in lessonEmptyHints" :key="item">{{ item }}</span>
+              </div>
             </div>
           </section>
         </div>
@@ -506,15 +911,24 @@ onMounted(loadCourses)
 
       <el-tab-pane name="grading">
         <template #label>
-          <span class="tab-label"><EditPen />智能批改</span>
+          <span class="tab-switch-card">
+            <span class="tab-switch-card__icon"><EditPen /></span>
+            <span class="tab-switch-card__copy">
+              <strong>智能批改</strong>
+              <small>评分卡 · 扣分原因 · 修改建议</small>
+            </span>
+          </span>
         </template>
 
         <div class="assistant-workspace grading-workspace">
-          <section class="input-panel grading-input-panel">
-            <div class="panel-heading">
-              <div>
+          <section class="workspace-card input-panel grading-input-panel">
+            <div class="panel-heading panel-heading--stack">
+              <div class="panel-heading__main">
                 <span class="panel-index">01</span>
-                <h2>批改参数</h2>
+                <div>
+                  <h2>批改参数配置</h2>
+                  <p>按题目、Rubric 和学生答案生成更具报告感的智能批改结果。</p>
+                </div>
               </div>
               <el-tooltip content="清空表单" placement="bottom">
                 <el-button circle aria-label="清空批改表单" :disabled="gradingLoading" @click="clearGradingForm">
@@ -530,112 +944,144 @@ onMounted(loadCourses)
               label-position="top"
               class="assistant-form grading-form"
             >
-              <el-form-item label="题目" prop="question" class="form-span-full">
-                <el-input
-                  v-model="gradingForm.question"
-                  type="textarea"
-                  :rows="3"
-                  maxlength="3000"
-                  show-word-limit
-                  placeholder="输入待批改题目"
-                />
-              </el-form-item>
-
-              <el-form-item label="题型" prop="questionType">
-                <el-select v-model="gradingForm.questionType" filterable allow-create class="full-width">
-                  <el-option label="简答题" value="简答题" />
-                  <el-option label="论述题" value="论述题" />
-                  <el-option label="计算题" value="计算题" />
-                  <el-option label="案例分析题" value="案例分析题" />
-                  <el-option label="编程题" value="编程题" />
-                </el-select>
-              </el-form-item>
-
-              <el-form-item label="总分" prop="maxScore">
-                <el-input-number
-                  v-model="gradingForm.maxScore"
-                  :min="0.1"
-                  :max="1000"
-                  :precision="1"
-                  :step="0.1"
-                  controls-position="right"
-                  class="full-width"
-                  @change="validateRubricField"
-                />
-              </el-form-item>
-
-              <el-form-item label="参考答案" prop="referenceAnswer" class="form-span-full">
-                <el-input
-                  v-model="gradingForm.referenceAnswer"
-                  type="textarea"
-                  :rows="4"
-                  maxlength="5000"
-                  show-word-limit
-                  placeholder="输入参考答案或参考要点"
-                />
-              </el-form-item>
-
-              <el-form-item label="评分标准" prop="rubric" class="form-span-full rubric-form-item">
-                <div class="rubric-editor">
-                  <div class="rubric-labels" aria-hidden="true">
-                    <span>评分维度</span>
-                    <span>评分说明</span>
-                    <span>分值</span>
-                    <span></span>
+              <section class="form-block form-span-full">
+                <div class="form-block__header">
+                  <span class="block-step">01</span>
+                  <div>
+                    <h3>题目信息</h3>
+                    <p>输入题干、题型与总分，让 AI 建立评分上下文。</p>
                   </div>
-                  <div v-for="(item, index) in gradingForm.rubric" :key="item.id" class="rubric-row">
+                </div>
+                <div class="form-block__grid">
+                  <el-form-item label="题目" prop="question" class="form-span-full">
                     <el-input
-                      v-model="item.criterion"
-                      :aria-label="`评分维度 ${index + 1}`"
-                      maxlength="100"
-                      placeholder="评分维度"
-                      @input="validateRubricField"
+                      v-model="gradingForm.question"
+                      type="textarea"
+                      :rows="3"
+                      maxlength="3000"
+                      show-word-limit
+                      placeholder="输入待批改题目"
                     />
-                    <el-input
-                      v-model="item.description"
-                      :aria-label="`评分说明 ${index + 1}`"
-                      maxlength="500"
-                      placeholder="评分说明"
-                      @input="validateRubricField"
-                    />
+                  </el-form-item>
+
+                  <el-form-item label="题型" prop="questionType">
+                    <el-select v-model="gradingForm.questionType" filterable allow-create class="full-width">
+                      <el-option label="简答题" value="简答题" />
+                      <el-option label="论述题" value="论述题" />
+                      <el-option label="计算题" value="计算题" />
+                      <el-option label="案例分析题" value="案例分析题" />
+                      <el-option label="编程题" value="编程题" />
+                    </el-select>
+                  </el-form-item>
+
+                  <el-form-item label="总分" prop="maxScore">
                     <el-input-number
-                      v-model="item.maxScore"
-                      :aria-label="`评分分值 ${index + 1}`"
+                      v-model="gradingForm.maxScore"
                       :min="0.1"
                       :max="1000"
                       :precision="1"
                       :step="0.1"
                       controls-position="right"
+                      class="full-width"
                       @change="validateRubricField"
                     />
-                    <el-tooltip content="删除评分维度" placement="top">
-                      <el-button
-                        circle
-                        type="danger"
-                        plain
-                        :aria-label="`删除评分维度 ${index + 1}`"
-                        @click="removeRubricItem(index)"
-                      >
-                        <el-icon><Delete /></el-icon>
-                      </el-button>
-                    </el-tooltip>
-                  </div>
-                  <el-button class="add-rubric-button" :icon="Plus" plain @click="addRubricItem">
-                    添加评分维度
-                  </el-button>
-                </div>
-              </el-form-item>
+                  </el-form-item>
 
-              <el-form-item label="学生答案" prop="studentAnswer" class="form-span-full">
-                <el-input
-                  v-model="gradingForm.studentAnswer"
-                  type="textarea"
-                  :rows="6"
-                  maxlength="5000"
-                  show-word-limit
-                  placeholder="输入学生提交的答案"
-                />
-              </el-form-item>
+                  <el-form-item label="参考答案" prop="referenceAnswer" class="form-span-full">
+                    <el-input
+                      v-model="gradingForm.referenceAnswer"
+                      type="textarea"
+                      :rows="4"
+                      maxlength="5000"
+                      show-word-limit
+                      placeholder="输入参考答案或参考要点"
+                    />
+                  </el-form-item>
+                </div>
+              </section>
+
+              <section class="form-block form-span-full">
+                <div class="form-block__header">
+                  <span class="block-step">02</span>
+                  <div>
+                    <h3>评分标准</h3>
+                    <p>按 Rubric 拆分评分维度，让结果更透明、更适合教学评价。</p>
+                  </div>
+                </div>
+                <div class="form-block__grid">
+                  <el-form-item label="评分标准" prop="rubric" class="form-span-full rubric-form-item">
+                    <div class="rubric-editor">
+                      <div class="rubric-labels" aria-hidden="true">
+                        <span>评分维度</span>
+                        <span>评分说明</span>
+                        <span>分值</span>
+                        <span></span>
+                      </div>
+                      <div v-for="(item, index) in gradingForm.rubric" :key="item.id" class="rubric-row">
+                        <el-input
+                          v-model="item.criterion"
+                          :aria-label="`评分维度 ${index + 1}`"
+                          maxlength="100"
+                          placeholder="评分维度"
+                          @input="validateRubricField"
+                        />
+                        <el-input
+                          v-model="item.description"
+                          :aria-label="`评分说明 ${index + 1}`"
+                          maxlength="500"
+                          placeholder="评分说明"
+                          @input="validateRubricField"
+                        />
+                        <el-input-number
+                          v-model="item.maxScore"
+                          :aria-label="`评分分值 ${index + 1}`"
+                          :min="0.1"
+                          :max="1000"
+                          :precision="1"
+                          :step="0.1"
+                          controls-position="right"
+                          @change="validateRubricField"
+                        />
+                        <el-tooltip content="删除评分维度" placement="top">
+                          <el-button
+                            circle
+                            type="danger"
+                            plain
+                            :aria-label="`删除评分维度 ${index + 1}`"
+                            @click="removeRubricItem(index)"
+                          >
+                            <el-icon><Delete /></el-icon>
+                          </el-button>
+                        </el-tooltip>
+                      </div>
+                      <el-button class="add-rubric-button" :icon="Plus" plain @click="addRubricItem">
+                        添加评分维度
+                      </el-button>
+                    </div>
+                  </el-form-item>
+                </div>
+              </section>
+              <section class="form-block form-span-full">
+                <div class="form-block__header">
+                  <span class="block-step">03</span>
+                  <div>
+                    <h3>学生答案</h3>
+                    <p>输入学生提交内容，AI 将结合 Rubric 输出评分报告与修改建议。</p>
+                  </div>
+                </div>
+                <div class="form-block__grid">
+                  <el-form-item label="学生答案" prop="studentAnswer" class="form-span-full">
+                    <el-input
+                      v-model="gradingForm.studentAnswer"
+                      type="textarea"
+                      :rows="6"
+                      maxlength="5000"
+                      show-word-limit
+                      placeholder="输入学生提交的答案"
+                    />
+                  </el-form-item>
+                </div>
+              </section>
 
               <div class="form-actions form-span-full">
                 <el-button :disabled="gradingLoading" @click="clearGradingForm">
@@ -650,78 +1096,177 @@ onMounted(loadCourses)
             </el-form>
           </section>
 
-          <section v-loading="gradingLoading" class="result-panel" aria-live="polite">
+          <section class="workspace-card result-panel" aria-live="polite">
             <div class="panel-heading result-heading">
-              <div>
+              <div class="panel-heading__main">
                 <span class="panel-index">02</span>
-                <h2>批改结果</h2>
+                <div>
+                  <h2>批改结果</h2>
+                  <p>以评分卡与反馈报告的方式展示总评分、扣分原因与修改建议。</p>
+                </div>
+              </div>
+              <div class="generation-status grading-status" :class="{ 'is-loading': gradingLoading, 'is-ready': gradingResultReady }">
+                <span class="status-dot"></span>
+                {{ gradingStatusText }}
               </div>
               <el-button
                 :icon="CopyDocument"
-                :disabled="!gradingResult || gradingLoading"
+                :disabled="!gradingResultReady || gradingLoading"
                 @click="copyResult(gradingResult, '批改结果已复制')"
               >
                 复制结果
               </el-button>
             </div>
 
-            <el-empty v-if="!gradingResult && !gradingLoading" description="暂无批改结果" :image-size="88" />
-
-            <div v-else-if="gradingResult" class="structured-result grading-result">
-              <section class="score-summary">
-                <div class="total-score">
-                  <span>总得分</span>
-                  <strong>{{ gradingResult.totalScore }}</strong>
-                  <small>/ {{ gradingResultMaxScore }}</small>
-                </div>
-                <div class="score-progress">
+            <div v-if="gradingLoading && !gradingResultReady" class="result-state result-state--loading">
+              <div class="loading-badge">AI 深度分析中</div>
+              <div class="state-orb state-orb--loading">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+              <h3>AI正在对照 Rubric 拆解评分依据</h3>
+              <p>系统会依次理解题目、核对评分标准，并整理出分项得分、扣分原因与修改建议。</p>
+              <div class="loading-progress-bar" aria-hidden="true">
+                <span></span>
+              </div>
+              <div class="loading-step-list loading-step-list--cards">
+                <article
+                  v-for="(item, index) in gradingLoadingStages"
+                  :key="item.title"
+                  class="loading-step-card"
+                  :class="{ 'is-active': index === 1 }"
+                >
+                  <i>{{ String(index + 1).padStart(2, '0') }}</i>
                   <div>
+                    <strong>{{ item.title }}</strong>
+                    <p>{{ item.description }}</p>
+                  </div>
+                </article>
+              </div>
+            </div>
+
+            <div v-else-if="gradingResultReady" class="structured-result grading-result">
+              <section class="score-board">
+                <article class="metric-card metric-card--primary">
+                  <span>总评分</span>
+                  <strong>{{ formatScore(gradingResult.totalScore) }}</strong>
+                  <small>/ {{ formatScore(gradingResultMaxScore) }}</small>
+                </article>
+                <article class="metric-card">
+                  <div class="metric-card__head">
                     <span>得分率</span>
                     <strong>{{ scorePercent }}%</strong>
                   </div>
-                  <el-progress :percentage="scorePercent" :stroke-width="9" :show-text="false" color="#2f855a" />
-                </div>
-                <div class="score-progress confidence-progress">
-                  <div>
-                    <span>AI 置信度</span>
+                  <el-progress :percentage="scorePercent" :stroke-width="10" :show-text="false" color="#2563eb" />
+                </article>
+                <article class="metric-card">
+                  <div class="metric-card__head">
+                    <span>AI置信度</span>
                     <strong>{{ confidencePercent }}%</strong>
                   </div>
-                  <el-progress :percentage="confidencePercent" :stroke-width="9" :show-text="false" color="#b7791f" />
-                </div>
+                  <el-progress :percentage="confidencePercent" :stroke-width="10" :show-text="false" color="#0f766e" />
+                </article>
               </section>
 
-              <section class="result-section wide-section">
-                <h3>分项得分</h3>
-                <el-table :data="gradingResult.dimensionScores" border class="result-table">
-                  <el-table-column prop="criterion" label="评分维度" width="140" />
-                  <el-table-column label="得分" width="100">
-                    <template #default="{ row }">
-                      <strong class="dimension-score">{{ row.score }} / {{ row.maxScore }}</strong>
-                    </template>
-                  </el-table-column>
-                  <el-table-column prop="reason" label="评分理由" min-width="300" />
-                </el-table>
+              <section class="result-surface">
+                <div class="surface-head">
+                  <div>
+                    <h3>分项评分卡</h3>
+                    <p>将每个评分维度拆成独立评分卡，便于教学评价与复核。</p>
+                  </div>
+                </div>
+                <div v-if="gradingDimensionScores.length" class="dimension-card-grid">
+                  <article
+                    v-for="(item, index) in gradingDimensionScores"
+                    :key="`${item.criterion}-${index}`"
+                    class="dimension-card"
+                  >
+                    <div class="dimension-card__head">
+                      <strong>{{ item.criterion }}</strong>
+                      <span>{{ formatScore(item.score) }} / {{ formatScore(item.maxScore) }}</span>
+                    </div>
+                    <p>{{ item.reason }}</p>
+                  </article>
+                </div>
+                <p v-else class="card-empty-text">暂无分项评分结果。</p>
               </section>
 
               <div class="feedback-grid">
-                <section class="result-section feedback-section strengths-section">
-                  <h3>答案优点</h3>
-                  <ul><li v-for="item in gradingResult.strengths" :key="item">{{ item }}</li></ul>
+                <section class="feedback-card feedback-card--positive">
+                  <div class="surface-head surface-head--compact">
+                    <div>
+                      <h3>答案优点</h3>
+                      <p>帮助教师快速识别学生表现较好的部分。</p>
+                    </div>
+                  </div>
+                  <ul v-if="gradingStrengths.length" class="bullet-list">
+                    <li v-for="(item, index) in gradingStrengths" :key="`strength-${index}`">{{ item }}</li>
+                  </ul>
+                  <p v-else class="card-empty-text">暂无答案优点分析。</p>
                 </section>
-                <section class="result-section feedback-section deductions-section">
-                  <h3>扣分原因</h3>
-                  <ul><li v-for="item in gradingResult.deductions" :key="item">{{ item }}</li></ul>
+
+                <section class="feedback-card feedback-card--warning">
+                  <div class="surface-head surface-head--compact">
+                    <div>
+                      <h3>扣分原因</h3>
+                      <p>集中展示失分点，方便教师快速定位问题。</p>
+                    </div>
+                  </div>
+                  <ul v-if="gradingDeductions.length" class="bullet-list">
+                    <li v-for="(item, index) in gradingDeductions" :key="`deduction-${index}`">{{ item }}</li>
+                  </ul>
+                  <p v-else class="card-empty-text">暂无扣分原因。</p>
                 </section>
-                <section class="result-section feedback-section suggestions-section">
-                  <h3>修改建议</h3>
-                  <ul><li v-for="item in gradingResult.suggestions" :key="item">{{ item }}</li></ul>
+
+                <section class="feedback-card feedback-card--info">
+                  <div class="surface-head surface-head--compact">
+                    <div>
+                      <h3>修改建议</h3>
+                      <p>将反馈转成可执行建议，便于学生二次修订。</p>
+                    </div>
+                  </div>
+                  <ul v-if="gradingSuggestions.length" class="bullet-list">
+                    <li v-for="(item, index) in gradingSuggestions" :key="`suggestion-${index}`">{{ item }}</li>
+                  </ul>
+                  <p v-else class="card-empty-text">暂无修改建议。</p>
                 </section>
               </div>
 
-              <section class="result-section wide-section revised-answer">
-                <h3>参考改写答案</h3>
-                <p>{{ gradingResult.revisedAnswer }}</p>
-              </section>
+              <div class="answer-surface-grid">
+                <section class="result-surface answer-card">
+                  <div class="surface-head">
+                    <div>
+                      <h3>参考答案</h3>
+                      <p>展示本次批改使用的参考答案或参考要点。</p>
+                    </div>
+                  </div>
+                  <div class="answer-block answer-block--large">
+                    <p>{{ gradingReferenceAnswer || '暂无参考答案内容。' }}</p>
+                  </div>
+                </section>
+
+                <section class="result-surface answer-card">
+                  <div class="surface-head">
+                    <div>
+                      <h3>参考改写答案</h3>
+                      <p>给出更完整的参考表达，便于教师反馈与讲评。</p>
+                    </div>
+                  </div>
+                  <div class="answer-block answer-block--large">
+                    <p>{{ gradingResult.revisedAnswer || '暂无参考改写答案。' }}</p>
+                  </div>
+                </section>
+              </div>
+            </div>
+
+            <div v-else class="result-state">
+              <div class="state-orb state-orb--idle"></div>
+              <h3>等待AI生成批改报告</h3>
+              <p>填写题目、Rubric 与学生答案后，系统会输出评分卡、扣分原因和修改建议。</p>
+              <div class="state-hint-row">
+                <span v-for="item in gradingEmptyHints" :key="item">{{ item }}</span>
+              </div>
             </div>
           </section>
         </div>
@@ -732,153 +1277,568 @@ onMounted(loadCourses)
 
 <style scoped>
 .ai-assistant-page {
+  --brand: #2563eb;
+  --brand-strong: #1d4ed8;
+  --brand-soft: #eff6ff;
+  --brand-line: #dbeafe;
+  --text-primary: #122033;
+  --text-secondary: #53657d;
+  --text-muted: #7a8aa0;
+  --border-soft: #e3ebf5;
+  --surface: #ffffff;
   min-height: 100%;
-  padding: 26px 28px 42px;
-  background: #f4f6f9;
-  color: #172033;
+  padding: 28px 30px 42px;
+  background: #f5f7fa;
+  color: var(--text-primary);
 }
 
-.page-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 18px;
-}
-
-.page-title {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.title-icon {
+.workspace-hero {
+  position: relative;
   display: grid;
-  width: 42px;
-  height: 42px;
-  flex: 0 0 42px;
+  grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.8fr);
+  gap: 20px;
+  margin-bottom: 22px;
+  padding: 24px;
+  overflow: hidden;
+  border: 1px solid #e1e6ed;
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgb(248 251 255 / 96%), rgb(255 255 255 / 98%)),
+    #ffffff;
+  box-shadow: 0 10px 24px rgb(31 55 88 / 6%);
+}
+
+.workspace-hero::before,
+.workspace-hero::after {
+  position: absolute;
+  border-radius: 999px;
+  content: '';
+}
+
+.workspace-hero::before {
+  top: -80px;
+  right: -40px;
+  width: 180px;
+  height: 180px;
+  background: radial-gradient(circle, rgb(37 99 235 / 14%), rgb(37 99 235 / 0%) 68%);
+}
+
+.workspace-hero::after {
+  bottom: -90px;
+  left: 56%;
+  width: 220px;
+  height: 220px;
+  background: radial-gradient(circle, rgb(96 165 250 / 14%), rgb(96 165 250 / 0%) 70%);
+}
+
+.workspace-hero__main,
+.workspace-hero__side {
+  position: relative;
+  z-index: 1;
+}
+
+.workspace-hero__main {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.hero-icon-shell {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  flex: 0 0 46px;
   place-items: center;
   border-radius: 8px;
-  background: #2468d8;
-  color: #ffffff;
+  background: linear-gradient(135deg, #edf5ff, #dbeafe);
+  color: #2468d8;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 72%);
 }
 
-.title-icon svg {
+.hero-icon-shell :deep(svg) {
   width: 22px;
+  height: 22px;
 }
 
-.page-title h1 {
-  margin: 0;
-  font-size: 24px;
-  font-weight: 700;
+.hero-copy h1 {
+  margin: 8px 0 10px;
+  font-size: 27px;
+  line-height: 1.2;
   letter-spacing: 0;
 }
 
-.page-title p {
-  margin: 3px 0 0;
-  color: #7b8798;
+.hero-copy p {
+  max-width: 720px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.hero-copy {
+  min-width: 0;
+}
+
+.hero-meta-row,
+.hero-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.hero-kicker {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgb(37 99 235 / 8%);
+  color: var(--brand-strong);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.12em;
+}
+
+.hero-state-pill,
+.hero-chip {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid #e3e8ef;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #30445f;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.hero-chip-row {
+  margin-top: 16px;
+}
+
+.hero-metric-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.hero-metric-card {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid #e4ebf5;
+  border-radius: 8px;
+  background: rgb(255 255 255 / 72%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 88%);
+}
+
+.hero-metric-card span,
+.hero-side-card__eyebrow {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.hero-metric-card strong {
+  color: var(--text-primary);
+  font-size: 17px;
+  line-height: 1.25;
+}
+
+.hero-metric-card small,
+.hero-mini-card small,
+.hero-side-card p {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.hero-chip :deep(svg) {
+  width: 15px;
+  height: 15px;
+  color: var(--brand);
+}
+
+.workspace-hero__side {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+
+.hero-side-card,
+.hero-mini-card {
+  padding: 16px 18px;
+  border: 1px solid #e8edf3;
+  border-radius: 8px;
+  background: rgb(255 255 255 / 84%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 84%);
+}
+
+.hero-side-card span,
+.hero-mini-card span {
+  display: block;
+  color: var(--text-muted);
   font-size: 12px;
 }
 
+.hero-side-card strong,
+.hero-mini-card strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.hero-side-card--primary {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border-color: #dbe6f6;
+  background: linear-gradient(180deg, rgb(255 255 255 / 94%), rgb(246 250 255 / 92%));
+}
+
+.hero-side-card__title-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.hero-side-card__title-row strong {
+  margin-top: 0;
+  font-size: 20px;
+}
+
+.hero-side-card__title-row em {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgb(37 99 235 / 10%);
+  color: var(--brand-strong);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.hero-side-card p {
+  margin: 0;
+}
+
+.hero-side-card__status {
+  display: grid;
+  gap: 6px;
+  padding-top: 12px;
+  border-top: 1px solid #e9eef5;
+}
+
+.hero-side-card__status span {
+  font-size: 12px;
+}
+
+.hero-side-card__status strong {
+  margin-top: 0;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.hero-mini-card {
+  display: grid;
+  gap: 6px;
+}
+
+.hero-mini-card strong {
+  margin-top: 0;
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.hero-side-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 0 4px rgb(34 197 94 / 12%);
+}
+
 .assistant-tabs {
-  --el-tabs-header-height: 48px;
+  --el-tabs-header-height: auto;
 }
 
 .assistant-tabs :deep(.el-tabs__header) {
   margin-bottom: 18px;
-  border-bottom: 1px solid #dfe5ed;
 }
 
-.assistant-tabs :deep(.el-tabs__nav-wrap::after) {
+.assistant-tabs :deep(.el-tabs__nav-wrap::after),
+.assistant-tabs :deep(.el-tabs__active-bar) {
   display: none;
 }
 
+.assistant-tabs :deep(.el-tabs__nav-wrap) {
+  overflow: visible;
+}
+
+.assistant-tabs :deep(.el-tabs__nav-scroll) {
+  overflow: visible;
+}
+
+.assistant-tabs :deep(.el-tabs__nav) {
+  display: flex;
+  gap: 14px;
+  border: 0;
+}
+
 .assistant-tabs :deep(.el-tabs__item) {
-  height: 48px;
-  padding: 0 24px;
-  font-size: 15px;
+  height: auto;
+  padding: 0;
+  border: 0;
 }
 
-.tab-label {
-  display: inline-flex;
+.tab-switch-card {
+  display: flex;
+  gap: 14px;
   align-items: center;
-  gap: 8px;
+  min-width: 270px;
+  padding: 14px 16px;
+  border: 1px solid #e1e6ed;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgb(32 63 110 / 4%);
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease, background-color 160ms ease;
 }
 
-.tab-label svg {
-  width: 17px;
+.assistant-tabs :deep(.el-tabs__item:hover .tab-switch-card) {
+  transform: translateY(-1px);
+  border-color: #c7d5ea;
+  box-shadow: 0 6px 16px rgb(32 63 110 / 8%);
 }
 
-.assistant-workspace {
+.assistant-tabs :deep(.el-tabs__item.is-active .tab-switch-card) {
+  border-color: #cfe0fa;
+  background: #edf5ff;
+  box-shadow: 0 8px 18px rgb(37 99 235 / 10%);
+}
+
+.assistant-tabs :deep(.el-tabs__item.is-active .tab-switch-card__icon) {
+  background: #2468d8;
+  color: #ffffff;
+}
+
+.assistant-tabs :deep(.el-tabs__item.is-active .tab-switch-card__copy strong) {
+  color: #1f63c4;
+}
+
+.tab-switch-card__icon {
   display: grid;
-  grid-template-columns: minmax(360px, 0.82fr) minmax(560px, 1.38fr);
-  gap: 18px;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  place-items: center;
+  border-radius: 8px;
+  background: #edf5ff;
+  color: var(--brand);
+}
+
+.tab-switch-card__icon :deep(svg) {
+  width: 20px;
+  height: 20px;
+}
+
+.tab-switch-card__copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  text-align: left;
+}
+
+.tab-switch-card__copy strong {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.tab-switch-card__copy small {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.assistant-workspace,
+.grading-workspace {
+  display: grid;
+  grid-template-columns: minmax(360px, 0.94fr) minmax(0, 1.2fr);
+  gap: 22px;
   align-items: start;
 }
 
-.grading-workspace {
-  grid-template-columns: minmax(460px, 0.95fr) minmax(520px, 1.25fr);
+.workspace-card {
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 6px 18px rgb(31 55 88 / 5%);
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+
+.workspace-card:hover {
+  transform: translateY(-1px);
+  border-color: #d6dee9;
+  box-shadow: 0 10px 22px rgb(31 55 88 / 7%);
 }
 
 .input-panel,
 .result-panel {
-  min-width: 0;
-  border: 1px solid #e0e5ec;
-  border-radius: 8px;
-  background: #ffffff;
-}
-
-.input-panel {
-  padding: 22px;
+  padding: 24px;
 }
 
 .result-panel {
-  min-height: 520px;
-  padding: 22px;
+  min-height: 720px;
 }
 
 .panel-heading {
   display: flex;
-  min-height: 36px;
+  gap: 16px;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
   margin-bottom: 22px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #edf0f4;
 }
 
-.panel-heading > div {
+.panel-heading--stack {
+  align-items: flex-start;
+}
+
+.panel-heading__main {
   display: flex;
-  align-items: center;
-  gap: 9px;
+  gap: 14px;
+  align-items: flex-start;
+  min-width: 0;
 }
 
-.panel-heading h2 {
+.panel-heading__main h2 {
   margin: 0;
-  font-size: 17px;
-  font-weight: 680;
-  letter-spacing: 0;
+  font-size: 18px;
+  line-height: 1.2;
 }
 
-.panel-index {
-  color: #2468d8;
-  font-size: 11px;
+.panel-heading__main p {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.panel-index,
+.block-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  background: #edf5ff;
+  color: var(--brand-strong);
+  font-size: 12px;
   font-weight: 750;
+  letter-spacing: 0.04em;
 }
 
 .assistant-form {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  column-gap: 16px;
+  gap: 16px;
 }
 
 .assistant-form :deep(.el-form-item) {
   min-width: 0;
-  margin-bottom: 19px;
+  margin-bottom: 0;
 }
 
 .assistant-form :deep(.el-form-item__label) {
-  color: #465267;
+  color: #33465f;
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 700;
+}
+
+.assistant-form :deep(.el-input__inner),
+.assistant-form :deep(.el-textarea__inner) {
+  font-size: 14px;
+}
+
+.assistant-form :deep(.el-input__wrapper),
+.assistant-form :deep(.el-textarea__inner),
+.assistant-form :deep(.el-select .el-input__wrapper),
+.assistant-form :deep(.el-input-number) {
+  border-radius: 7px;
+}
+
+.assistant-form :deep(.el-input__wrapper),
+.assistant-form :deep(.el-select .el-input__wrapper),
+.assistant-form :deep(.el-input-number),
+.assistant-form :deep(.el-textarea__inner) {
+  box-shadow: 0 0 0 1px #d8e3f2 inset;
+  background: rgb(255 255 255 / 86%);
+  transition: box-shadow 160ms ease, transform 160ms ease;
+}
+
+.assistant-form :deep(.el-input__wrapper:hover),
+.assistant-form :deep(.el-select .el-input__wrapper:hover),
+.assistant-form :deep(.el-input-number:hover),
+.assistant-form :deep(.el-textarea__inner:hover) {
+  box-shadow: 0 0 0 1px #a9c3ed inset;
+}
+.assistant-form :deep(.el-input__wrapper.is-focus),
+.assistant-form :deep(.el-select .el-input__wrapper.is-focus),
+.assistant-form :deep(.el-input-number.is-focus),
+.assistant-form :deep(.el-textarea__inner:focus) {
+  box-shadow: 0 0 0 1px #2563eb inset, 0 0 0 4px rgb(37 99 235 / 10%);
+}
+
+.form-block {
+  display: grid;
+  gap: 18px;
+  padding: 20px;
+  border: 1px solid #e7eef8;
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.form-block__header {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.form-block__header h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.form-block__header p {
+  margin: 7px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.form-block__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
 }
 
 .form-span-full {
@@ -890,19 +1850,129 @@ onMounted(loadCourses)
   width: 100%;
 }
 
+.rubric-editor {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+}
+
+.rubric-labels,
+.rubric-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 0.9fr) minmax(220px, 1.6fr) 120px 40px;
+  gap: 10px;
+  align-items: center;
+}
+
+.rubric-labels {
+  padding: 0 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.rubric-row {
+  padding: 10px;
+  border: 1px solid #e7eef8;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.rubric-row :deep(.el-input-number) {
+  width: 100%;
+}
+
+.add-rubric-button {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 4px;
+  border-style: dashed;
+  border-radius: 7px;
+}
+
 .form-actions {
   display: flex;
   justify-content: flex-end;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.form-actions :deep(.el-button) {
+  min-width: 116px;
+  min-height: 42px;
+  border-radius: 7px;
+  font-weight: 650;
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.form-actions :deep(.el-button:not(:disabled):hover) {
+  transform: translateY(-1px);
+}
+
+.form-actions :deep(.el-button--primary:not(:disabled)) {
+  box-shadow: 0 6px 14px rgb(37 99 235 / 16%);
+}
+
+.panel-heading :deep(.el-button.is-circle) {
+  width: 36px;
+  height: 36px;
+  border-radius: 7px;
+}
+
+.result-heading :deep(.el-button) {
+  min-height: 38px;
+  padding: 0 16px;
+  border-radius: 7px;
+  font-weight: 650;
+}
+
+.result-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 14px;
+  align-items: center;
+}
+
+.generation-status {
+  display: inline-flex;
   gap: 8px;
-  padding-top: 3px;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: #f3f7fd;
+  color: #5a6b81;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
-.form-actions .el-button {
-  min-width: 108px;
+.generation-status .status-dot {
+  width: 7px;
+  height: 7px;
+  flex-basis: 7px;
+  box-shadow: none;
+  background: #94a3b8;
 }
 
-.result-panel > .el-empty {
-  min-height: 390px;
+.generation-status.is-loading {
+  background: rgb(37 99 235 / 10%);
+  color: var(--brand-strong);
+}
+
+.generation-status.is-loading .status-dot {
+  background: var(--brand);
+  box-shadow: 0 0 0 4px rgb(37 99 235 / 12%);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.generation-status.is-ready {
+  background: rgb(16 185 129 / 10%);
+  color: #047857;
+}
+
+.generation-status.is-ready .status-dot {
+  background: #10b981;
 }
 
 .structured-result {
@@ -910,334 +1980,1049 @@ onMounted(loadCourses)
   gap: 18px;
 }
 
-.result-title-band {
-  padding: 18px 20px;
-  border-left: 4px solid #2468d8;
-  background: #f2f6fc;
-}
-
-.result-title-band span {
-  color: #6e7b8f;
-  font-size: 12px;
-}
-
-.result-title-band h2 {
-  margin: 5px 0 0;
-  font-size: 20px;
-  line-height: 1.45;
-  letter-spacing: 0;
-}
-
-.overview-grid,
-.feedback-grid {
+.result-state {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  border-top: 1px solid #e7ebf1;
-  border-left: 1px solid #e7ebf1;
+  justify-items: center;
+  gap: 12px;
+  min-height: 560px;
+  padding: 42px 28px;
+  border: 1px dashed #d6e5fb;
+  border-radius: 8px;
+  background: #f8fbff;
+  text-align: center;
 }
 
-.result-section {
-  min-width: 0;
-  padding: 17px 18px;
-  border-right: 1px solid #e7ebf1;
-  border-bottom: 1px solid #e7ebf1;
-}
-
-.wide-section {
-  padding: 0;
-  border: 0;
-}
-
-.result-section h3 {
-  margin: 0 0 12px;
-  color: #273349;
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0;
-}
-
-.wide-section > h3 {
-  padding-bottom: 10px;
-  border-bottom: 1px solid #e6eaf0;
-}
-
-.result-section ul {
-  display: grid;
-  gap: 8px;
+.result-state h3 {
   margin: 0;
-  padding-left: 18px;
-  color: #5d697c;
+  font-size: 22px;
+}
+
+.result-state p {
+  max-width: 420px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.result-state--loading {
+  align-content: center;
+  border-style: solid;
+  border-color: #e2ecfa;
+  background:
+    radial-gradient(circle at top, rgb(37 99 235 / 7%), rgb(37 99 235 / 0%) 34%),
+    linear-gradient(180deg, #f8fbff, #ffffff);
+}
+
+.state-orb {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 35% 30%, #ffffff, rgb(255 255 255 / 0%) 38%),
+    linear-gradient(135deg, #2563eb, #93c5fd);
+  box-shadow: 0 10px 24px rgb(37 99 235 / 18%);
+}
+
+.state-orb--loading {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 86px;
+  height: 86px;
+  background:
+    radial-gradient(circle at center, rgb(255 255 255 / 96%) 0 28%, rgb(255 255 255 / 0%) 29%),
+    conic-gradient(from 180deg, rgb(37 99 235 / 18%), #2563eb, #93c5fd, rgb(37 99 235 / 18%));
+  animation: spin 5.2s linear infinite;
+}
+
+.state-orb--loading span {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 0 0 5px rgb(37 99 235 / 10%);
+}
+
+.state-orb--loading span:nth-child(1) {
+  top: 8px;
+}
+
+.state-orb--loading span:nth-child(2) {
+  right: 10px;
+  bottom: 16px;
+}
+
+.state-orb--loading span:nth-child(3) {
+  left: 10px;
+  bottom: 16px;
+}
+
+.state-orb--idle {
+  background:
+    radial-gradient(circle at 35% 30%, #ffffff, rgb(255 255 255 / 0%) 38%),
+    linear-gradient(135deg, #c7d8f8, #93c5fd);
+}
+
+.loading-step-list {
+  display: grid;
+  gap: 10px;
+  width: min(100%, 640px);
+  margin-top: 8px;
+}
+
+.loading-step-list span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 16px;
+  border: 1px solid #d8e5fb;
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.loading-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgb(37 99 235 / 10%);
+  color: var(--brand-strong);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.loading-progress-bar {
+  position: relative;
+  width: min(100%, 420px);
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e7eef9;
+}
+
+.loading-progress-bar span {
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2563eb, #60a5fa);
+  box-shadow: 0 4px 12px rgb(37 99 235 / 18%);
+  animation: loading-slide 1.8s ease-in-out infinite;
+}
+
+.loading-step-list--cards {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.loading-step-card {
+  display: grid;
+  gap: 10px;
+  min-height: 132px;
+  padding: 16px;
+  border: 1px solid #dfe9f7;
+  border-radius: 8px;
+  background: rgb(255 255 255 / 86%);
+  text-align: left;
+  box-shadow: 0 6px 18px rgb(31 55 88 / 4%);
+}
+
+.loading-step-card.is-active {
+  border-color: #bfd4fa;
+  background: linear-gradient(180deg, #ffffff, #eef5ff);
+  box-shadow: 0 10px 22px rgb(37 99 235 / 10%);
+}
+
+.loading-step-card i {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  background: #edf5ff;
+  color: var(--brand-strong);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.loading-step-card strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.loading-step-card p {
+  margin-top: 6px;
+  color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.65;
 }
 
-.result-section li::marker {
-  color: #3f7fd6;
+.state-hint-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 4px;
 }
 
-.result-table {
-  width: 100%;
+.state-hint-row span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid #dce8fb;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #4a5e79;
+  font-size: 12px;
+  font-weight: 700;
 }
 
-.result-table :deep(.cell) {
-  line-height: 1.55;
-  word-break: break-word;
+.lesson-result {
+  gap: 16px;
 }
 
-.activity-list {
+.lesson-result-hero {
   display: grid;
-  gap: 1px;
+  gap: 16px;
+}
+
+.result-hero-card__header {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.result-hero-card__copy {
+  min-width: 0;
+}
+
+.result-hero-card__copy p {
+  max-width: 700px;
+  margin: 12px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.result-hero-card__status {
+  display: grid;
+  gap: 6px;
+  min-width: 180px;
+  padding: 14px 16px;
+  border: 1px solid #dbe6f6;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.result-hero-card__status span {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.result-hero-card__status strong {
+  color: var(--text-primary);
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+.result-hero-card__status small {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.result-meta-tags--dense {
+  margin-top: 0;
+}
+
+.lesson-module-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.lesson-module-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.lesson-module-grid--secondary {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.lesson-module-card {
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 4px 14px rgb(24 45 82 / 5%);
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+
+.lesson-module-card--featured {
+  border-color: #d6e4fb;
+  background: linear-gradient(180deg, #ffffff, #f8fbff);
+}
+
+.lesson-module-card:hover,
+.lesson-module-card--featured:hover {
+  transform: translateY(-1px);
+  border-color: #c7d7f1;
+  box-shadow: 0 10px 22px rgb(31 55 88 / 7%);
+}
+
+.lesson-module-card__head {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.lesson-module-card__index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  border-radius: 8px;
+  background: #edf5ff;
+  color: var(--brand-strong);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.lesson-module-card__index--soft {
+  background: #f3f7fd;
+  color: #7c8ba1;
+}
+
+.lesson-module-card__head h3 {
   margin: 0;
-  padding: 0;
-  background: #e8ecf1;
-  list-style: none;
+  font-size: 16px;
+  line-height: 1.35;
 }
 
-.activity-list li {
+.lesson-module-card__head p {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.lesson-module-card .bullet-list {
+  gap: 8px;
+  padding-left: 18px;
+}
+
+.timeline-list {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 14px;
+}
+
+.timeline-item {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: 14px;
+  align-items: stretch;
+}
+
+.timeline-marker {
+  display: grid;
+  justify-items: center;
   align-items: start;
-  gap: 13px;
-  padding: 13px 15px;
+  gap: 8px;
+}
+
+.timeline-marker__index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  background: #edf5ff;
+  color: var(--brand-strong);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.timeline-marker__line {
+  width: 2px;
+  flex: 1 1 auto;
+  min-height: 84px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgb(37 99 235 / 35%), rgb(37 99 235 / 6%));
+}
+
+.timeline-card {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid #dbe6f6;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #ffffff, #f8fbff);
+  box-shadow: 0 4px 14px rgb(24 45 82 / 5%);
+}
+
+.timeline-card__top {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.timeline-card__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgb(37 99 235 / 10%);
+  color: var(--brand-strong);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.timeline-card__top h3 {
+  margin: 8px 0 0;
+  font-size: 17px;
+  line-height: 1.35;
+}
+
+.timeline-time-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: #eef4ff;
+  color: #3766c9;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.timeline-card__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.timeline-card__panel {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid #e4ebf5;
+  border-radius: 8px;
   background: #ffffff;
 }
 
-.activity-list span {
-  color: #2468d8;
+.timeline-card__panel--wide {
+  grid-column: 1 / -1;
+}
+
+.timeline-card__panel span {
+  color: var(--text-muted);
   font-size: 12px;
-  font-weight: 750;
+  font-weight: 700;
 }
 
-.activity-list p {
+.timeline-card__panel p {
   margin: 0;
-  color: #5d697c;
-  font-size: 13px;
-  line-height: 1.65;
+  color: #42556f;
+  font-size: 14px;
+  line-height: 1.75;
 }
 
-.exercise-list {
-  display: grid;
-  border-top: 1px solid #e4e9ef;
+.exercise-card--question {
+  gap: 16px;
 }
 
-.exercise-list article {
-  padding: 16px 2px;
-  border-bottom: 1px solid #e4e9ef;
+.exercise-card__title {
+  min-width: 0;
 }
 
-.exercise-heading {
-  display: flex;
+.exercise-card__index {
+  display: inline-flex;
   align-items: center;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgb(37 99 235 / 10%);
+  color: var(--brand-strong);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.exercise-card__question {
+  margin-top: 10px;
+  color: var(--text-primary);
+  font-size: 15px;
+  line-height: 1.75;
+}
+
+.exercise-card__tags {
+  align-items: flex-start;
+  justify-content: flex-end;
+}
+
+.answer-block--product {
+  gap: 10px;
+  border: 1px solid #e3ebf5;
+  background: #f7faff;
+}
+
+.answer-block--product p {
+  color: #42556f;
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.rubric-card-grid--product {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.rubric-card--product {
+  gap: 14px;
+  padding: 20px;
+  border-color: #dbe6f6;
+  background: linear-gradient(180deg, #ffffff, #f8fbff);
+}
+
+.rubric-card__head {
+  align-items: flex-start;
+}
+
+.rubric-card__index {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  margin-bottom: 8px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgb(37 99 235 / 10%);
+  color: var(--brand-strong);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.rubric-card__head strong {
+  display: block;
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+.rubric-card__head span {
+  flex: 0 0 auto;
+}
+
+.rubric-card--product p {
+  color: #42556f;
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.result-hero-card {
+  padding: 24px 24px 22px;
+  border: 1px solid rgb(37 99 235 / 12%);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 6px 18px rgb(31 55 88 / 5%);
+}
+
+.result-hero-card__label {
+  display: inline-flex;
+  min-height: 28px;
+  padding: 0 12px;
+  align-items: center;
+  border-radius: 999px;
+  background: rgb(37 99 235 / 10%);
+  color: var(--brand-strong);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.result-hero-card h2 {
+  margin: 14px 0 0;
+  font-size: 24px;
+  line-height: 1.35;
+}
+
+.result-meta-tags,
+.inline-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.result-meta-tags {
+  margin-top: 16px;
+}
+
+.result-meta-tags span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 86%);
+  color: #4b5f7a;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.result-card-grid,
+.exercise-card-grid,
+.rubric-card-grid,
+.dimension-card-grid,
+.feedback-grid,
+.answer-surface-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.result-card-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.result-info-card,
+.exercise-card,
+.rubric-card,
+.dimension-card,
+.feedback-card {
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 4px 14px rgb(24 45 82 / 5%);
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+
+.result-info-card {
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+}
+
+.result-card-head h3,
+.surface-head h3 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.result-card-head p,
+.surface-head p {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.bullet-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 18px;
+  color: #42556f;
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.bullet-list li::marker {
+  color: var(--brand);
+}
+
+.card-empty-text {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.result-surface,
+.answer-card {
+  display: grid;
+  gap: 16px;
+  padding: 22px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 4px 14px rgb(24 45 82 / 5%);
+}
+
+.surface-head {
+  display: flex;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 14px;
 }
 
-.exercise-heading > div {
-  display: flex;
-  gap: 6px;
+.surface-head--compact {
+  margin-bottom: 12px;
 }
 
-.exercise-question {
-  margin: 11px 0;
-  color: #2f3a4d;
-  font-size: 14px;
-  line-height: 1.65;
-}
-
-.exercise-list dl {
-  display: grid;
-  grid-template-columns: 70px minmax(0, 1fr);
-  margin: 0;
-  padding: 10px 12px;
-  background: #f6f8fa;
-  color: #687488;
-  font-size: 13px;
-  line-height: 1.6;
-}
-
-.exercise-list dt {
-  color: #445065;
-  font-weight: 650;
-}
-
-.exercise-list dd {
-  margin: 0;
-}
-
-.notes-section {
-  padding: 16px 18px;
-  border-left: 3px solid #b7791f;
-  background: #fffbeb;
-}
-
-.notes-section > h3 {
-  border-bottom: 0;
-}
-
-.rubric-editor {
-  display: grid;
+.result-table {
   width: 100%;
-  gap: 9px;
-}
-
-.rubric-labels,
-.rubric-row {
-  display: grid;
-  grid-template-columns: minmax(110px, 0.8fr) minmax(170px, 1.6fr) 112px 34px;
-  gap: 8px;
-  align-items: center;
-}
-
-.rubric-labels {
-  padding: 0 1px;
-  color: #7b8798;
-  font-size: 11px;
-}
-
-.rubric-row .el-input-number {
-  width: 100%;
-}
-
-.add-rubric-button {
-  width: 100%;
-  margin-top: 2px;
-  border-style: dashed;
-}
-
-.score-summary {
-  display: grid;
-  grid-template-columns: minmax(130px, 0.55fr) repeat(2, minmax(150px, 1fr));
-  gap: 1px;
   overflow: hidden;
-  border: 1px solid #dfe5ec;
+  border: 1px solid #e5eaf1;
   border-radius: 8px;
-  background: #dfe5ec;
 }
 
-.total-score,
-.score-progress {
-  min-width: 0;
-  padding: 17px 18px;
-  background: #ffffff;
+.result-table :deep(.el-table__inner-wrapper::before) {
+  display: none;
 }
 
-.total-score span,
-.score-progress span {
-  color: #738095;
+.result-table :deep(.el-table__header-wrapper th) {
+  background: #f4f8ff;
+  color: #4b607b;
   font-size: 12px;
+  font-weight: 800;
 }
 
-.total-score strong {
-  display: inline-block;
-  margin: 4px 4px 0 0;
-  color: #23734b;
-  font-size: 30px;
+.result-table :deep(.el-table__body td) {
+  color: #41556f;
+  font-size: 13px;
+}
+
+.result-table :deep(.cell) {
+  line-height: 1.7;
+  word-break: break-word;
+}
+
+.activity-card-list {
+  display: grid;
+  gap: 12px;
+}
+
+.activity-card {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  padding: 16px 18px;
+  border: 1px solid #e8eef8;
+  border-radius: 8px;
+  background: #ffffff;
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+
+.activity-card:hover,
+.exercise-card:hover,
+.rubric-card:hover,
+.dimension-card:hover,
+.feedback-card:hover,
+.result-info-card:hover {
+  transform: translateY(-1px);
+  border-color: #d4deeb;
+  box-shadow: 0 8px 18px rgb(24 45 82 / 8%);
+}
+
+.activity-card span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 8px;
+  background: #edf5ff;
+  color: var(--brand-strong);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.activity-card p,
+.exercise-card__question,
+.answer-block p,
+.rubric-card p,
+.dimension-card p {
+  margin: 0;
+  color: #42556f;
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.exercise-card-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.exercise-card {
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+}
+
+.exercise-card__head,
+.rubric-card__head,
+.dimension-card__head,
+.metric-card__head {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.exercise-card__head strong,
+.rubric-card__head strong,
+.dimension-card__head strong {
+  font-size: 16px;
+}
+
+.answer-block {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  background: #f5f8fc;
+}
+
+.answer-block span {
+  color: #60748e;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.rubric-card-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.rubric-card,
+.dimension-card {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+}
+
+.rubric-card__head span,
+.dimension-card__head span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgb(37 99 235 / 10%);
+  color: var(--brand-strong);
+  font-size: 12px;
+  font-weight: 800;
+}
+.score-board {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.7fr) repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.metric-card {
+  display: grid;
+  gap: 14px;
+  padding: 22px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 4px 14px rgb(24 45 82 / 5%);
+}
+
+.metric-card span {
+  color: #61748e;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.metric-card strong {
+  color: var(--text-primary);
+  font-size: 28px;
   line-height: 1;
 }
 
-.total-score small {
-  color: #7b8798;
-  font-size: 13px;
-}
-
-.score-progress > div {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-
-.score-progress strong {
-  color: #23734b;
+.metric-card small {
+  color: var(--text-muted);
   font-size: 14px;
 }
 
-.confidence-progress strong {
-  color: #9b6518;
+.metric-card--primary {
+  align-content: center;
+  background: linear-gradient(135deg, #2468d8, #4f8ff0);
+  color: #ffffff;
+  box-shadow: 0 10px 24px rgb(37 99 235 / 18%);
 }
 
-.dimension-score {
-  color: #23734b;
+.metric-card--primary span,
+.metric-card--primary strong,
+.metric-card--primary small {
+  color: #ffffff;
+}
+
+.dimension-card-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .feedback-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.feedback-section {
-  padding-top: 19px;
-  border-top: 3px solid #8190a5;
+.feedback-card {
+  padding: 20px;
+  background: #fbfcfe;
 }
 
-.strengths-section {
-  border-top-color: #2f855a;
+.feedback-card--positive {
+  border-top: 4px solid #16a34a;
 }
 
-.deductions-section {
-  border-top-color: #c05621;
+.feedback-card--warning {
+  border-top: 4px solid #ea580c;
 }
 
-.suggestions-section {
-  border-top-color: #2b6cb0;
+.feedback-card--info {
+  border-top: 4px solid #2563eb;
 }
 
-.revised-answer {
-  padding: 18px;
-  border: 1px solid #dfe5ec;
-  background: #f7f9fb;
+.answer-surface-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.revised-answer > h3 {
-  border-bottom: 0;
+.answer-block--large {
+  min-height: 210px;
 }
 
-.revised-answer p {
-  margin: 0;
-  color: #465267;
-  font-size: 14px;
-  line-height: 1.8;
-  white-space: pre-wrap;
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.4;
+  }
 }
 
-@media (max-width: 1180px) {
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes loading-slide {
+  0% {
+    transform: translateX(-120%);
+  }
+
+  50% {
+    transform: translateX(130%);
+  }
+
+  100% {
+    transform: translateX(260%);
+  }
+}
+
+@media (max-width: 1260px) {
+  .workspace-hero,
   .assistant-workspace,
-  .grading-workspace {
+  .grading-workspace,
+  .result-card-grid,
+  .lesson-module-grid,
+  .lesson-module-grid--secondary,
+  .exercise-card-grid,
+  .rubric-card-grid,
+  .rubric-card-grid--product,
+  .dimension-card-grid,
+  .feedback-grid,
+  .answer-surface-grid,
+  .score-board,
+  .timeline-card__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-metric-strip,
+  .loading-step-list--cards {
     grid-template-columns: 1fr;
   }
 
   .result-panel {
-    min-height: 440px;
+    min-height: 620px;
   }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 860px) {
   .ai-assistant-page {
-    padding: 20px 14px 32px;
+    padding: 18px 14px 28px;
   }
 
-  .assistant-tabs :deep(.el-tabs__item) {
-    padding: 0 16px;
-  }
-
+  .workspace-hero,
   .input-panel,
   .result-panel {
-    padding: 17px 14px;
+    padding: 20px;
   }
 
-  .assistant-form,
-  .overview-grid,
-  .feedback-grid,
-  .score-summary {
+  .workspace-hero__main {
     grid-template-columns: 1fr;
   }
 
-  .form-span-full {
-    grid-column: auto;
+  .tab-switch-card {
+    min-width: 0;
+  }
+
+  .form-block__grid,
+  .hero-side-grid {
+    grid-template-columns: 1fr;
   }
 
   .result-heading {
+    grid-template-columns: 1fr;
+  }
+
+  .result-hero-card__header,
+  .lesson-module-card__head,
+  .exercise-card__head {
+    flex-direction: column;
     align-items: flex-start;
+  }
+
+  .generation-status {
+    justify-self: start;
+  }
+
+  .result-hero-card__status {
+    min-width: 0;
+  }
+
+  .timeline-item {
+    grid-template-columns: 1fr;
+  }
+
+  .timeline-marker {
+    display: none;
+  }
+
+  .timeline-card__grid,
+  .lesson-module-grid--secondary,
+  .rubric-card-grid--product {
+    grid-template-columns: 1fr;
+  }
+
+  .exercise-card__tags {
+    justify-content: flex-start;
   }
 
   .rubric-labels {
@@ -1245,7 +3030,7 @@ onMounted(loadCourses)
   }
 
   .rubric-row {
-    grid-template-columns: minmax(0, 1fr) 108px 34px;
+    grid-template-columns: minmax(0, 1fr) 108px 40px;
   }
 
   .rubric-row > :nth-child(2) {
@@ -1262,37 +3047,37 @@ onMounted(loadCourses)
     grid-column: 3;
     grid-row: 1;
   }
-
-  .score-summary {
-    gap: 0;
-    background: #ffffff;
-  }
-
-  .score-summary > * {
-    border-bottom: 1px solid #e4e9ef;
-  }
-
-  .score-summary > *:last-child {
-    border-bottom: 0;
-  }
-
-  .exercise-heading,
-  .panel-heading {
-    align-items: flex-start;
-  }
 }
 
-@media (max-width: 480px) {
-  .page-title h1 {
-    font-size: 21px;
+@media (max-width: 560px) {
+  .hero-copy h1 {
+    font-size: 28px;
   }
 
-  .result-heading {
-    flex-direction: column;
+  .hero-meta-row,
+  .hero-chip-row,
+  .result-meta-tags,
+  .inline-tags {
+    align-items: stretch;
   }
 
-  .result-heading > .el-button {
-    width: 100%;
+  .hero-state-pill,
+  .hero-chip,
+  .result-meta-tags span {
+    justify-content: center;
+  }
+
+  .tab-switch-card {
+    padding: 14px;
+  }
+
+  .panel-heading,
+  .form-block__header,
+  .exercise-card__head,
+  .rubric-card__head,
+  .dimension-card__head,
+  .metric-card__head {
+    align-items: flex-start;
   }
 
   .form-actions {
@@ -1300,19 +3085,18 @@ onMounted(loadCourses)
     grid-template-columns: 1fr 1fr;
   }
 
-  .form-actions .el-button {
+  .form-actions :deep(.el-button) {
     width: 100%;
     min-width: 0;
-    margin: 0;
   }
 
-  .exercise-heading {
-    flex-direction: column;
-  }
-
-  .exercise-list dl {
+  .activity-card {
     grid-template-columns: 1fr;
-    gap: 4px;
+  }
+
+  .activity-card span {
+    width: 48px;
+    height: 48px;
   }
 }
 </style>
