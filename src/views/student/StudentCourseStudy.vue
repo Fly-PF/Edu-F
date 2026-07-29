@@ -11,6 +11,7 @@ import {
   Document,
   Files,
   FolderOpened,
+  Link,
   Picture,
   Refresh,
   VideoPlay,
@@ -49,6 +50,12 @@ const selectedResource = computed(() => {
   const resources = selectedChapter.value?.resources || []
   return resources.find((item) => item.id === selectedResourceId.value) || resources[0] || null
 })
+const videoSubtitleUrl = computed(() => {
+  const url = selectedResource.value?.url || ''
+  return /codeorg-ai-machine-learning\.mp4(?:\?.*)?$/i.test(url)
+    ? url.replace(/\.mp4(?:\?.*)?$/i, '-zh-CN.vtt')
+    : ''
+})
 
 const recordMap = computed(() => {
   const map = {}
@@ -78,7 +85,14 @@ function fallbackCover(item) {
   return covers[Math.abs(Number(item?.id || 0)) % covers.length]
 }
 
-function resourceTypeMeta(type) {
+function isExternalResource(resource) {
+  return /^https?:\/\//i.test(resource?.url || resource?.resourceUrl || '')
+}
+
+function resourceTypeMeta(type, resource) {
+  if (Number(type) === 4 && isExternalResource(resource)) {
+    return { label: '官方课程', icon: Link, tag: 'primary' }
+  }
   return resourceTypes[type] || resourceTypes[4]
 }
 
@@ -267,7 +281,7 @@ onBeforeUnmount(revokePdfViewerUrl)
               type="button"
               @click="selectResource(chapter, resource)"
             >
-              <el-icon><component :is="resourceTypeMeta(resource.type).icon" /></el-icon>
+              <el-icon><component :is="resourceTypeMeta(resource.type, resource).icon" /></el-icon>
               <span>{{ resource.name }}</span>
             </button>
           </div>
@@ -297,14 +311,25 @@ onBeforeUnmount(revokePdfViewerUrl)
       </header>
 
       <div v-if="selectedResource" class="viewer-body">
-        <video
-          v-if="selectedResource.type === 1"
-          ref="videoRef"
-          :src="selectedResource.url"
-          controls
-          @timeupdate="reportVideoProgress"
-          @ended="markCompleted"
-        />
+        <div v-if="selectedResource.type === 1" class="video-viewer">
+          <video
+            ref="videoRef"
+            :src="selectedResource.url"
+            crossorigin="anonymous"
+            controls
+            @timeupdate="reportVideoProgress"
+            @ended="markCompleted"
+          >
+            <track
+              v-if="videoSubtitleUrl"
+              kind="subtitles"
+              srclang="zh-CN"
+              label="中文学习讲解"
+              :src="videoSubtitleUrl"
+              default
+            />
+          </video>
+        </div>
         <iframe
           v-else-if="selectedResource.type === 2"
           :src="pdfViewerUrl"
@@ -317,10 +342,13 @@ onBeforeUnmount(revokePdfViewerUrl)
           class="image-viewer"
         />
         <div v-else class="file-viewer">
-          <el-icon><Files /></el-icon>
+          <el-icon><component :is="isExternalResource(selectedResource) ? Link : Files" /></el-icon>
           <strong>{{ selectedResource.name }}</strong>
-          <span>{{ formatFileSize(selectedResource.fileSize) }}</span>
-          <el-link :href="selectedResource.url" target="_blank" type="primary">打开资源</el-link>
+          <span v-if="isExternalResource(selectedResource)">内容由课程发布机构提供，将在新窗口打开</span>
+          <span v-else>{{ formatFileSize(selectedResource.fileSize) }}</span>
+          <el-link :href="selectedResource.url" target="_blank" type="primary">
+            {{ isExternalResource(selectedResource) ? '进入官方课程' : '打开资源' }}
+          </el-link>
         </div>
       </div>
 
@@ -329,11 +357,11 @@ onBeforeUnmount(revokePdfViewerUrl)
       <footer class="resource-facts" v-if="selectedResource">
         <span>
           <el-icon><Collection /></el-icon>
-          {{ resourceTypeMeta(selectedResource.type).label }}
+          {{ resourceTypeMeta(selectedResource.type, selectedResource).label }}
         </span>
         <span>
-          <el-icon><Files /></el-icon>
-          {{ formatFileSize(selectedResource.fileSize) }}
+          <el-icon><component :is="isExternalResource(selectedResource) ? Link : Files" /></el-icon>
+          {{ isExternalResource(selectedResource) ? '官方来源' : formatFileSize(selectedResource.fileSize) }}
         </span>
         <span>
           <el-icon><Clock /></el-icon>
@@ -592,6 +620,21 @@ onBeforeUnmount(revokePdfViewerUrl)
 .viewer-body video,
 .viewer-body iframe,
 .image-viewer {
+  width: 100%;
+  height: 100%;
+  min-height: 520px;
+  border: 0;
+  background: #111827;
+}
+
+.video-viewer {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 520px;
+}
+
+.video-viewer video {
   width: 100%;
   height: 100%;
   min-height: 520px;

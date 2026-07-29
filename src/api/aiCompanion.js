@@ -41,3 +41,7 @@ export function saveAiCompanionExchange(sessionId, data) {
 export function listAiCompanionMessages(sessionId) {
   return resolve(request.get(`/api/student/ai-companion/sessions/${sessionId}/messages`))
 }
+
+export function clearAiCompanionConversations() {
+  return resolve(request.delete('/api/student/ai-companion/sessions'))
+}

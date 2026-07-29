@@ -1,9 +1,10 @@
 <script setup>
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
-import { ChatDotRound, MagicStick, Plus, Promotion, User } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { ChatDotRound, Clock, Delete, DocumentChecked, MagicStick, Opportunity, Plus, Promotion, RefreshRight, User } from '@element-plus/icons-vue'
 import {
   createAiCompanionSession,
+  clearAiCompanionConversations,
   getAiCompanionContext,
   listAiCompanionMessages,
   listAiCompanionSessions,
@@ -27,8 +28,10 @@ const thinkingHint = ref('正在读取课程上下文...')
 const thinkingTimers = []
 const loadingConversation = ref(false)
 const messageListRef = ref(null)
+const inputRef = ref(null)
 const sessionId = ref(null)
 const serverContext = ref(null)
+const sessions = ref([])
 
 const context = computed(() => ({
   course: serverContext.value?.courseTitle || props.courseTitle || '当前课程',
@@ -37,6 +40,7 @@ const context = computed(() => ({
   progress: Math.max(0, Math.min(100, Number(serverContext.value?.progress ?? props.progress ?? 0))),
   courseIntro: serverContext.value?.courseIntro || '',
   nextChapter: serverContext.value?.nextChapterTitle || '',
+  suggestions: serverContext.value?.personalizedSuggestions || [],
 }))
 
 function createWelcomeMessage(content = '你好，我会结合你正在学习的课程、章节和资源提供学习帮助。') {
@@ -50,6 +54,9 @@ const generationLabel = computed(() => {
   if (latest?.generationMode === 'MODEL') return '真实模型'
   if (latest?.generationMode === 'SAFETY_BLOCKED') return '安全拦截'
   if (latest?.generationMode === 'FALLBACK') return '演示回退'
+  if (latest?.generationMode === 'MODEL_TIMEOUT') return '模型回答超时'
+  if (latest?.generationMode === 'MODEL_UNAVAILABLE') return '模型暂不可用'
+  if (latest?.generationMode === 'MODEL_DISABLED') return '模型未启用'
   return '后端生成'
 })
 
@@ -126,6 +133,56 @@ function sendMessage(text = input.value) {
   })
 }
 
+function renderMessage(content = '') {
+  const escaped = String(content)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+  return escaped
+    .replace(/^### (.+)$/gm, '<h4>$1</h4>')
+    .replace(/^## (.+)$/gm, '<h3>$1</h3>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/^- (.+)$/gm, '<li>$1</li>')
+    .replace(/\n/g, '<br>')
+}
+
+function continueAsking(message) {
+  input.value = '请结合刚才的回答，再具体解释一下：'
+  nextTick(() => inputRef.value?.focus())
+}
+
+function regenerateAnswer(message) {
+  const messageIndex = messages.value.findIndex((item) => item.id === message.id)
+  const previousQuestion = [...messages.value.slice(0, messageIndex)]
+    .reverse()
+    .find((item) => item.role === 'user')?.content
+  if (!previousQuestion) {
+    ElMessage.info('没有找到可以重新生成的问题')
+    return
+  }
+  sendMessage(previousQuestion)
+}
+
+function sessionLabel(session) {
+  const time = session.lastMessageTime || session.updateTime || session.createTime
+  return `${session.title || '学习对话'}${time ? ` · ${String(time).slice(5, 16)}` : ''}`
+}
+
+async function switchConversation(id) {
+  if (!id || id === sessionId.value || thinking.value) return
+  loadingConversation.value = true
+  try {
+    sessionId.value = id
+    const storedMessages = await listAiCompanionMessages(id)
+    messages.value = storedMessages?.length ? mapServerMessages(storedMessages) : [createWelcomeMessage()]
+    scrollToBottom()
+  } catch (error) {
+    ElMessage.error(error?.message || '加载历史对话失败')
+  } finally {
+    loadingConversation.value = false
+  }
+}
+
 onUnmounted(() => {
   clearThinkingTimers()
 })
@@ -149,6 +206,9 @@ function generationLabelFor(message) {
   }
   if (message.generationMode === 'SAFETY_BLOCKED') return '安全拦截'
   if (message.generationMode === 'FALLBACK') return '演示回退'
+  if (message.generationMode === 'MODEL_TIMEOUT') return '模型回答超时'
+  if (message.generationMode === 'MODEL_UNAVAILABLE') return '模型暂不可用'
+  if (message.generationMode === 'MODEL_DISABLED') return '模型未启用'
   return '后端生成'
 }
 
@@ -165,7 +225,7 @@ async function loadConversation() {
   if (!props.courseId || loadingConversation.value) return
   loadingConversation.value = true
   try {
-    const [contextData, sessions] = await Promise.all([
+    const [contextData, sessionList] = await Promise.all([
       getAiCompanionContext(
         props.courseId,
         Number(props.chapterId) || undefined,
@@ -174,13 +234,15 @@ async function loadConversation() {
       listAiCompanionSessions(props.courseId),
     ])
     serverContext.value = contextData
-    let session = sessions?.[0]
+    sessions.value = sessionList || []
+    let session = sessions.value[0]
     if (!session) {
       session = await createAiCompanionSession({
         courseId: Number(props.courseId),
         chapterId: Number(props.chapterId) || null,
         title: `${context.value.course}学习对话`,
       })
+      sessions.value = [session]
     }
     sessionId.value = session.id
     const storedMessages = await listAiCompanionMessages(session.id)
@@ -206,10 +268,35 @@ async function startNewConversation() {
       title: `${context.value.course}学习对话`,
     })
     sessionId.value = session.id
+    sessions.value = [session, ...sessions.value]
     messages.value = [createWelcomeMessage('新对话已创建。你可以继续询问当前课程内容。')]
     ElMessage.success('已新建智能学伴对话')
   } catch (error) {
     ElMessage.error(error?.message || '新建对话失败')
+  } finally {
+    loadingConversation.value = false
+  }
+}
+
+async function clearAllConversations() {
+  if (thinking.value || loadingConversation.value) return
+  try {
+    await ElMessageBox.confirm(
+      '这会删除你在智能学伴中的全部历史问答，删除后无法恢复。课程进度和课程资料不会受影响。',
+      '清空全部对话',
+      { confirmButtonText: '确认清空', cancelButtonText: '取消', type: 'warning' },
+    )
+    loadingConversation.value = true
+    await clearAiCompanionConversations()
+    sessions.value = []
+    sessionId.value = null
+    messages.value = [createWelcomeMessage('全部历史对话已清空。你可以开始一段新的学习对话。')]
+    await startNewConversation()
+    ElMessage.success('已清空全部智能学伴对话')
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') {
+      ElMessage.error(error?.message || '清空对话失败')
+    }
   } finally {
     loadingConversation.value = false
   }
@@ -258,6 +345,9 @@ watch([() => props.chapterId, () => props.resourceId], () => {
       </section>
 
       <div class="conversation-toolbar">
+        <span class="model-status" :class="{ busy: thinking }">
+          <i></i>{{ thinking ? '模型回答中' : generationLabel }}
+        </span>
         <span><el-icon><ChatDotRound /></el-icon>学习对话</span>
         <el-tooltip content="新建对话" placement="bottom">
           <el-button circle text aria-label="新建对话" :disabled="loadingConversation" @click="startNewConversation">
@@ -265,6 +355,27 @@ watch([() => props.chapterId, () => props.resourceId], () => {
           </el-button>
         </el-tooltip>
       </div>
+
+      <div v-if="sessions.length > 1" class="session-history">
+        <span><el-icon><Clock /></el-icon>历史对话</span>
+        <el-select :model-value="sessionId" size="small" :disabled="thinking || loadingConversation" @update:model-value="switchConversation">
+          <el-option v-for="session in sessions" :key="session.id" :label="sessionLabel(session)" :value="session.id" />
+        </el-select>
+      </div>
+
+      <section v-if="context.suggestions.length" class="personalized-suggestions" aria-label="个性化学习建议">
+        <div class="suggestions-heading"><el-icon><Opportunity /></el-icon><span>为你安排的下一步</span></div>
+        <button
+          v-for="suggestion in context.suggestions"
+          :key="`${suggestion.type}-${suggestion.title}`"
+          type="button"
+          :disabled="thinking || loadingConversation || !sessionId"
+          @click="sendMessage(suggestion.prompt)"
+        >
+          <strong>{{ suggestion.title }}</strong>
+          <span>{{ suggestion.description }}</span>
+        </button>
+      </section>
 
       <div ref="messageListRef" class="message-list">
         <article
@@ -277,13 +388,22 @@ watch([() => props.chapterId, () => props.resourceId], () => {
             <el-icon><User v-if="message.role === 'user'" /><MagicStick v-else /></el-icon>
           </span>
           <div class="message-content">
-            <p>{{ message.content }}</p>
+            <div v-if="message.role === 'assistant' && message.sourceSummary" class="source-card">
+              <el-icon><DocumentChecked /></el-icon>
+              <span>{{ message.sourceSummary }}</span>
+            </div>
+            <p v-html="renderMessage(message.content)"></p>
             <small v-if="message.role === 'assistant' && message.generationMode" class="generation-label">
               {{ generationLabelFor(message) }}<span v-if="message.responseTimeMs"> · {{ message.responseTimeMs }}ms</span>
             </small>
-            <small v-if="message.role === 'assistant' && message.sourceSummary" class="source-label">
-              参考来源：{{ message.sourceSummary }}
-            </small>
+            <div v-if="message.role === 'assistant' && message.generationMode" class="answer-actions">
+              <button type="button" :disabled="thinking" @click="regenerateAnswer(message)">
+                <el-icon><RefreshRight /></el-icon>重新生成
+              </button>
+              <button type="button" :disabled="thinking" @click="continueAsking(message)">
+                <el-icon><ChatDotRound /></el-icon>继续追问
+              </button>
+            </div>
           </div>
         </article>
         <article v-if="thinking" class="message-row assistant">
@@ -309,6 +429,7 @@ watch([() => props.chapterId, () => props.resourceId], () => {
 
       <form class="message-composer" @submit.prevent="sendMessage()">
         <el-input
+          ref="inputRef"
           v-model="input"
           type="textarea"
           :rows="2"
@@ -331,6 +452,13 @@ watch([() => props.chapterId, () => props.resourceId], () => {
           </el-button>
         </el-tooltip>
       </form>
+      <div class="conversation-clear-action">
+        <el-tooltip content="清空全部对话" placement="top">
+          <el-button circle text type="danger" aria-label="清空全部对话" :disabled="thinking || loadingConversation" @click="clearAllConversations">
+            <el-icon><Delete /></el-icon>
+          </el-button>
+        </el-tooltip>
+      </div>
     </div>
   </el-drawer>
 </template>
@@ -434,6 +562,117 @@ watch([() => props.chapterId, () => props.resourceId], () => {
   gap: 6px;
 }
 
+.model-status {
+  margin-left: auto;
+  color: #16856c;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.model-status i {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.model-status.busy {
+  color: #2468b1;
+}
+
+.model-status.busy i {
+  animation: status-pulse 800ms infinite alternate;
+}
+
+.session-history {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+  color: #65768b;
+  font-size: 11px;
+}
+
+.session-history > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.personalized-suggestions {
+  display: grid;
+  gap: 6px;
+  margin: 2px 0 7px;
+  padding: 10px;
+  border: 1px solid #d7e9df;
+  border-radius: 7px;
+  background: #f7fcf9;
+}
+
+.suggestions-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #28725e;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.personalized-suggestions button {
+  display: grid;
+  gap: 2px;
+  padding: 8px 9px;
+  border: 1px solid #d9ece2;
+  border-radius: 6px;
+  background: #fff;
+  color: #335d50;
+  cursor: pointer;
+  text-align: left;
+}
+
+.personalized-suggestions button:hover:not(:disabled) {
+  border-color: #8bc6ad;
+  background: #f1fbf5;
+}
+
+.personalized-suggestions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.personalized-suggestions strong {
+  font-size: 11px;
+}
+
+.personalized-suggestions button span {
+  color: #708b80;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.source-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  margin-bottom: 6px;
+  padding: 7px 9px;
+  border-left: 3px solid #71a9dc;
+  border-radius: 4px;
+  background: #f3f8fd;
+  color: #4c6d8b;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.source-card .el-icon {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: #2468b1;
+}
+
 .message-list {
   min-height: 180px;
   flex: 1;
@@ -484,6 +723,17 @@ watch([() => props.chapterId, () => props.resourceId], () => {
   white-space: pre-wrap;
 }
 
+.message-row p :deep(h3),
+.message-row p :deep(h4) {
+  margin: 0 0 8px;
+  color: #203a54;
+  font-size: 13px;
+}
+
+.message-row p :deep(li) {
+  margin-left: 16px;
+}
+
 .generation-label {
   display: block;
   margin-top: 5px;
@@ -491,12 +741,37 @@ watch([() => props.chapterId, () => props.resourceId], () => {
   font-size: 10px;
 }
 
-.source-label {
-  display: block;
-  margin-top: 3px;
-  color: #66809a;
+.answer-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 6px;
+}
+
+.answer-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 5px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #63819e;
+  cursor: pointer;
+  font: inherit;
   font-size: 10px;
-  line-height: 1.45;
+}
+
+.answer-actions button:hover:not(:disabled),
+.answer-actions button.selected {
+  background: #eef6fd;
+  color: #2468b1;
+}
+
+.answer-actions button:disabled {
+  cursor: default;
+  opacity: 0.65;
 }
 
 .message-row.safety-blocked p {
@@ -586,9 +861,26 @@ watch([() => props.chapterId, () => props.resourceId], () => {
   height: 40px;
 }
 
+.conversation-clear-action {
+  display: flex;
+  justify-content: flex-end;
+  min-height: 30px;
+  padding-top: 2px;
+}
+
+.conversation-clear-action .el-button {
+  width: 30px;
+  height: 30px;
+}
+
 @keyframes thinking {
   from { opacity: 0.3; transform: translateY(1px); }
   to { opacity: 1; transform: translateY(-1px); }
+}
+
+@keyframes status-pulse {
+  from { opacity: 0.45; }
+  to { opacity: 1; }
 }
 
 @media (max-width: 560px) {
