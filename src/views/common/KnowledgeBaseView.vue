@@ -225,6 +225,7 @@ provide('knowledgeBaseChat', {
   setComposerText,
   handleSend,
   copyMessageContent,
+  canReadMessage,
   toggleSources,
   openReferencePreview,
   canRewriteMessage,
@@ -1126,6 +1127,12 @@ function canRewriteMessage(item) {
     && item.id === latestUserMessageRowId.value
     && !currentConversationLoading.value
     && !editingMessageSubmitting.value
+}
+
+function canReadMessage(item) {
+  return item?.role === 'assistant'
+    && !item.loading
+    && item.id !== typingAssistantMessage.value?.id
 }
 
 function getPairedAssistantMessage(item) {

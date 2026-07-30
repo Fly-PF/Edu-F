@@ -124,6 +124,10 @@ export function deleteChatMessagePair(data) {
   }))
 }
 
+export function prepareSpeechText(content, signal) {
+  return resolve(request.post('/api/rag/chat/speech-text', { content }, { timeout: 120000, signal }))
+}
+
 export async function sendRagChatStream(data, onMessage) {
   const userStore = useUserStore()
   const formData = new FormData()

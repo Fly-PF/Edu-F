@@ -1,9 +1,11 @@
 <script setup>
-import { inject, nextTick, onMounted, ref } from 'vue'
+import { ElMessage } from 'element-plus'
+import { inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { MarkdownRenderer } from 'x-markdown-vue'
 import 'x-markdown-vue/style'
 import 'katex/dist/katex.min.css'
 import { ArrowDown, ArrowRight, Check, Close, CopyDocument, Delete, Edit, Plus } from '@element-plus/icons-vue'
+import { prepareSpeechText } from '@/api/rag'
 import KnowledgeBaseWelcome from './KnowledgeBaseWelcome.vue'
 
 const chatState = inject('knowledgeBaseChat')
@@ -28,6 +30,7 @@ const {
   setComposerText,
   handleSend,
   copyMessageContent,
+  canReadMessage,
   toggleSources,
   openReferencePreview,
   canRewriteMessage,
@@ -46,6 +49,83 @@ const {
 } = chatState
 
 const imageInputRef = ref(null)
+const readingMessageId = ref('')
+const processingMessageId = ref('')
+const speechTextCache = new Map()
+let speechRequestController = null
+
+function stopReading() {
+  speechRequestController?.abort()
+  speechRequestController = null
+  window.speechSynthesis.cancel()
+  readingMessageId.value = ''
+  processingMessageId.value = ''
+}
+
+function isReadingMessage(item) {
+  return readingMessageId.value === item.id
+}
+
+function isProcessingMessage(item) {
+  return processingMessageId.value === item.id
+}
+
+async function toggleReading(item) {
+  if (!canReadMessage(item)) {
+    return
+  }
+  if (isReadingMessage(item) || isProcessingMessage(item)) {
+    stopReading()
+    return
+  }
+
+  const markdown = String(item.content ?? '')
+  if (!markdown.trim()) {
+    return
+  }
+
+  stopReading()
+  const controller = new AbortController()
+  speechRequestController = controller
+  const cachedText = speechTextCache.get(item.id)
+  let waitingMessage
+  if (!cachedText) {
+    processingMessageId.value = item.id
+    waitingMessage = ElMessage.info({ message: '请您耐心等待朗读处理。', duration: 0 })
+  }
+  try {
+    const text = cachedText || await prepareSpeechText(markdown, controller.signal)
+    if (speechRequestController !== controller) {
+      return
+    }
+    const speechText = String(text ?? '').trim()
+    if (!speechText) {
+      throw new Error('朗读文本处理失败')
+    }
+    if (!cachedText) {
+      speechTextCache.set(item.id, speechText)
+    }
+    const utterance = new SpeechSynthesisUtterance(speechText)
+    utterance.lang = 'zh-CN'
+    utterance.onend = utterance.onerror = () => {
+      if (readingMessageId.value === item.id) {
+        readingMessageId.value = ''
+      }
+    }
+    readingMessageId.value = item.id
+    window.speechSynthesis.speak(utterance)
+  } catch (error) {
+    if (!controller.signal.aborted) {
+      ElMessage.error(error?.code === 'ECONNABORTED' ? '朗读文本处理超时' : error?.message || '朗读文本处理失败')
+    }
+  } finally {
+    waitingMessage?.close()
+    if (speechRequestController === controller) {
+      speechRequestController = null
+      processingMessageId.value = ''
+    }
+  }
+}
 
 function chooseImages() {
   imageInputRef.value?.click()
@@ -88,6 +168,10 @@ onMounted(async () => {
   await nextTick()
   scrollBubbleListToBottom(false)
 })
+
+watch(activeConversation, stopReading)
+
+onBeforeUnmount(stopReading)
 </script>
 
 <template>
@@ -222,17 +306,52 @@ onMounted(async () => {
                 </div>
 
                 <div v-if="!isEditingMessage(item)" class="message-actions">
-                  <button class="copy-button" type="button" @click.stop="copyMessageContent(item.content)">
-                    <el-icon><CopyDocument /></el-icon>
-                  </button>
-                  <button
-                    v-if="item.role === 'user' && canRewriteMessage(item) && !isEditingMessage(item)"
-                    class="edit-button"
-                    type="button"
-                    @click.stop="startMessageEdit(item)"
+                  <el-tooltip content="复制" placement="top">
+                    <button class="copy-button" type="button" @click.stop="copyMessageContent(item.content)">
+                      <el-icon><CopyDocument /></el-icon>
+                    </button>
+                  </el-tooltip>
+                  <el-tooltip
+                    v-if="item.role === 'assistant' && canReadMessage(item)"
+                    :content="isProcessingMessage(item) ? '取消处理' : isReadingMessage(item) ? '停止朗读' : '朗读'"
+                    placement="top"
                   >
-                    <el-icon><Edit /></el-icon>
-                  </button>
+                    <button
+                      class="copy-button read-button"
+                      :class="{ 'is-reading': isReadingMessage(item) || isProcessingMessage(item) }"
+                      type="button"
+                      :aria-label="isProcessingMessage(item) ? '取消处理' : isReadingMessage(item) ? '停止朗读' : '朗读'"
+                      @click.stop="toggleReading(item)"
+                    >
+                      <el-icon v-if="isProcessingMessage(item)">
+                        <svg class="speaker-icon" viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M11 5 6 9H2v6h4l5 4V5z" />
+                          <path d="m3 3 18 18" />
+                        </svg>
+                      </el-icon>
+                      <span v-else-if="isReadingMessage(item)" class="sound-wave" aria-hidden="true">
+                        <span class="sound-wave-bar"></span>
+                        <span class="sound-wave-bar"></span>
+                        <span class="sound-wave-bar"></span>
+                      </span>
+                      <el-icon v-else>
+                        <svg class="speaker-icon" viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M11 5 6 9H2v6h4l5 4V5z" />
+                          <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+                          <path d="M19 5a10 10 0 0 1 0 14" />
+                        </svg>
+                      </el-icon>
+                    </button>
+                  </el-tooltip>
+                  <el-tooltip v-if="item.role === 'user' && canRewriteMessage(item) && !isEditingMessage(item)" content="编辑" placement="top">
+                    <button
+                      class="edit-button"
+                      type="button"
+                      @click.stop="startMessageEdit(item)"
+                    >
+                      <el-icon><Edit /></el-icon>
+                    </button>
+                  </el-tooltip>
                   <el-tooltip v-if="item.role === 'user' && canDeleteMessage(item)" content="删除这组问答" placement="top">
                     <button
                       class="delete-button"
@@ -828,6 +947,57 @@ onMounted(async () => {
   background: #f8fbff;
   color: #2563eb;
   outline: none;
+}
+
+.read-button.is-reading {
+  border-color: #bfdbfe;
+  background: #f8fbff;
+  color: #2563eb;
+}
+
+.speaker-icon {
+  width: 1em;
+  height: 1em;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.sound-wave {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: 14px;
+  height: 14px;
+}
+
+.sound-wave-bar {
+  width: 2px;
+  height: 12px;
+  border-radius: 1px;
+  background: currentColor;
+  animation: sound-wave 0.75s ease-in-out infinite alternate;
+  transform-origin: center;
+}
+
+.sound-wave-bar:nth-child(1) {
+  animation-delay: -0.5s;
+}
+
+.sound-wave-bar:nth-child(2) {
+  animation-delay: -0.25s;
+}
+
+@keyframes sound-wave {
+  from {
+    transform: scaleY(0.35);
+  }
+
+  to {
+    transform: scaleY(1);
+  }
 }
 
 .composer-wrap {
