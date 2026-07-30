@@ -972,6 +972,7 @@ onBeforeUnmount(revokeCoverPreview)
 
 .upload-dialog-body {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
 }
 
