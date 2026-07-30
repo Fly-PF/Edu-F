@@ -25,6 +25,7 @@ const studentNavItems = [
 ]
 
 const teacherNavItems = [
+  { label: '安全检测', path: '/main/teacher/safety', roles: ['TEACHER'] },
   { label: '班级管理', path: '/main/teacher/classes', roles: ['TEACHER'] },
   { label: '课程管理', path: '/main/teacher/courses', roles: ['TEACHER'] },
 ]
@@ -57,7 +58,10 @@ const navItems = computed(() => {
   }
 
   if (['ADMIN', 'SUPERADMIN'].includes(userStore.roleCode)) {
-    items.push({ label: '管理', path: getAdminEntryPath(), roles: ['ADMIN', 'SUPERADMIN'] })
+    items.push(
+      { label: '安全治理', path: '/main/admin/safety', roles: ['ADMIN', 'SUPERADMIN'] },
+      { label: '人员管理', path: getAdminEntryPath(), roles: ['ADMIN', 'SUPERADMIN'] },
+    )
   }
 
   return items
@@ -74,8 +78,16 @@ const visibleTopNavItems = computed(() => {
 })
 
 const activePath = computed(() => {
+  if (route.path.startsWith('/main/admin/safety')) {
+    return '/main/admin/safety'
+  }
+
   if (route.path.startsWith('/main/admin')) {
     return getAdminEntryPath()
+  }
+
+  if (route.name === 'teacher-safety-workbench') {
+    return '/main/teacher/safety'
   }
 
   if (route.name === 'teacher-course-resources') {

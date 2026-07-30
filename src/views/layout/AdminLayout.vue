@@ -12,42 +12,31 @@ const userStore = useUserStore()
 const menuKey = ref(0)
 
 const personnelMenus = [
-  {
-    label: '管理人员',
-    path: '/main/admin/personnel/managers',
-    roles: ['SUPERADMIN'],
-  },
-  {
-    label: '教师人员',
-    path: '/main/admin/personnel/teachers',
-    roles: ['ADMIN', 'SUPERADMIN'],
-  },
-  {
-    label: '学生人员',
-    path: '/main/admin/personnel/students',
-    roles: ['ADMIN', 'SUPERADMIN'],
-  },
+  { label: '管理人员', path: '/main/admin/personnel/managers', roles: ['SUPERADMIN'] },
+  { label: '教师人员', path: '/main/admin/personnel/teachers', roles: ['ADMIN', 'SUPERADMIN'] },
+  { label: '学生人员', path: '/main/admin/personnel/students', roles: ['ADMIN', 'SUPERADMIN'] },
 ]
 
 const utilityMenus = [
-  {
-    label: '知识库问答',
-    path: '/main/knowledge-qa',
-    roles: ['ADMIN', 'SUPERADMIN'],
-  },
+  { label: '评测中心', path: '/main/admin/safety', roles: ['ADMIN', 'SUPERADMIN'] },
+  { label: '知识库问答', path: '/main/knowledge-qa', roles: ['ADMIN', 'SUPERADMIN'] },
 ]
 
-const visiblePersonnelMenus = computed(() => {
-  return personnelMenus.filter((item) => userStore.hasAnyRole(item.roles))
-})
+const visiblePersonnelMenus = computed(() =>
+  personnelMenus.filter((item) => userStore.hasAnyRole(item.roles)),
+)
 
-const visibleUtilityMenus = computed(() => {
-  return utilityMenus.filter((item) => userStore.hasAnyRole(item.roles))
-})
+const visibleUtilityMenus = computed(() =>
+  utilityMenus.filter((item) => userStore.hasAnyRole(item.roles)),
+)
 
 const activeMenu = computed(() => {
   if (route.path.startsWith('/main/admin/personnel/')) {
     return route.path
+  }
+
+  if (route.path.startsWith('/main/admin/safety')) {
+    return '/main/admin/safety'
   }
 
   if (route.path === '/main/knowledge-qa') {
@@ -65,6 +54,12 @@ watch(
     if (path.startsWith('/main/admin/personnel/')) {
       shellStore.openMenu('personnel')
       shellStore.setActiveMenu(path)
+      return
+    }
+
+    if (path.startsWith('/main/admin/safety')) {
+      shellStore.openMenu('utility')
+      shellStore.setActiveMenu('/main/admin/safety')
       return
     }
 
@@ -102,6 +97,10 @@ function handleSelect(index) {
     shellStore.openMenu('personnel')
   }
 
+  if (index.startsWith('/main/admin/safety')) {
+    shellStore.openMenu('utility')
+  }
+
   if (index === '/main/knowledge-qa') {
     shellStore.openMenu('utility')
   }
@@ -115,10 +114,10 @@ function handleSelect(index) {
   <el-container class="admin-shell">
     <el-aside width="232px" class="sidebar">
       <div class="brand-block">
-        <div class="brand-mark">M</div>
+        <div class="brand-mark">A</div>
         <div>
-          <div class="brand-name">管理端</div>
-          <div class="brand-subtitle">后台管理系统</div>
+          <div class="brand-name">安全后台</div>
+          <div class="brand-subtitle">AI 教育安全评测中心</div>
         </div>
       </div>
 
@@ -141,11 +140,7 @@ function handleSelect(index) {
             <template #title>
               <span>人员管理</span>
             </template>
-            <el-menu-item
-              v-for="item in visiblePersonnelMenus"
-              :key="item.path"
-              :index="item.path"
-            >
+            <el-menu-item v-for="item in visiblePersonnelMenus" :key="item.path" :index="item.path">
               {{ item.label }}
             </el-menu-item>
           </el-sub-menu>
@@ -229,8 +224,9 @@ function handleSelect(index) {
 
 .content-area {
   min-height: 0;
+  height: 100%;
   padding: 0;
-  overflow: hidden;
+  overflow: auto;
 }
 
 :deep(.el-menu-item.is-active) {

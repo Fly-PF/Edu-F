@@ -33,12 +33,24 @@ function isPublicRequest(config) {
   return isLoginRequest(config) || isRegisterRequest(config) || isPublicCourseRequest(config)
 }
 
+function formatBearerToken(token) {
+  if (!token) {
+    return ''
+  }
+
+  return token.startsWith('Bearer ') ? token : `Bearer ${token}`
+}
+
 function redirectToLogin() {
   import('@/router').then(({ default: router }) => {
     if (router.currentRoute.value.path !== '/login') {
       router.replace('/login')
     }
   })
+}
+
+function isTimeoutError(error) {
+  return error?.code === 'ECONNABORTED' || String(error?.message || '').includes('timeout')
 }
 
 function handleAuthExpired(message = '登录状态已失效，请重新登录') {
@@ -63,7 +75,7 @@ instance.interceptors.request.use(
     }
 
     if (!isLoginRequest(config) && userStore.token) {
-      config.headers['Authorization'] = `${userStore.token}`
+      config.headers['Authorization'] = formatBearerToken(userStore.token)
     } else {
       delete config.headers['Authorization']
     }
@@ -88,6 +100,10 @@ instance.interceptors.response.use(
   function (error) {
     if (authExpiredCodes.includes(Number(error?.response?.status))) {
       return handleAuthExpired(error?.response?.data?.message)
+    }
+
+    if (isTimeoutError(error)) {
+      return Promise.reject(new Error('后端处理时间较长，请稍后重试或减少本次检测内容'))
     }
 
     return Promise.reject(error)

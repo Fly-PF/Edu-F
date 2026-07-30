@@ -8,7 +8,7 @@ function getAdminEntryPath(roleCode) {
 }
 
 function getTeacherEntryPath() {
-  return '/main/teacher/classes'
+  return '/main/teacher/safety'
 }
 
 function getStudentEntryPath() {
@@ -16,22 +16,22 @@ function getStudentEntryPath() {
 }
 
 function getMainEntryPath(userStore) {
-  if (userStore.roleCode === 'STUDENT') {
-    return getStudentEntryPath()
+  if (['ADMIN', 'SUPERADMIN'].includes(userStore.roleCode)) {
+    return '/main/admin/safety'
   }
 
   if (userStore.roleCode === 'TEACHER') {
     return getTeacherEntryPath()
   }
 
-  if (['ADMIN', 'SUPERADMIN'].includes(userStore.roleCode)) {
-    return getAdminEntryPath(userStore.roleCode)
+  if (userStore.roleCode === 'STUDENT') {
+    return getStudentEntryPath()
   }
 
   return '/main/home'
 }
 
-const publicRouteNames = new Set(['main-home', 'course-list', 'login', 'register'])
+const publicRouteNames = new Set(['main-home', 'login', 'register'])
 
 const personnelRoutes = [
   {
@@ -67,6 +67,15 @@ const personnelRoutes = [
 ]
 
 const teacherRoutes = [
+  {
+    path: 'teacher/safety',
+    name: 'teacher-safety-workbench',
+    component: () => import('@/views/teacher/TeacherStudentSafetyReview.vue'),
+    meta: {
+      title: '教师学生内容审核',
+      allowedRoles: ['TEACHER'],
+    },
+  },
   {
     path: 'teacher/classes',
     name: 'teacher-classes',
@@ -149,7 +158,7 @@ const router = createRouter({
   routes: [
     {
       path: '/',
-      redirect: '/main/home',
+      redirect: '/main/admin/safety',
     },
     {
       path: '/login',
@@ -168,15 +177,20 @@ const router = createRouter({
       },
     },
     {
+      path: '/safety',
+      name: 'safety-cockpit',
+      redirect: '/main/admin/safety',
+    },
+    {
       path: '/main',
       name: 'main',
       component: () => import('@/views/layout/MainView.vue'),
-      redirect: '/main/home',
+      redirect: '/main/admin/safety',
       children: [
         {
           path: 'home',
           name: 'main-home',
-          component: () => import('@/views/common/PublicHomeView.vue'),
+          redirect: '/main/admin/safety',
         },
         {
           path: 'knowledge-qa',
@@ -229,11 +243,22 @@ const router = createRouter({
           path: 'admin',
           name: 'main-admin',
           component: () => import('@/views/layout/AdminLayout.vue'),
-          redirect: () => getAdminEntryPath(useUserStore().roleCode),
+          redirect: '/main/admin/safety',
           meta: {
             allowedRoles: ['ADMIN', 'SUPERADMIN'],
           },
-          children: personnelRoutes,
+          children: [
+            {
+              path: 'safety',
+              name: 'admin-safety-cockpit',
+              component: () => import('@/views/safety/SafetyCockpitView.vue'),
+              meta: {
+                title: 'AI 鏁欒偛瀹夊叏璇勬祴涓績',
+                allowedRoles: ['ADMIN', 'SUPERADMIN'],
+              },
+            },
+            ...personnelRoutes,
+          ],
         },
       ],
     },
@@ -251,7 +276,7 @@ const router = createRouter({
     },
     {
       path: '/:pathMatch(.*)*',
-      redirect: '/main/home',
+      redirect: '/main/admin/safety',
     },
   ],
 })
