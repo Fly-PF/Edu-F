@@ -32,7 +32,7 @@ const personnelMenus = [
 const utilityMenus = [
   {
     label: '知识库问答',
-    path: '/main/knowledge-qa',
+    path: '/main/knowledge-qa/chat',
     roles: ['ADMIN', 'SUPERADMIN'],
   },
 ]
@@ -50,8 +50,8 @@ const activeMenu = computed(() => {
     return route.path
   }
 
-  if (route.path === '/main/knowledge-qa') {
-    return route.path
+  if (route.path.startsWith('/main/knowledge-qa')) {
+    return '/main/knowledge-qa/chat'
   }
 
   return ''
@@ -68,9 +68,9 @@ watch(
       return
     }
 
-    if (path === '/main/knowledge-qa') {
+    if (path.startsWith('/main/knowledge-qa')) {
       shellStore.openMenu('utility')
-      shellStore.setActiveMenu(path)
+      shellStore.setActiveMenu('/main/knowledge-qa/chat')
       return
     }
 
@@ -102,7 +102,7 @@ function handleSelect(index) {
     shellStore.openMenu('personnel')
   }
 
-  if (index === '/main/knowledge-qa') {
+  if (index.startsWith('/main/knowledge-qa')) {
     shellStore.openMenu('utility')
   }
 
