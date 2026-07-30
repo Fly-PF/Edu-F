@@ -31,7 +31,7 @@ function getMainEntryPath(userStore) {
   return '/main/home'
 }
 
-const publicRouteNames = new Set(['main-home', 'course-list', 'login', 'register'])
+const publicRouteNames = new Set(['main-home', 'course-list', 'knowledge-base-show', 'knowledge-base-more', 'login', 'register'])
 
 const personnelRoutes = [
   {
@@ -67,6 +67,15 @@ const personnelRoutes = [
 ]
 
 const teacherRoutes = [
+  {
+    path: 'teacher/practice-review',
+    name: 'teacher-practice-review',
+    component: () => import('@/views/teacher/TeacherPracticeReview.vue'),
+    meta: {
+      title: '教师练习批改',
+      allowedRoles: ['TEACHER'],
+    },
+  },
   {
     path: 'teacher/classes',
     name: 'teacher-classes',
@@ -106,6 +115,24 @@ const teacherRoutes = [
 ]
 
 const studentRoutes = [
+  {
+    path: 'student/practices',
+    name: 'student-practices',
+    component: () => import('@/views/student/StudentPracticeCenter.vue'),
+    meta: {
+      title: '学生学习练习',
+      allowedRoles: ['STUDENT'],
+    },
+  },
+  {
+    path: 'student/practices/:practiceId',
+    name: 'student-practice-take',
+    component: () => import('@/views/student/StudentPracticeTake.vue'),
+    meta: {
+      title: '学生练习作答',
+      allowedRoles: ['STUDENT'],
+    },
+  },
   {
     path: 'student/classes',
     name: 'student-classes',
@@ -229,11 +256,96 @@ const router = createRouter({
           component: () => import('@/views/common/PublicHomeView.vue'),
         },
         {
+          path: 'knowledge-qa/show',
+          name: 'knowledge-base-show',
+          component: () => import('@/views/common/KnowledgeBaseShowView.vue'),
+          meta: {
+            title: '知识库',
+          },
+        },
+        {
+          path: 'knowledge-qa/more',
+          name: 'knowledge-base-more',
+          component: () => import('@/views/common/KnowledgeBaseMoreView.vue'),
+          meta: {
+            title: '公开知识库',
+          },
+        },
+        {
+          path: 'knowledge-qa/preview',
+          name: 'knowledge-base-preview',
+          component: () => import('@/views/common/KnowledgeBasePreviewView.vue'),
+          meta: {
+            title: '文件预览',
+          },
+        },
+        {
           path: 'knowledge-qa',
           name: 'knowledge-qa',
-          component: () => import('@/views/common/KnowledgeBaseChatView.vue'),
+          component: () => import('@/views/common/KnowledgeBaseView.vue'),
+          redirect: '/main/knowledge-qa/chat',
           meta: {
             title: '知识库问答',
+          },
+          children: [
+            {
+              path: 'chat',
+              name: 'knowledge-base-chat',
+              component: () => import('@/views/common/KnowledgeBaseChatView.vue'),
+              meta: {
+                title: '知识库问答',
+              },
+            },
+            {
+              path: 'create',
+              name: 'knowledge-base-create',
+              component: () => import('@/views/common/KnowledgeBaseCreateView.vue'),
+              meta: {
+                title: '新建知识库',
+              },
+            },
+            {
+              path: 'my',
+              name: 'knowledge-base-my',
+              component: () => import('@/views/common/KnowledgeBaseMyView.vue'),
+              meta: {
+                title: '我的知识库',
+              },
+            },
+            {
+              path: 'collection',
+              name: 'knowledge-base-collection',
+              component: () => import('@/views/common/KnowledgeBaseCollectionView.vue'),
+              meta: {
+                title: '知识库收藏',
+              },
+            },
+            {
+              path: 'modify',
+              name: 'knowledge-base-modify',
+              component: () => import('@/views/common/KnowledgeBaseModifyView.vue'),
+              meta: {
+                title: '编辑知识库',
+              },
+            },
+            {
+              path: 'file-show',
+              name: 'knowledge-base-file-show',
+              component: () => import('@/views/common/KnowledgeBaseFileShowView.vue'),
+              meta: {
+                title: '文件预览',
+              },
+            },
+          ],
+        },
+        {
+          path: 'practice',
+          name: 'learning-practice',
+          redirect: () => (useUserStore().roleCode === 'TEACHER'
+            ? '/main/teacher/practice-review'
+            : '/main/student/practices'),
+          meta: {
+            allowedRoles: ['STUDENT', 'TEACHER'],
           },
         },
         {
@@ -339,6 +451,34 @@ const router = createRouter({
       path: '/tools',
       component: () => import('@/views/layout/MainView.vue'),
       children: toolRoutes,
+    },
+    {
+      path: '/knowledge-qa/chat',
+      redirect: '/main/knowledge-qa/chat',
+    },
+    {
+      path: '/knowledge-qa/show',
+      redirect: '/main/knowledge-qa/show',
+    },
+    {
+      path: '/knowledge-qa/more',
+      redirect: (to) => ({ path: '/main/knowledge-qa/more', query: to.query }),
+    },
+    {
+      path: '/knowledge-qa/collection',
+      redirect: '/main/knowledge-qa/collection',
+    },
+    {
+      path: '/knowledge-qa/modify',
+      redirect: (to) => ({ path: '/main/knowledge-qa/modify', query: to.query }),
+    },
+    {
+      path: '/knowledge-qa/file-show',
+      redirect: (to) => ({ path: '/main/knowledge-qa/file-show', query: to.query }),
+    },
+    {
+      path: '/knowledge-qa/preview',
+      redirect: (to) => ({ path: '/main/knowledge-qa/preview', query: to.query }),
     },
     {
       path: '/personnel/managers',

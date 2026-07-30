@@ -21,11 +21,13 @@ const userTypeMap = {
 }
 
 const studentNavItems = [
+  { label: '学习练习', path: '/main/practice', roles: ['STUDENT'] },
   { label: '班级', path: '/main/student/classes', roles: ['STUDENT'] },
   { label: 'AI展馆', path: '/main/ai-exhibit', roles: ['STUDENT'] },
 ]
 
 const teacherNavItems = [
+  { label: '学习练习', path: '/main/practice', roles: ['TEACHER'] },
   { label: '班级管理', path: '/main/teacher/classes', roles: ['TEACHER'] },
   { label: '课程管理', path: '/main/teacher/courses', roles: ['TEACHER'] },
   { label: 'AI展馆', path: '/main/ai-exhibit', roles: ['TEACHER'] },
@@ -45,7 +47,7 @@ const navItems = computed(() => {
     },
     {
       label: '知识库',
-      path: '/main/knowledge-qa',
+      path: '/main/knowledge-qa/show',
       roles: [],
     },
     {
@@ -81,7 +83,7 @@ const visibleTopNavItems = computed(() => {
   }
 
   return navItems.value.filter(
-    (item) => !['/main/home', '/main/courses', '/main/knowledge-qa'].includes(item.path),
+    (item) => !['/main/home', '/main/courses', '/main/knowledge-qa/show'].includes(item.path),
   )
 })
 
@@ -94,8 +96,12 @@ const activePath = computed(() => {
     return '/main/teacher/courses'
   }
 
-  if (route.name === 'knowledge-qa') {
-    return '/main/knowledge-qa'
+  if (route.path.startsWith('/main/knowledge-qa')) {
+    return '/main/knowledge-qa/show'
+  }
+
+  if (['learning-practice', 'student-practices', 'student-practice-take', 'teacher-practice-review'].includes(route.name)) {
+    return '/main/practice'
   }
 
   if (route.name === 'teacher-class-detail') {

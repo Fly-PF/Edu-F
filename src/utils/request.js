@@ -29,8 +29,21 @@ function isPublicCourseRequest(config) {
   )
 }
 
+function isPublicKnowledgeBaseRequest(config) {
+  const method = (config?.method || 'get').toLowerCase()
+  const url = String(config?.url || '').split('?')[0]
+
+  return (
+    method === 'get' &&
+    (/^\/api\/rag\/kb\/public$/.test(url) ||
+      /^\/api\/rag\/kb\/public\/page$/.test(url) ||
+      /^\/api\/rag\/kb\/public\/documents$/.test(url) ||
+      /^\/api\/rag\/kb\/cover$/.test(url))
+  )
+}
+
 function isPublicRequest(config) {
-  return isLoginRequest(config) || isRegisterRequest(config) || isPublicCourseRequest(config)
+  return isLoginRequest(config) || isRegisterRequest(config) || isPublicCourseRequest(config) || isPublicKnowledgeBaseRequest(config)
 }
 
 function redirectToLogin() {
