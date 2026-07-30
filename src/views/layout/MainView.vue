@@ -83,7 +83,7 @@ const visibleTopNavItems = computed(() => {
   }
 
   return navItems.value.filter(
-    (item) => !['/main/home', '/main/courses', '/main/knowledge-qa/show'].includes(item.path),
+    (item) => !['/main/knowledge-qa/show'].includes(item.path),
   )
 })
 

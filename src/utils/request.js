@@ -29,6 +29,16 @@ function isPublicCourseRequest(config) {
   )
 }
 
+function isPublicCatalogRequest(config) {
+  const method = (config?.method || 'get').toLowerCase()
+  const url = String(config?.url || '').split('?')[0]
+
+  return (
+    method === 'get' &&
+    (/^\/api\/course-categories(?:\/tags)?$/.test(url))
+  )
+}
+
 function isPublicKnowledgeBaseRequest(config) {
   const method = (config?.method || 'get').toLowerCase()
   const url = String(config?.url || '').split('?')[0]
@@ -43,7 +53,7 @@ function isPublicKnowledgeBaseRequest(config) {
 }
 
 function isPublicRequest(config) {
-  return isLoginRequest(config) || isRegisterRequest(config) || isPublicCourseRequest(config) || isPublicKnowledgeBaseRequest(config)
+  return isLoginRequest(config) || isRegisterRequest(config) || isPublicCourseRequest(config) || isPublicCatalogRequest(config) || isPublicKnowledgeBaseRequest(config)
 }
 
 function redirectToLogin() {
