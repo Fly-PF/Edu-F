@@ -68,6 +68,15 @@ const personnelRoutes = [
 
 const teacherRoutes = [
   {
+    path: 'teacher/practice-review',
+    name: 'teacher-practice-review',
+    component: () => import('@/views/teacher/TeacherPracticeReview.vue'),
+    meta: {
+      title: '教师练习批改',
+      allowedRoles: ['TEACHER'],
+    },
+  },
+  {
     path: 'teacher/classes',
     name: 'teacher-classes',
     component: () => import('@/views/teacher/TeacherClassManage.vue'),
@@ -106,6 +115,24 @@ const teacherRoutes = [
 ]
 
 const studentRoutes = [
+  {
+    path: 'student/practices',
+    name: 'student-practices',
+    component: () => import('@/views/student/StudentPracticeCenter.vue'),
+    meta: {
+      title: '学生学习练习',
+      allowedRoles: ['STUDENT'],
+    },
+  },
+  {
+    path: 'student/practices/:practiceId',
+    name: 'student-practice-take',
+    component: () => import('@/views/student/StudentPracticeTake.vue'),
+    meta: {
+      title: '学生练习作答',
+      allowedRoles: ['STUDENT'],
+    },
+  },
   {
     path: 'student/classes',
     name: 'student-classes',
@@ -260,6 +287,16 @@ const router = createRouter({
               },
             },
           ],
+        },
+        {
+          path: 'practice',
+          name: 'learning-practice',
+          redirect: () => (useUserStore().roleCode === 'TEACHER'
+            ? '/main/teacher/practice-review'
+            : '/main/student/practices'),
+          meta: {
+            allowedRoles: ['STUDENT', 'TEACHER'],
+          },
         },
         {
           path: 'profile',
