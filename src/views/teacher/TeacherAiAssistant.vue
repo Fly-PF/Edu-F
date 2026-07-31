@@ -674,6 +674,11 @@ onMounted(loadCourses)
             <span class="hero-chip"><EditPen /> 智能批改</span>
             <span class="hero-chip"><MagicStick /> 学情分析</span>
           </div>
+          <div class="hero-lab-strip" aria-label="AI鎺㈢储涔愬洯">
+            <span>AI鎺㈢储涔愬洯</span>
+            <span>娴矇钃濊惀鏋勭瓚</span>
+            <span>璇惧墠澶囪 · 璇惧悗鎵规敼 · 瀛︽儏鍒嗘瀽</span>
+          </div>
           <div class="hero-metric-strip">
             <article v-for="item in heroFeatureCards" :key="item.label" class="hero-metric-card">
               <span>{{ item.label }}</span>
@@ -4390,6 +4395,452 @@ onMounted(loadCourses)
 
   .overview-stat-card strong {
     white-space: normal;
+  }
+}
+
+.ai-assistant-page {
+  --brand: #8b5cf6;
+  --brand-strong: #6d28d9;
+  --brand-soft: #f5f3ff;
+  --brand-line: #e9ddff;
+  --text-primary: #281c3a;
+  --text-secondary: #645b79;
+  --text-muted: #8a819b;
+  --border-soft: rgba(134, 108, 190, 0.16);
+  --surface: rgba(255, 255, 255, 0.92);
+  position: relative;
+  background:
+    linear-gradient(rgba(139, 92, 246, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(236, 72, 153, 0.04) 1px, transparent 1px),
+    radial-gradient(circle at 14% 10%, rgb(139 92 246 / 12%), transparent 22%),
+    radial-gradient(circle at 84% 14%, rgb(52 211 153 / 14%), transparent 20%),
+    radial-gradient(circle at 74% 78%, rgb(251 191 36 / 14%), transparent 18%),
+    linear-gradient(180deg, #fbf9ff 0%, #f8fbff 48%, #fffdf6 100%);
+  background-size: 28px 28px, 28px 28px, auto, auto, auto, auto;
+}
+
+.ai-assistant-page::before,
+.ai-assistant-page::after {
+  position: fixed;
+  z-index: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  content: '';
+}
+
+.ai-assistant-page::before {
+  top: 48px;
+  right: 5vw;
+  width: 220px;
+  height: 220px;
+  background: radial-gradient(circle, rgb(236 72 153 / 12%), rgb(236 72 153 / 0%) 68%);
+}
+
+.ai-assistant-page::after {
+  bottom: 4vh;
+  left: 4vw;
+  width: 260px;
+  height: 260px;
+  background: radial-gradient(circle, rgb(52 211 153 / 10%), rgb(52 211 153 / 0%) 70%);
+}
+
+.ai-assistant-page > * {
+  position: relative;
+  z-index: 1;
+}
+
+.workspace-hero,
+.overview-band,
+.teaching-loop-band,
+.workspace-card {
+  border-color: rgba(139, 92, 246, 0.12);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 75%) inset,
+    0 14px 30px rgb(109 40 217 / 7%);
+}
+
+.workspace-hero {
+  padding: 18px 20px;
+  overflow: hidden;
+  background:
+    linear-gradient(135deg, rgb(255 255 255 / 92%), rgb(247 241 255 / 92%)),
+    #fff;
+}
+
+.workspace-hero::before {
+  top: -52px;
+  right: -42px;
+  width: 180px;
+  height: 180px;
+  background: radial-gradient(circle, rgb(139 92 246 / 16%), rgb(139 92 246 / 0%) 68%);
+}
+
+.workspace-hero::after {
+  bottom: -70px;
+  left: 52%;
+  width: 220px;
+  height: 220px;
+  background: radial-gradient(circle, rgb(251 191 36 / 14%), rgb(251 191 36 / 0%) 72%);
+}
+
+.hero-icon-shell {
+  background: linear-gradient(135deg, rgb(236 72 153 / 16%), rgb(139 92 246 / 16%));
+  color: #7c3aed;
+}
+
+.hero-kicker {
+  background: rgb(139 92 246 / 10%);
+  color: var(--brand-strong);
+}
+
+.hero-copy h1 {
+  font-size: 24px;
+}
+
+.hero-chip-row {
+  gap: 8px;
+}
+
+.hero-chip,
+.hero-lab-strip span {
+  border: 1px solid rgba(139, 92, 246, 0.14);
+  background: rgba(255, 255, 255, 0.82);
+  color: #48355f;
+  box-shadow: 0 1px 0 rgb(255 255 255 / 72%) inset;
+  white-space: nowrap;
+}
+
+.hero-chip:nth-child(1) {
+  background: rgb(236 72 153 / 10%);
+}
+
+.hero-chip:nth-child(2) {
+  background: rgb(139 92 246 / 10%);
+}
+
+.hero-chip:nth-child(3) {
+  background: rgb(52 211 153 / 10%);
+}
+
+.hero-chip :deep(svg) {
+  color: var(--brand-strong);
+}
+
+.hero-lab-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.hero-lab-strip span:nth-child(1) {
+  background: rgb(139 92 246 / 12%);
+  color: var(--brand-strong);
+}
+
+.hero-lab-strip span:nth-child(2) {
+  background: rgb(52 211 153 / 12%);
+  color: #117a5d;
+}
+
+.hero-lab-strip span:nth-child(3) {
+  background: rgb(251 191 36 / 15%);
+  color: #8b5a00;
+}
+
+.overview-band {
+  margin-bottom: 16px;
+  padding: 20px 22px;
+}
+
+.overview-band__eyebrow {
+  color: #7c3aed;
+}
+
+.overview-stat-card:nth-child(1) {
+  background: linear-gradient(180deg, rgb(255 255 255 / 96%), rgb(247 243 255 / 90%));
+}
+
+.overview-stat-card:nth-child(2) {
+  background: linear-gradient(180deg, rgb(255 255 255 / 96%), rgb(244 255 249 / 90%));
+}
+
+.overview-stat-card:nth-child(3) {
+  background: linear-gradient(180deg, rgb(255 255 255 / 96%), rgb(246 250 255 / 90%));
+}
+
+.overview-stat-card:nth-child(4) {
+  background: linear-gradient(180deg, rgb(255 255 255 / 96%), rgb(255 250 235 / 92%));
+}
+
+.assistant-tabs :deep(.el-tabs__item.is-active .tab-switch-card) {
+  border-color: rgba(139, 92, 246, 0.42);
+  background: linear-gradient(135deg, rgb(255 255 255 / 100%), rgb(247 241 255 / 94%));
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 92%) inset,
+    0 14px 30px rgb(109 40 217 / 12%);
+  transform: translateY(-2px);
+}
+
+.assistant-tabs :deep(.el-tabs__item:hover .tab-switch-card) {
+  border-color: rgba(236, 72, 153, 0.24);
+  transform: translateY(-1px);
+}
+
+.tab-switch-card {
+  min-width: 260px;
+  border-color: rgba(139, 92, 246, 0.12);
+}
+
+.tab-switch-card__icon {
+  border-radius: 6px;
+  background: linear-gradient(135deg, rgb(139 92 246 / 14%), rgb(236 72 153 / 14%));
+  color: var(--brand-strong);
+}
+
+.assistant-workspace {
+  gap: 20px;
+}
+
+.input-panel,
+.result-panel {
+  padding: 22px;
+}
+
+.panel-heading {
+  padding-bottom: 14px;
+  border-bottom-color: rgba(139, 92, 246, 0.12);
+}
+
+.panel-index,
+.block-step,
+.ability-band__card span,
+.teaching-loop-step span,
+.timeline-marker__index,
+.lesson-module-card__index,
+.exercise-card__index,
+.rubric-card__index,
+.grading-workflow-step span,
+.result-hero-card__label,
+.timeline-card__eyebrow,
+.timeline-time-pill,
+.grading-entry-pill,
+.hero-state-pill,
+.hero-lab-strip span {
+  border-radius: 999px;
+}
+
+.workspace-hero__side {
+  gap: 12px;
+}
+
+.hero-side-card--primary {
+  border-color: rgba(139, 92, 246, 0.16);
+  background: linear-gradient(180deg, rgb(255 255 255 / 94%), rgb(248 243 255 / 92%));
+}
+
+.hero-side-card__title-row em {
+  background: rgb(139 92 246 / 10%);
+  color: var(--brand-strong);
+}
+
+.ability-band,
+.grading-entry-card,
+.result-hero-card,
+.lesson-module-card,
+.timeline-card,
+.exercise-card,
+.rubric-card,
+.dimension-card,
+.metric-card,
+.insight-card,
+.insight-recommend-card,
+.feedback-card,
+.answer-card,
+.grading-workflow-band,
+.grading-capability-card,
+.result-surface,
+.result-preview-card,
+.activity-card,
+.lesson-flow-step {
+  border-color: rgba(139, 92, 246, 0.12);
+  border-radius: 6px;
+  background: linear-gradient(180deg, rgb(255 255 255 / 97%), rgb(251 249 255 / 93%));
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 82%) inset,
+    0 10px 24px rgb(109 40 217 / 7%);
+}
+
+.hero-workflow-step,
+.ability-band__card,
+.teaching-loop-step,
+.grading-workflow-step,
+.grading-capability-card,
+.lesson-module-card,
+.timeline-card,
+.exercise-card,
+.rubric-card,
+.dimension-card,
+.result-surface,
+.answer-card,
+.result-preview-card,
+.feedback-card,
+.insight-card,
+.insight-recommend-card,
+.activity-card {
+  border-color: rgba(139, 92, 246, 0.12);
+}
+
+.hero-workflow-step span,
+.ability-band__card span,
+.teaching-loop-step span,
+.timeline-marker__index,
+.lesson-module-card__index,
+.exercise-card__index,
+.rubric-card__index,
+.grading-workflow-step span,
+.panel-index,
+.block-step {
+  background: linear-gradient(135deg, rgb(236 72 153 / 12%), rgb(139 92 246 / 12%));
+  color: var(--brand-strong);
+}
+
+.grading-entry-card {
+  background: linear-gradient(180deg, rgb(255 255 255 / 94%), rgb(248 255 252 / 92%));
+}
+
+.lesson-module-card--featured {
+  background: linear-gradient(180deg, rgb(255 255 255 / 96%), rgb(249 245 255 / 94%));
+}
+
+.result-state,
+.grading-workflow-band,
+.result-surface,
+.answer-card,
+.result-preview-card {
+  background: linear-gradient(180deg, rgb(255 255 255 / 96%), rgb(251 249 255 / 92%));
+}
+
+.result-state--loading {
+  background:
+    radial-gradient(circle at top, rgb(139 92 246 / 8%), rgb(139 92 246 / 0%) 34%),
+    linear-gradient(180deg, rgb(255 255 255 / 98%), rgb(250 247 255 / 96%));
+}
+
+.loading-badge,
+.generation-status.is-loading,
+.result-hero-card__label,
+.timeline-card__eyebrow,
+.timeline-time-pill,
+.hero-kicker {
+  background: rgb(139 92 246 / 10%);
+  color: var(--brand-strong);
+}
+
+.metric-card--primary {
+  background: linear-gradient(135deg, #8b5cf6, #ec4899);
+  color: #fff;
+}
+
+.metric-card--primary span,
+.metric-card--primary strong,
+.metric-card--primary small {
+  color: #fff;
+}
+
+.score-board {
+  gap: 14px;
+}
+
+.grading-capability-card span {
+  color: var(--brand-strong);
+}
+
+.insight-card--issue {
+  border-top-color: #ec4899;
+}
+
+.insight-card--suggestion {
+  border-top-color: #34d399;
+}
+
+.feedback-card--positive {
+  border-top-color: #34d399;
+}
+
+.feedback-card--warning {
+  border-top-color: #f59e0b;
+}
+
+.feedback-card--info {
+  border-top-color: #8b5cf6;
+}
+
+.bullet-list li::marker {
+  color: #8b5cf6;
+}
+
+.result-meta-tags span {
+  background: rgb(255 255 255 / 88%);
+  border: 1px solid rgba(139, 92, 246, 0.12);
+}
+
+.assistant-form :deep(.el-input__wrapper),
+.assistant-form :deep(.el-select .el-input__wrapper),
+.assistant-form :deep(.el-input-number),
+.assistant-form :deep(.el-textarea__inner) {
+  border-radius: 6px;
+  border-color: rgba(139, 92, 246, 0.12);
+}
+
+.form-actions :deep(.el-button),
+.result-heading :deep(.el-button),
+.panel-heading :deep(.el-button.is-circle),
+.add-rubric-button {
+  white-space: nowrap;
+}
+
+@media (max-width: 860px) {
+  .workspace-hero {
+    padding: 18px;
+  }
+
+  .hero-copy h1 {
+    font-size: 26px;
+  }
+
+  .hero-lab-strip {
+    gap: 6px;
+  }
+
+  .assistant-tabs :deep(.el-tabs__nav) {
+    gap: 10px;
+  }
+
+  .tab-switch-card {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 560px) {
+  .hero-copy h1 {
+    font-size: 24px;
+  }
+
+  .hero-lab-strip span,
+  .hero-chip {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .score-board {
+    grid-template-columns: 1fr;
+  }
+
+  .form-actions {
+    grid-template-columns: 1fr;
   }
 }
 </style>
