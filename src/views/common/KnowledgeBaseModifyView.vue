@@ -641,34 +641,36 @@ onBeforeUnmount(revokeCoverPreview)
                 <div class="group-name">{{ group.title }}</div>
                 <div class="group-count">{{ group.count }} 个文件</div>
               </div>
-              <el-table :data="group.items" border class="document-table">
-                <el-table-column prop="docName" label="文件名称" min-width="180" show-overflow-tooltip />
-                <el-table-column prop="docType" label="类型" width="120" align="center">
-                  <template #default="{ row }">
-                    <el-tag type="info" effect="light">{{ formatDocumentType(row.docType) }}</el-tag>
-                  </template>
-                </el-table-column>
-                <el-table-column prop="description" label="说明" min-width="180" show-overflow-tooltip />
-                <el-table-column prop="createTime" label="创建时间" min-width="170" show-overflow-tooltip>
-                  <template #default="{ row }">
-                    {{ formatDateTime(row.createTime) }}
-                  </template>
-                </el-table-column>
-                <el-table-column prop="updateTime" label="更新时间" min-width="170" show-overflow-tooltip>
-                  <template #default="{ row }">
-                    {{ formatDateTime(row.updateTime) }}
-                  </template>
-                </el-table-column>
-                <el-table-column label="操作" width="240" align="center" fixed="right">
-                  <template #default="{ row }">
-                    <div class="document-actions">
-                      <el-button link type="primary" :icon="View" @click="handleViewDocument(row)">查看</el-button>
-                      <el-button link type="primary" :icon="Edit" @click="handleEditDocument(row)">编辑</el-button>
-                      <el-button link type="danger" :icon="Delete" :loading="documentDeletingId === row.id" :disabled="documentDeletingId !== null" @click="handleDeleteDocument(row)">删除</el-button>
-                    </div>
-                  </template>
-                </el-table-column>
-              </el-table>
+              <div class="document-table-scroll">
+                <el-table :data="group.items" border class="document-table">
+                  <el-table-column prop="docName" label="文件名称" min-width="180" show-overflow-tooltip />
+                  <el-table-column prop="docType" label="类型" width="120" align="center">
+                    <template #default="{ row }">
+                      <el-tag type="info" effect="light">{{ formatDocumentType(row.docType) }}</el-tag>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="description" label="说明" min-width="180" show-overflow-tooltip />
+                  <el-table-column prop="createTime" label="创建时间" min-width="170" show-overflow-tooltip>
+                    <template #default="{ row }">
+                      {{ formatDateTime(row.createTime) }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="updateTime" label="更新时间" min-width="170" show-overflow-tooltip>
+                    <template #default="{ row }">
+                      {{ formatDateTime(row.updateTime) }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="操作" width="240" align="center" fixed="right">
+                    <template #default="{ row }">
+                      <div class="document-actions">
+                        <el-button link type="primary" :icon="View" @click="handleViewDocument(row)">查看</el-button>
+                        <el-button link type="primary" :icon="Edit" @click="handleEditDocument(row)">编辑</el-button>
+                        <el-button link type="danger" :icon="Delete" :loading="documentDeletingId === row.id" :disabled="documentDeletingId !== null" @click="handleDeleteDocument(row)">删除</el-button>
+                      </div>
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </div>
             </section>
           </template>
           <el-empty v-else class="document-empty" description="暂无文件数据" />
@@ -1225,6 +1227,345 @@ onBeforeUnmount(revokeCoverPreview)
 
   .create-form :deep(.el-radio-group) {
     flex-wrap: wrap;
+  }
+}
+
+/* AI 探索乐园工作台覆盖层 */
+.create-page {
+  padding: clamp(18px, 3vw, 38px) clamp(18px, 5vw, 80px) 64px;
+  background: transparent;
+}
+
+.create-panel {
+  width: min(1440px, 100%);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.page-head {
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 24px;
+  padding: 18px 24px;
+  border: 2px solid var(--kb-ink, #3d3564);
+  border-radius: 8px;
+  background: linear-gradient(118deg, #e8e4ff 0%, #f9ddec 46%, #d3f2f2 100%);
+  box-shadow: var(--kb-shadow, 4px 5px 0 rgb(61 53 100 / 14%));
+}
+
+.page-head::after {
+  position: absolute;
+  top: -34px;
+  right: 8%;
+  width: 88px;
+  height: 88px;
+  border: 2px dashed rgb(61 53 100 / 36%);
+  border-radius: 50%;
+  content: '';
+  opacity: 0.56;
+  animation: editor-orbit 12s linear infinite;
+}
+
+.back-btn {
+  position: relative;
+  z-index: 1;
+  min-height: 34px;
+  border: 1px solid var(--kb-ink-soft, #4e4473);
+  border-radius: 5px;
+  background: rgb(255 255 255 / 78%);
+  box-shadow: 2px 3px 0 rgb(61 53 100 / 16%);
+  color: var(--kb-ink, #3d3564);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.head-title {
+  position: relative;
+  z-index: 1;
+}
+
+.head-title h2 {
+  color: var(--kb-ink, #3d3564);
+  font-family: 'Trebuchet MS', 'Microsoft YaHei', sans-serif;
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.head-title span,
+.document-subtitle,
+.group-count,
+.upload-kb-label,
+.upload-kb-tip {
+  color: var(--kb-ink-soft, #4e4473);
+  font-weight: 700;
+}
+
+.editor-shell {
+  gap: 28px;
+  padding: 26px;
+  border: 2px solid var(--kb-ink, #3d3564);
+  border-radius: 8px;
+  background-color: #ffffff;
+  background-image: radial-gradient(rgb(129 120 207 / 13%) 1px, transparent 1px);
+  background-size: 14px 14px;
+  box-shadow: 7px 8px 0 rgb(61 53 100 / 24%);
+}
+
+.cover-pane {
+  padding-right: 28px;
+  border-right-color: rgb(61 53 100 / 28%);
+}
+
+.cover-label,
+.create-form :deep(.el-form-item__label),
+.document-title,
+.group-name {
+  color: var(--kb-ink, #3d3564);
+  font-weight: 900;
+}
+
+.cover-btn,
+.form-actions :deep(.el-button),
+.document-toolbar :deep(.el-button),
+.document-actions :deep(.el-button) {
+  min-height: 34px;
+  border: 1px solid var(--kb-ink-soft, #4e4473);
+  border-radius: 5px;
+  box-shadow: 3px 4px 0 rgb(61 53 100 / 18%);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.document-actions :deep(.el-button) {
+  box-shadow: none;
+}
+
+.create-panel :deep(.el-button--primary) {
+  border-color: var(--kb-ink-soft, #4e4473);
+  background: var(--kb-primary, #8178cf);
+  color: #ffffff;
+}
+
+.create-panel :deep(.el-button:not(.is-disabled):hover),
+.create-panel :deep(.el-button:not(.is-disabled):focus-visible) {
+  box-shadow: 5px 6px 0 rgb(61 53 100 / 24%);
+  outline: none;
+  transform: translate(-2px, -2px);
+}
+
+.create-panel :deep(.el-button.is-disabled) {
+  box-shadow: none;
+  opacity: 0.56;
+}
+
+.cover-preview,
+.cover-empty {
+  border-radius: 7px;
+}
+
+.cover-preview {
+  border: 2px solid var(--kb-ink, #3d3564);
+  background: #ffffff;
+  box-shadow: 4px 5px 0 rgb(61 53 100 / 18%);
+}
+
+.cover-empty {
+  border: 2px dashed var(--kb-ink-soft, #4e4473);
+  background-color: #ffffff;
+  background-image: radial-gradient(var(--kb-pink, #ee91bb) 1px, transparent 1px);
+  background-size: 12px 12px;
+  color: var(--kb-primary, #8178cf);
+}
+
+.create-form :deep(.el-input__wrapper),
+.create-form :deep(.el-select__wrapper),
+.create-form :deep(.el-textarea__inner),
+.document-toolbar :deep(.el-input__wrapper),
+.document-toolbar :deep(.el-select__wrapper) {
+  border-radius: 5px;
+  background: rgb(255 255 255 / 94%);
+  box-shadow: 0 0 0 1px rgb(61 53 100 / 42%) inset;
+}
+
+.create-form :deep(.el-input__wrapper:hover),
+.create-form :deep(.el-select__wrapper:hover),
+.create-form :deep(.el-textarea__inner:hover),
+.document-toolbar :deep(.el-input__wrapper:hover),
+.document-toolbar :deep(.el-select__wrapper:hover) {
+  box-shadow: 0 0 0 2px var(--kb-pink, #ee91bb) inset;
+}
+
+.create-form :deep(.el-input__wrapper.is-focus),
+.create-form :deep(.el-select__wrapper.is-focused),
+.create-form :deep(.el-textarea__inner:focus),
+.document-toolbar :deep(.el-input__wrapper.is-focus),
+.document-toolbar :deep(.el-select__wrapper.is-focused) {
+  box-shadow: 0 0 0 2px var(--kb-primary, #8178cf) inset, 3px 4px 0 rgb(61 53 100 / 14%);
+}
+
+.create-form :deep(.el-radio-button__inner) {
+  border-color: rgb(61 53 100 / 42%);
+  border-radius: 5px;
+  background: #ffffff;
+  color: var(--kb-ink, #3d3564);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.create-form :deep(.el-radio-button__original-radio:checked + .el-radio-button__inner),
+.create-form :deep(.el-radio-button.is-disabled.is-active .el-radio-button__inner),
+.create-form :deep(.el-radio-button.is-disabled.is-checked .el-radio-button__inner) {
+  border-color: var(--kb-ink-soft, #4e4473);
+  background: var(--kb-mint, #9de4eb);
+  box-shadow: 2px 3px 0 rgb(61 53 100 / 18%);
+  color: var(--kb-ink, #3d3564);
+}
+
+.document-section {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  margin-top: 28px;
+  padding: 24px;
+  border: 2px solid var(--kb-ink, #3d3564);
+  border-radius: 8px;
+  background: rgb(255 255 255 / 90%);
+  box-shadow: 7px 8px 0 rgb(61 53 100 / 24%);
+}
+
+.document-head {
+  margin-bottom: 18px;
+}
+
+.document-title .el-icon {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid var(--kb-ink, #3d3564);
+  border-radius: 5px;
+  background: var(--kb-yellow, #fff1a8);
+  box-shadow: 2px 3px 0 rgb(61 53 100 / 14%);
+}
+
+.document-group {
+  min-width: 0;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.group-head {
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border-left: 4px solid var(--kb-pink, #ee91bb);
+  background: #fff7fb;
+}
+
+.document-table {
+  --el-table-border-color: rgb(61 53 100 / 26%);
+  --el-table-header-bg-color: #f4f2ff;
+  --el-table-row-hover-bg-color: #effcfc;
+  --el-table-text-color: var(--kb-ink, #3d3564);
+  --el-table-header-text-color: var(--kb-ink, #3d3564);
+  min-width: 1060px;
+  border: 1px solid rgb(61 53 100 / 38%);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.document-table-scroll {
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 8px;
+}
+
+.document-table :deep(.el-table__header-wrapper th) {
+  font-weight: 900;
+}
+
+.document-table :deep(.el-tag) {
+  border-color: rgb(61 53 100 / 40%);
+  border-radius: 4px;
+  background: var(--kb-yellow, #fff1a8);
+  color: var(--kb-ink, #3d3564);
+  font-weight: 800;
+}
+
+.document-empty {
+  min-height: 220px;
+  border: 2px dashed rgb(61 53 100 / 40%);
+  border-radius: 7px;
+  background: #fbfbff;
+}
+
+.document-pagination {
+  justify-content: center;
+}
+
+.upload-kb-card {
+  border-color: rgb(61 53 100 / 36%);
+  border-radius: 6px;
+  background: #f4f2ff;
+}
+
+.upload-kb-name {
+  color: var(--kb-ink, #3d3564);
+  font-weight: 900;
+}
+
+.file-upload-control :deep(.el-upload-dragger) {
+  border-color: var(--kb-ink-soft, #4e4473);
+  border-radius: 6px;
+  background: #fbfbff;
+}
+
+.upload-icon {
+  color: var(--kb-primary, #8178cf);
+}
+
+.upload-text {
+  color: var(--kb-ink, #3d3564);
+  font-weight: 800;
+}
+
+@keyframes editor-orbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 640px) {
+  .create-page {
+    padding: 18px 16px 40px;
+  }
+
+  .page-head,
+  .editor-shell,
+  .document-section {
+    padding: 18px;
+  }
+
+  .page-head {
+    padding-top: 18px;
+  }
+
+  .document-subtitle {
+    white-space: normal;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-head::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
   }
 }
 </style>
