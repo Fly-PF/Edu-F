@@ -68,6 +68,15 @@ const personnelRoutes = [
 
 const teacherRoutes = [
   {
+    path: 'teacher/learning-analysis',
+    name: 'teacher-learning-analysis',
+    component: () => import('@/views/teacher/TeacherLearningAnalysis.vue'),
+    meta: {
+      title: '班级学情分析',
+      allowedRoles: ['TEACHER'],
+    },
+  },
+  {
     path: 'teacher/practice-review',
     name: 'teacher-practice-review',
     component: () => import('@/views/teacher/TeacherPracticeReview.vue'),
@@ -124,6 +133,15 @@ const teacherRoutes = [
 ]
 
 const studentRoutes = [
+  {
+    path: 'student/learning-analysis',
+    name: 'student-learning-analysis',
+    component: () => import('@/views/student/StudentLearningAnalysis.vue'),
+    meta: {
+      title: '我的学情与成长档案',
+      allowedRoles: ['STUDENT'],
+    },
+  },
   {
     path: 'student/practices',
     name: 'student-practices',

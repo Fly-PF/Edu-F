@@ -1031,4 +1031,9 @@ onMounted(() => {
     flex-wrap: nowrap;
   }
 }
+
+</style>
+
+<style>
+@import '@/assets/creative-lab.css';
 </style>

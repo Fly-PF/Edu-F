@@ -23,6 +23,7 @@ const userTypeMap = {
 const studentNavItems = [
   { label: '学习练习', path: '/main/practice', roles: ['STUDENT'] },
   { label: '班级', path: '/main/student/classes', roles: ['STUDENT'] },
+  { label: '我的学情', path: '/main/student/learning-analysis', roles: ['STUDENT'] },
   { label: 'AI展馆', path: '/main/ai-exhibit', roles: ['STUDENT'] },
 ]
 
@@ -30,6 +31,7 @@ const teacherNavItems = [
   { label: '学习练习', path: '/main/practice', roles: ['TEACHER'] },
   { label: '班级管理', path: '/main/teacher/classes', roles: ['TEACHER'] },
   { label: '课程管理', path: '/main/teacher/courses', roles: ['TEACHER'] },
+  { label: '班级学情', path: '/main/teacher/learning-analysis', roles: ['TEACHER'] },
   { label: 'AI展馆', path: '/main/ai-exhibit', roles: ['TEACHER'] },
   { label: 'AI备课与批改', path: '/main/teacher/ai-assistant', roles: ['TEACHER'] },
 ]
@@ -109,12 +111,20 @@ const activePath = computed(() => {
     return '/main/teacher/classes'
   }
 
+  if (route.name === 'teacher-learning-analysis') {
+    return '/main/teacher/learning-analysis'
+  }
+
   if (route.name === 'student-platform-courses' || route.name === 'course-search' || route.name === 'course-learn') {
     return '/main/courses'
   }
 
   if (route.name === 'student-class-detail') {
     return '/main/student/classes'
+  }
+
+  if (route.name === 'student-learning-analysis') {
+    return '/main/student/learning-analysis'
   }
 
   if (route.path.startsWith('/main/ai-exhibit')) {
