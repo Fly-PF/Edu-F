@@ -2,7 +2,7 @@ import axios from 'axios'
 import { useUserStore } from '@/stores/user'
 
 const baseURL = 'http://localhost:8080'
-const authExpiredCodes = [401, 403]
+const authExpiredCodes = [401]
 
 const instance = axios.create({
   baseURL,
@@ -75,7 +75,7 @@ instance.interceptors.request.use(
   function (config) {
     const userStore = useUserStore()
 
-    if (!isPublicRequest(config) && !userStore.isLoggedIn) {
+    if (!isPublicRequest(config) && !userStore.token) {
       return handleAuthExpired('请先登录')
     }
 

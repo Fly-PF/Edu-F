@@ -13,7 +13,7 @@ export const useUserStore = defineStore(
     const avatar = ref('')
     const token = ref('')
 
-    const isLoggedIn = computed(() => Boolean(token.value && username.value))
+    const isLoggedIn = computed(() => Boolean(token.value))
     const roleCodes = computed(() => (roleCode.value ? [roleCode.value] : []))
     const currentUser = computed(() => ({
       userId: userId.value,
