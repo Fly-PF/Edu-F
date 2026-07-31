@@ -672,12 +672,12 @@ onMounted(loadCourses)
           <div class="hero-chip-row" aria-label="AI能力标签">
             <span class="hero-chip"><Document /> 智能备课</span>
             <span class="hero-chip"><EditPen /> 智能批改</span>
-            <span class="hero-chip"><MagicStick /> 学情分析</span>
+            <span class="hero-chip"><MagicStick /> 教学评价辅助</span>
           </div>
-          <div class="hero-lab-strip" aria-label="AI鎺㈢储涔愬洯">
-            <span>AI鎺㈢储涔愬洯</span>
-            <span>娴矇钃濊惀鏋勭瓚</span>
-            <span>璇惧墠澶囪 · 璇惧悗鎵规敼 · 瀛︽儏鍒嗘瀽</span>
+          <div class="hero-lab-strip" aria-label="AI教学闭环">
+            <span>AI探索乐园</span>
+            <span>教学实验室</span>
+            <span>备课 · 批改 · 分析 · 优化</span>
           </div>
           <div class="hero-metric-strip">
             <article v-for="item in heroFeatureCards" :key="item.label" class="hero-metric-card">
@@ -715,9 +715,9 @@ onMounted(loadCourses)
       <div class="overview-band__header">
         <div>
           <span class="overview-band__eyebrow">教学智能看板</span>
-          <h2>教师智能教学助手运行概况</h2>
+          <h2>教师智能教学助手运行概览</h2>
         </div>
-        <p>围绕备课效率、批改任务、评分可信度与知识点发现，呈现当前工作台的示意数据。</p>
+        <p>围绕备课效率、批改任务、评分可信度与薄弱知识点发现，呈现当前工作台的教学智能数据。</p>
       </div>
       <div class="overview-band__grid">
         <article v-for="item in teachingOverviewStats" :key="item.label" class="overview-stat-card">
@@ -784,7 +784,7 @@ onMounted(loadCourses)
                   <span class="block-step">01</span>
                   <div>
                     <h3>基础信息</h3>
-                    <p>先设置课程、课题与授课范围，帮助 AI 快速理解教学背景。</p>
+                    <p>先设置课程、题目与授课范围，帮助 AI 快速理解教学背景。</p>
                   </div>
                 </div>
                 <div class="form-block__grid">
@@ -887,7 +887,7 @@ onMounted(loadCourses)
                       :rows="3"
                       maxlength="2000"
                       show-word-limit
-                      placeholder="例如：希望加入讨论活动、实验案例或板书设计提醒"
+                      placeholder="例如：希望加入讨论活动、实验案例或板书提示"
                     />
                   </el-form-item>
                 </div>
@@ -929,13 +929,13 @@ onMounted(loadCourses)
             </div>
 
             <div v-if="lessonLoading && !lessonResultReady" class="result-state result-state--loading">
-              <div class="loading-badge">AI 深度生成中</div>
+              <div class="loading-badge">AI 正在生成教学方案</div>
               <div class="state-orb state-orb--loading">
                 <span></span>
                 <span></span>
                 <span></span>
               </div>
-              <h3>AI正在组织教案结构与课堂节奏</h3>
+              <h3>AI 正在组织教案结构与课堂节奏</h3>
               <p>系统会先理解教学背景，再生成流程、活动、练习与评价内容，输出更完整的教学方案。</p>
               <div class="loading-progress-bar" aria-hidden="true">
                 <span></span>
