@@ -395,4 +395,41 @@ onMounted(loadCurrentUserProfile)
   padding: 0;
   overflow: auto;
 }
+
+@media (max-width: 700px) {
+  .main-header {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 0 12px;
+  }
+
+  .header-left {
+    min-width: 0;
+  }
+
+  .brand-text {
+    overflow: hidden;
+    font-size: 15px;
+    text-overflow: ellipsis;
+  }
+
+  .top-menu {
+    display: none;
+  }
+
+  .user-info {
+    display: none;
+  }
+
+  .auth-actions {
+    gap: 6px;
+  }
+
+  .auth-button {
+    min-width: 0;
+    height: 34px;
+    padding: 0 10px;
+    font-size: 13px;
+  }
+}
 </style>
