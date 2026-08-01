@@ -394,7 +394,7 @@ onBeforeUnmount(stopReading)
         :clearable="true"
         :loading="isLoading"
         variant="updown"
-        :custom-style="{ minHeight: '86px' }"
+        :custom-style="{ height: '86px', minHeight: '86px', maxHeight: '86px' }"
         @submit="handleSend"
         @change="syncComposerText"
         @paste-file="handlePasteImages"

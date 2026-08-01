@@ -2620,6 +2620,11 @@ onBeforeUnmount(() => {
   transform: translate(-1px, -1px);
 }
 
+.topbar-back:hover,
+.topbar-back:focus-visible {
+  transform: translateY(-50%);
+}
+
 .chat-main {
   background: transparent;
 }
