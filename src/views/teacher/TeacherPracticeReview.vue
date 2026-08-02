@@ -72,8 +72,8 @@ function changeQuestionType(question) {
   }
 }
 
-function addOption(question) { if (question.options.length < 6) question.options.push('') }
-function removeOption(question, index) { if (question.options.length > 2) question.options.splice(index, 1) }
+function addOption(question) { if (question.options.length < 4) question.options.push('') }
+function removeOption(question, index) { if (question.options.length > 4) question.options.splice(index, 1) }
 function addQuestion() { publishForm.questions.push(newQuestion('SINGLE')) }
 function removeQuestion(index) { if (publishForm.questions.length > 1) publishForm.questions.splice(index, 1) }
 
@@ -84,8 +84,8 @@ async function publishPractice() {
   for (let index = 0; index < publishForm.questions.length; index += 1) {
     const question = publishForm.questions[index]
     if (!question.content.trim() || !question.referenceAnswer.trim()) { ElMessage.warning(`请完整填写第 ${index + 1} 题`); return }
-    if (question.type === 'SINGLE' && (question.options.length < 2 || question.options.some((item) => !item.trim()))) {
-      ElMessage.warning(`请填写第 ${index + 1} 题的全部选项`); return
+    if (question.type === 'SINGLE' && (question.options.length !== 4 || question.options.some((item) => !item.trim()))) {
+      ElMessage.warning(`第 ${index + 1} 题必须完整填写 A、B、C、D 四个选项`); return
     }
   }
   publishing.value = true
@@ -241,7 +241,7 @@ onMounted(loadSubmissions)
           <div class="question-heading"><strong>第 {{ index + 1 }} 题</strong><el-button text type="danger" :disabled="publishForm.questions.length === 1" @click="removeQuestion(index)">删除本题</el-button></div>
           <div class="question-config"><el-form-item label="题型"><el-select v-model="question.type" @change="changeQuestionType(question)"><el-option label="单选题" value="SINGLE" /><el-option label="开放题" value="SHORT" /></el-select></el-form-item><el-form-item label="分值"><el-input-number v-model="question.score" :min="1" :max="100" /></el-form-item></div>
           <el-form-item label="题干"><el-input v-model="question.content" type="textarea" :rows="2" maxlength="3000" placeholder="请输入题目内容" /></el-form-item>
-          <template v-if="question.type === 'SINGLE'"><div class="options-title"><span>选项</span><el-button text type="primary" :disabled="question.options.length >= 6" @click="addOption(question)">添加选项</el-button></div><div v-for="(option, optionIndex) in question.options" :key="optionIndex" class="option-row"><b>{{ String.fromCharCode(65 + optionIndex) }}</b><el-input v-model="question.options[optionIndex]" :placeholder="`选项 ${String.fromCharCode(65 + optionIndex)}`" /><el-button text type="danger" :disabled="question.options.length <= 2" @click="removeOption(question, optionIndex)">删除</el-button></div><el-form-item label="正确答案"><el-radio-group v-model="question.referenceAnswer"><el-radio v-for="(_, optionIndex) in question.options" :key="optionIndex" :label="String.fromCharCode(65 + optionIndex)">{{ String.fromCharCode(65 + optionIndex) }}</el-radio></el-radio-group></el-form-item></template>
+          <template v-if="question.type === 'SINGLE'"><div class="options-title"><span>选项（固定 A、B、C、D）</span><el-button text type="primary" :disabled="question.options.length >= 4" @click="addOption(question)">添加选项</el-button></div><div v-for="(option, optionIndex) in question.options" :key="optionIndex" class="option-row"><b>{{ String.fromCharCode(65 + optionIndex) }}</b><el-input v-model="question.options[optionIndex]" :placeholder="`选项 ${String.fromCharCode(65 + optionIndex)}`" /><el-button text type="danger" :disabled="question.options.length <= 4" @click="removeOption(question, optionIndex)">删除</el-button></div><el-form-item label="正确答案"><el-radio-group v-model="question.referenceAnswer"><el-radio v-for="(_, optionIndex) in question.options" :key="optionIndex" :label="String.fromCharCode(65 + optionIndex)">{{ String.fromCharCode(65 + optionIndex) }}</el-radio></el-radio-group></el-form-item></template>
           <el-form-item :label="question.type === 'SINGLE' ? '答案说明' : '参考答案或评分提示'"><el-input v-model="question.referenceAnswer" v-if="question.type === 'SHORT'" type="textarea" :rows="2" placeholder="写出参考要点，供批改时查看" /><el-input v-model="question.explanation" v-else type="textarea" :rows="2" placeholder="解释正确答案的原因" /></el-form-item>
           <el-form-item v-if="question.type === 'SHORT'" label="答案解析"><el-input v-model="question.explanation" type="textarea" :rows="2" placeholder="学生被批改后可看到的解析" /></el-form-item>
         </article>
