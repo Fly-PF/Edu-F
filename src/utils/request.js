@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { useUserStore } from '@/stores/user'
 
-const baseURL = 'http://localhost:8080'
+const baseURL = `${import.meta.env.VITE_APP_REQUEST_BASE_URL}`
 const authExpiredCodes = [401]
 
 const instance = axios.create({

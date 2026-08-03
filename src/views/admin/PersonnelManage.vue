@@ -38,7 +38,7 @@ const avatarPreviewFailed = ref(false)
 const formError = ref('')
 const currentId = ref(null)
 
-const apiBaseURL = 'http://localhost:8080'
+const apiBaseURL = `${import.meta.env.VITE_APP_REQUEST_BASE_URL}`
 const defaultAvatar =
   'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160"%3E%3Crect width="160" height="160" rx="80" fill="%23eef2f7"/%3E%3Ccircle cx="80" cy="62" r="30" fill="%239aa6b2"/%3E%3Cpath d="M31 138c8-28 26-43 49-43s41 15 49 43" fill="%239aa6b2"/%3E%3C/svg%3E'
 
