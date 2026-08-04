@@ -6,7 +6,7 @@ import { MarkdownRenderer } from 'x-markdown-vue'
 import 'x-markdown-vue/style'
 import { getKnowledgeBaseDocumentPreviewContent, getKnowledgeBaseDocumentPreviewImages } from '@/api/rag'
 
-const apiBaseURL = 'http://localhost:8080'
+const apiBaseURL = String(import.meta.env.VITE_APP_REQUEST_BASE_URL || '').replace(/\/+$/, '')
 const supportedExtensions = ['pdf', 'ppt', 'pptx', 'txt', 'md', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'webp']
 
 const route = useRoute()

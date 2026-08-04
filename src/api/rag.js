@@ -1,7 +1,7 @@
 import request from '@/utils/request'
 import { useUserStore } from '@/stores/user'
 
-const RAG_API_BASE_URL = 'http://localhost:8080'
+const RAG_API_BASE_URL = String(import.meta.env.VITE_APP_REQUEST_BASE_URL || '').replace(/\/+$/, '')
 
 function unwrap(response) {
   if (!response || typeof response !== 'object' || !Object.prototype.hasOwnProperty.call(response, 'code')) {

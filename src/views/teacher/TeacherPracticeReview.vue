@@ -24,6 +24,11 @@ const totalScore = computed(() => {
     .reduce((sum, item) => sum + Number(item.score || 0), 0)
   return autoScore + manualScore
 })
+const practiceTotalScore = computed(() => {
+  const configuredTotal = Number(activeSubmission.value?.totalScore || 0)
+  if (configuredTotal > 0) return configuredTotal
+  return (activeSubmission.value?.answers || []).reduce((sum, answer) => sum + Number(answer.score || 0), 0)
+})
 
 function statusText(value) { return value === 'REVIEWED' ? '已批改' : '待批改' }
 function statusType(value) { return value === 'REVIEWED' ? 'success' : 'warning' }
@@ -221,7 +226,7 @@ onMounted(loadSubmissions)
           </div>
         </article>
         <el-form label-position="top" class="review-form">
-          <div class="total-score-row"><span>本次练习总分</span><strong>{{ totalScore }} / 100 分</strong><small>选择题自动得分与开放题得分之和</small></div>
+          <div class="total-score-row"><span>本次练习总分</span><strong>{{ totalScore }} / {{ practiceTotalScore }} 分</strong><small>选择题自动得分与开放题得分之和</small></div>
           <el-form-item label="整份练习总反馈"><el-input v-model="reviewForm.feedback" type="textarea" :rows="4" maxlength="1000" show-word-limit placeholder="总结整体完成情况，并给出下一步学习建议" /></el-form-item>
         </el-form>
       </template>
