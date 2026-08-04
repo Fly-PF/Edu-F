@@ -1,10 +1,13 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Check, DocumentChecked, Plus, RefreshRight } from '@element-plus/icons-vue'
+import { Check, DocumentChecked, MagicStick, Plus, RefreshRight } from '@element-plus/icons-vue'
 import { deleteTeacherPractice, listTeacherPracticeCourses, listTeacherPracticeSubmissions, publishTeacherPractice, reviewPracticeSubmission } from '@/api/learningPractice'
 
 const loading = ref(false)
+const route = useRoute()
+const router = useRouter()
 const saving = ref(false)
 const status = ref('SUBMITTED')
 const submissions = ref([])
@@ -29,6 +32,9 @@ const practiceTotalScore = computed(() => {
   if (configuredTotal > 0) return configuredTotal
   return (activeSubmission.value?.answers || []).reduce((sum, answer) => sum + Number(answer.score || 0), 0)
 })
+const hasOpenAnswers = computed(() =>
+  (activeSubmission.value?.answers || []).some((answer) => answer.questionType === 'SHORT'),
+)
 
 function statusText(value) { return value === 'REVIEWED' ? '已批改' : '待批改' }
 function statusType(value) { return value === 'REVIEWED' ? 'success' : 'warning' }
@@ -152,6 +158,26 @@ function openReview(item) {
   reviewVisible.value = true
 }
 
+async function openAiReview() {
+  if (!activeSubmission.value || !hasOpenAnswers.value) {
+    ElMessage.warning('这份练习没有需要 AI 辅助批改的开放题')
+    return
+  }
+  if (activeSubmission.value.status !== 'SUBMITTED') {
+    ElMessage.warning('已完成批改的练习请直接查看或人工修改后重新保存')
+    return
+  }
+  reviewVisible.value = false
+  await router.push({
+    name: 'teacher-ai-assistant',
+    query: {
+      tab: 'grading',
+      submissionId: String(activeSubmission.value.submissionId),
+      returnStatus: status.value || 'ALL',
+    },
+  })
+}
+
 async function saveReview() {
   if (!activeSubmission.value) return
   const openAnswers = (activeSubmission.value.answers || []).filter((answer) => answer.questionType === 'SHORT')
@@ -185,7 +211,21 @@ async function saveReview() {
   finally { saving.value = false }
 }
 
-onMounted(loadSubmissions)
+async function initializePage() {
+  if (route.query.status === 'REVIEWED' || route.query.status === 'SUBMITTED') {
+    status.value = route.query.status
+  } else if (route.query.status === 'ALL') {
+    status.value = ''
+  }
+  await loadSubmissions()
+  const requestedSubmissionId = Number(route.query.submissionId)
+  if (Number.isInteger(requestedSubmissionId) && requestedSubmissionId > 0) {
+    const submission = submissions.value.find((item) => Number(item.submissionId) === requestedSubmissionId)
+    if (submission) openReview(submission)
+  }
+}
+
+onMounted(initializePage)
 </script>
 
 <template>
@@ -219,6 +259,13 @@ onMounted(loadSubmissions)
             本题由系统自动评分：<strong>{{ answer.awardedScore }} / {{ answer.score }} 分</strong>
           </div>
           <div v-else-if="reviewForm.questionReviews[answer.questionId]" class="question-review-editor">
+            <div v-if="answer.reviewSource?.startsWith('AI')" class="ai-draft-note">
+              <span>AI 辅助建议</span>
+              <small v-if="answer.aiConfidence !== null && answer.aiConfidence !== undefined">
+                可信度 {{ Math.round(Number(answer.aiConfidence) * 100) }}%
+              </small>
+              <p v-if="answer.aiReasoning">{{ answer.aiReasoning }}</p>
+            </div>
             <label>本题得分</label>
             <div class="score-editor"><el-input-number v-model="reviewForm.questionReviews[answer.questionId].score" :min="0" :max="answer.score" /><span>/ {{ answer.score }} 分</span></div>
             <label>本题反馈</label>
@@ -230,7 +277,17 @@ onMounted(loadSubmissions)
           <el-form-item label="整份练习总反馈"><el-input v-model="reviewForm.feedback" type="textarea" :rows="4" maxlength="1000" show-word-limit placeholder="总结整体完成情况，并给出下一步学习建议" /></el-form-item>
         </el-form>
       </template>
-      <template #footer><el-button @click="reviewVisible = false">取消</el-button><el-button type="primary" :loading="saving" @click="saveReview"><el-icon><Check /></el-icon>保存批改</el-button></template>
+      <template #footer>
+        <el-button @click="reviewVisible = false">取消</el-button>
+        <el-button
+          class="ai-review-button"
+          :disabled="!hasOpenAnswers || activeSubmission?.status !== 'SUBMITTED'"
+          @click="openAiReview"
+        >
+          <el-icon><MagicStick /></el-icon>AI 辅助批改
+        </el-button>
+        <el-button type="primary" :loading="saving" @click="saveReview"><el-icon><Check /></el-icon>保存批改</el-button>
+      </template>
     </el-dialog>
 
     <el-dialog v-model="publishVisible" class="publish-dialog" width="min(920px, 94vw)" title="发布习题" destroy-on-close>
@@ -271,6 +328,7 @@ onMounted(loadSubmissions)
 .submission-actions :deep(.el-button) { border-radius: 5px; font-weight: 800; white-space: nowrap; word-break: keep-all; }.submission-actions :deep(.el-button--primary) { border-color: #4e4473; background: var(--explore-purple); color: #fff; box-shadow: 3px 4px 0 rgb(61 53 100 / 24%); }.submission-actions :deep(.el-button--danger) { border-color: #ad527d; background: #fff2f8; color: #ad527d; }.submission-actions :deep(.el-button:hover) { transform: translate(-2px, -2px); }
 .practice-review-page :deep(.el-empty) { max-width: 720px; margin: 34px auto; border: 1px solid var(--explore-ink); border-radius: 8px; background: #fff; box-shadow: 4px 5px 0 rgb(61 53 100 / 12%); }.practice-review-page :deep(.review-dialog .el-dialog), .practice-review-page :deep(.publish-dialog .el-dialog) { border: 1px solid var(--explore-ink); border-radius: 8px; background: var(--explore-paper); box-shadow: 7px 8px 0 rgb(61 53 100 / 22%); }.practice-review-page :deep(.review-dialog .el-dialog__header), .practice-review-page :deep(.publish-dialog .el-dialog__header) { margin-right: 0; padding: 21px 24px 15px; border-bottom: 1px solid rgb(61 53 100 / 14%); background: linear-gradient(118deg, #e8e4ff, #f9ddec); }.practice-review-page :deep(.review-dialog .el-dialog__title), .practice-review-page :deep(.publish-dialog .el-dialog__title) { color: var(--explore-ink); font-weight: 900; }.practice-review-page :deep(.review-dialog .el-dialog__body), .practice-review-page :deep(.publish-dialog .el-dialog__body) { max-height: 68vh; overflow-y: auto; padding: 22px 24px; }.dialog-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; color: #655d7e; font-size: 13px; }.dialog-meta span { padding: 5px 9px; border: 1px solid rgb(61 53 100 / 16%); border-radius: 4px; background: var(--explore-yellow); }.answer-card { padding: 17px; border: 1px solid var(--explore-ink); border-radius: 7px; background: #fff; box-shadow: 3px 4px 0 rgb(61 53 100 / 10%); }.answer-card + .answer-card { margin-top: 14px; }.answer-card h3 { margin: 0; color: var(--explore-ink); font-size: 14px; line-height: 1.6; }.answer-card h3 small { margin-left: 4px; color: #756d91; font-weight: 400; }.answer-card p { margin: 9px 0 0; color: #5e577d; line-height: 1.6; white-space: pre-wrap; }.answer-card .explanation { color: #39766d; }.auto-question-score { margin-top: 14px; padding: 10px 12px; border: 1px solid #398b82; border-radius: 6px; background: #ecfbf6; color: #276b62; font-size: 13px; }.question-review-editor { display: grid; gap: 9px; margin-top: 16px; padding-top: 15px; border-top: 1px dashed rgb(61 53 100 / 25%); }.question-review-editor label { color: var(--explore-ink); font-size: 13px; font-weight: 800; }.score-editor { display: flex; align-items: center; gap: 10px; color: #6b6484; font-size: 13px; }.review-form { margin-top: 22px; padding-top: 18px; border-top: 1px solid rgb(61 53 100 / 15%); }.total-score-row { display: grid; grid-template-columns: auto auto 1fr; gap: 12px; align-items: baseline; margin-bottom: 18px; padding: 15px; border: 1px solid #55aeb4; border-radius: 7px; background: #ecfbfc; }.total-score-row span { color: #476e73; }.total-score-row strong { color: #287f88; font-size: 21px; }.total-score-row small { color: #6e898d; }.publish-base, .question-config { display: grid; grid-template-columns: 1fr 180px; gap: 16px; }.publish-question { margin-top: 18px; padding: 18px; border: 1px solid var(--explore-ink); border-radius: 8px; background: #fffdf0; box-shadow: 3px 4px 0 rgb(61 53 100 / 10%); }.question-heading, .options-title, .option-row { display: flex; align-items: center; gap: 10px; }.question-heading { justify-content: space-between; margin-bottom: 14px; color: var(--explore-ink); }.options-title { justify-content: space-between; margin-bottom: 7px; color: var(--explore-ink); font-size: 13px; font-weight: 800; }.option-row { margin-bottom: 8px; }.option-row b { width: 20px; color: var(--explore-purple); }.add-question { width: 100%; margin-top: 16px; }
 .practice-review-page :deep(.el-dialog__footer) { padding: 14px 24px 22px; border-top: 1px solid rgb(61 53 100 / 14%); }.practice-review-page :deep(.el-dialog .el-button--primary) { border-color: #4e4473; border-radius: 5px; background: var(--explore-purple); box-shadow: 3px 4px 0 rgb(61 53 100 / 23%); font-weight: 800; }.practice-review-page :deep(.el-dialog .el-button:hover) { transform: translate(-1px, -1px); }
+.ai-draft-note { display: grid; grid-template-columns: auto 1fr; gap: 5px 10px; padding: 11px 12px; border: 1px solid #8178cf; border-radius: 6px; background: #f4f1ff; color: var(--explore-ink); }.ai-draft-note span { font-size: 13px; font-weight: 900; }.ai-draft-note small { color: #6f6790; text-align: right; }.ai-draft-note p { grid-column: 1 / -1; margin: 0; color: #625a80; font-size: 12px; }.practice-review-page :deep(.ai-review-button) { border: 1px solid #4e4473; border-radius: 5px; background: #fff1a8; color: var(--explore-ink); box-shadow: 3px 4px 0 rgb(61 53 100 / 18%); font-weight: 800; white-space: nowrap; }
 @media (max-width: 700px) { .practice-review-page { padding: 24px 16px 36px; }.review-header { align-items: stretch; flex-direction: column; padding: 24px 20px 28px; }.review-header h1 { font-size: 32px; }.header-actions { align-items: stretch; flex-direction: column; }.header-actions :deep(.el-button) { width: 100%; }.review-summary { grid-template-columns: 1fr; }.review-summary div { border-right: 0; border-bottom: 1px solid rgb(61 53 100 / 12%); }.review-summary div:last-child { border-bottom: 0; }.submission-card { align-items: stretch; flex-direction: column; }.submission-actions, .submission-card .el-button { width: 100%; }.total-score-row, .publish-base, .question-config { grid-template-columns: 1fr; gap: 7px; }.practice-review-page :deep(.review-dialog .el-dialog__body), .practice-review-page :deep(.publish-dialog .el-dialog__body) { padding: 18px 16px; }.practice-review-page :deep(.el-dialog__footer) { padding: 12px 16px 18px; } }
 @media (prefers-reduced-motion: reduce) { .practice-review-page *, .practice-review-page *::before, .practice-review-page *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; } }
 </style>

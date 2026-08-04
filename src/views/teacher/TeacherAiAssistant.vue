@@ -1,7 +1,10 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
+  Back,
+  CircleCheck,
   CopyDocument,
   Delete,
   Document,
@@ -12,17 +15,26 @@ import {
 } from '@element-plus/icons-vue'
 import { listTeacherCourses } from '@/api/course'
 import { generateGrading, generateLessonPlan } from '@/api/teacherAi'
+import { getTeacherPracticeSubmission, saveTeacherPracticeAiDraft } from '@/api/learningPractice'
 
+const route = useRoute()
+const router = useRouter()
 const activeTab = ref('lesson')
 const courseLoading = ref(false)
 const courseOptions = ref([])
 const lessonFormRef = ref()
 const gradingFormRef = ref()
+const gradingStartRef = ref()
 const lessonLoading = ref(false)
 const gradingLoading = ref(false)
 const lessonResult = ref(null)
 const gradingResult = ref(null)
 const gradingResultMaxScore = ref(10)
+const linkedSubmission = ref(null)
+const linkedSubmissionLoading = ref(false)
+const linkedQuestionIndex = ref(0)
+const linkedAppliedQuestionIds = ref([])
+const applyingLinkedSuggestion = ref(false)
 let rubricSequence = 3
 
 function createLessonDefaults() {
@@ -54,6 +66,15 @@ function createGradingDefaults() {
 
 const lessonForm = reactive(createLessonDefaults())
 const gradingForm = reactive(createGradingDefaults())
+const linkedOpenAnswers = computed(() =>
+  (linkedSubmission.value?.answers || []).filter((answer) => answer.questionType === 'SHORT'),
+)
+const activeLinkedAnswer = computed(() => linkedOpenAnswers.value[linkedQuestionIndex.value] || null)
+const activeLinkedSuggestionApplied = computed(() =>
+  activeLinkedAnswer.value
+    ? linkedAppliedQuestionIds.value.includes(Number(activeLinkedAnswer.value.questionId))
+    : false,
+)
 
 const lessonRules = {
   topic: [
@@ -132,6 +153,12 @@ const scorePercent = computed(() => {
 
 function normalizeList(value) {
   return Array.isArray(value) ? value.filter((item) => item !== null && item !== undefined && item !== '') : []
+}
+
+function normalizeDisplayText(value) {
+  if (value === null || value === undefined) return ''
+  const text = String(value).trim()
+  return /^(null|undefined)$/i.test(text) ? '' : text
 }
 
 function formatScore(value) {
@@ -327,7 +354,11 @@ const lessonStatusText = computed(() =>
 const gradingStatusText = computed(() =>
   gradingLoading.value ? 'AI正在分析答案' : gradingResultReady.value ? '批改报告已完成' : '示例批改案例',
 )
-const gradingReferenceAnswer = computed(() => gradingDisplayResult.value?.referenceAnswer || gradingForm.referenceAnswer)
+const gradingReferenceAnswer = computed(() =>
+  normalizeDisplayText(gradingDisplayResult.value?.referenceAnswer)
+  || normalizeDisplayText(gradingForm.referenceAnswer),
+)
+const gradingRevisedAnswer = computed(() => normalizeDisplayText(gradingDisplayResult.value?.revisedAnswer))
 const gradingCaseQuestion = computed(
   () => gradingDisplayResult.value?.question || gradingForm.question || gradingDemoResult.question,
 )
@@ -535,6 +566,151 @@ async function loadCourses() {
   }
 }
 
+function roundScore(value) {
+  return Math.round(Number(value || 0) * 10) / 10
+}
+
+function createLinkedRubric(maxScore) {
+  const total = Math.max(1, Number(maxScore || 1))
+  const accuracy = roundScore(total * 0.5)
+  const completeness = roundScore(total * 0.3)
+  const expression = roundScore(total - accuracy - completeness)
+  return [
+    { id: 1, criterion: '知识准确性', description: '核心概念、事实和结论准确', maxScore: accuracy },
+    { id: 2, criterion: '要点完整性', description: '覆盖题目要求和参考答案中的主要得分点', maxScore: completeness },
+    { id: 3, criterion: '逻辑与表达', description: '推理过程清晰，表达规范且有依据', maxScore: expression },
+  ]
+}
+
+function resolveLinkedReferenceAnswer(answer) {
+  const referenceAnswer = normalizeDisplayText(answer?.referenceAnswer)
+  const genericValues = new Set(['开放题', '简答题', '论述题', 'short'])
+  if (referenceAnswer && !genericValues.has(referenceAnswer.toLowerCase())) {
+    return referenceAnswer
+  }
+  return normalizeDisplayText(answer?.explanation) || '请结合题目要求和课程学习目标进行评价。'
+}
+
+async function scrollToGradingWorkspace() {
+  await nextTick()
+  gradingStartRef.value?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+}
+
+function handleAssistantTabClick(tab) {
+  if (tab?.paneName === 'grading') {
+    scrollToGradingWorkspace()
+  }
+}
+
+function fillLinkedQuestion(answer) {
+  if (!answer) return
+  rubricSequence = 3
+  Object.assign(gradingForm, {
+    question: answer.questionContent || '',
+    questionType: '简答题',
+    referenceAnswer: resolveLinkedReferenceAnswer(answer),
+    rubric: createLinkedRubric(answer.score),
+    studentAnswer: answer.studentAnswer || '',
+    maxScore: Number(answer.score || 1),
+  })
+  gradingResult.value = null
+  gradingResultMaxScore.value = Number(answer.score || 1)
+  gradingFormRef.value?.clearValidate()
+}
+
+function selectLinkedQuestion(index) {
+  if (index < 0 || index >= linkedOpenAnswers.value.length) return
+  linkedQuestionIndex.value = index
+  fillLinkedQuestion(linkedOpenAnswers.value[index])
+}
+
+async function loadLinkedSubmission() {
+  const submissionId = Number(route.query.submissionId)
+  if (!Number.isInteger(submissionId) || submissionId <= 0) return
+  activeTab.value = 'grading'
+  linkedSubmissionLoading.value = true
+  try {
+    linkedSubmission.value = await getTeacherPracticeSubmission(submissionId)
+    linkedAppliedQuestionIds.value = linkedOpenAnswers.value
+      .filter((answer) => answer.reviewSource?.startsWith('AI'))
+      .map((answer) => Number(answer.questionId))
+    if (!linkedOpenAnswers.value.length) {
+      ElMessage.warning('这份练习没有需要 AI 辅助批改的开放题')
+      return
+    }
+    const requestedQuestionId = Number(route.query.questionId)
+    const requestedIndex = linkedOpenAnswers.value.findIndex(
+      (answer) => Number(answer.questionId) === requestedQuestionId,
+    )
+    selectLinkedQuestion(requestedIndex >= 0 ? requestedIndex : 0)
+    await scrollToGradingWorkspace()
+  } catch (error) {
+    linkedSubmission.value = null
+    ElMessage.error(error?.message || '学生练习加载失败')
+  } finally {
+    linkedSubmissionLoading.value = false
+  }
+}
+
+function buildLinkedFeedback(result) {
+  const parts = []
+  if (result?.strengths?.length) parts.push(`优点：${result.strengths.join('；')}`)
+  if (result?.deductions?.length) parts.push(`需要改进：${result.deductions.join('；')}`)
+  if (result?.suggestions?.length) parts.push(`建议：${result.suggestions.join('；')}`)
+  return parts.join('\n').slice(0, 500) || '请教师结合 AI 分项评分进一步复核本题答案。'
+}
+
+function buildLinkedReasoning(result) {
+  return (result?.dimensionScores || [])
+    .map((item) => `${item.criterion} ${formatScore(item.score)}/${formatScore(item.maxScore)}：${item.reason || '待教师复核'}`)
+    .join('\n')
+    .slice(0, 2000)
+}
+
+async function applyLinkedSuggestion() {
+  if (!linkedSubmission.value || !activeLinkedAnswer.value || !gradingResult.value) return
+  const maxScore = Number(activeLinkedAnswer.value.score || 0)
+  const suggestedScore = Math.max(0, Math.min(maxScore, Math.round(Number(gradingResult.value.totalScore || 0))))
+  applyingLinkedSuggestion.value = true
+  try {
+    linkedSubmission.value = await saveTeacherPracticeAiDraft(linkedSubmission.value.submissionId, {
+      questionId: activeLinkedAnswer.value.questionId,
+      score: suggestedScore,
+      feedback: buildLinkedFeedback(gradingResult.value),
+      reasoning: buildLinkedReasoning(gradingResult.value),
+      confidence: Number(gradingResult.value.confidence || 0),
+    })
+    const questionId = Number(activeLinkedAnswer.value.questionId)
+    if (!linkedAppliedQuestionIds.value.includes(questionId)) {
+      linkedAppliedQuestionIds.value = [...linkedAppliedQuestionIds.value, questionId]
+    }
+    const nextIndex = linkedOpenAnswers.value.findIndex(
+      (answer, index) => index > linkedQuestionIndex.value
+        && !linkedAppliedQuestionIds.value.includes(Number(answer.questionId)),
+    )
+    if (nextIndex >= 0) {
+      ElMessage.success('本题 AI 建议已保存，继续批改下一道开放题')
+      selectLinkedQuestion(nextIndex)
+    } else {
+      ElMessage.success('AI 建议已保存，请返回练习页面进行教师复核')
+    }
+  } catch (error) {
+    ElMessage.error(error?.message || 'AI 建议保存失败')
+  } finally {
+    applyingLinkedSuggestion.value = false
+  }
+}
+
+async function returnToPracticeReview() {
+  await router.push({
+    name: 'teacher-practice-review',
+    query: {
+      submissionId: String(linkedSubmission.value?.submissionId || route.query.submissionId || ''),
+      status: String(route.query.returnStatus || 'SUBMITTED'),
+    },
+  })
+}
+
 async function submitLessonPlan() {
   const valid = await lessonFormRef.value?.validate().catch(() => false)
   if (!valid) return
@@ -650,7 +826,14 @@ async function copyResult(result, successMessage) {
   }
 }
 
-onMounted(loadCourses)
+async function initializeAssistant() {
+  if (route.query.tab === 'grading' || route.query.submissionId) {
+    activeTab.value = 'grading'
+  }
+  await Promise.all([loadCourses(), loadLinkedSubmission()])
+}
+
+onMounted(initializeAssistant)
 </script>
 <template>
   <main class="ai-assistant-page">
@@ -728,7 +911,7 @@ onMounted(loadCourses)
       </div>
     </section>
 
-    <el-tabs v-model="activeTab" class="assistant-tabs">
+    <el-tabs v-model="activeTab" class="assistant-tabs" @tab-click="handleAssistantTabClick">
       <el-tab-pane name="lesson">
         <template #label>
           <span class="tab-switch-card">
@@ -1161,6 +1344,35 @@ onMounted(loadCourses)
           </span>
         </template>
 
+        <section v-if="linkedSubmission || linkedSubmissionLoading" v-loading="linkedSubmissionLoading" class="linked-review-banner">
+          <div class="linked-review-banner__copy">
+            <span>来自学习练习</span>
+            <h2>{{ linkedSubmission?.practiceTitle || '正在读取学生练习' }}</h2>
+            <p v-if="linkedSubmission">
+              {{ linkedSubmission.courseName }} · {{ linkedSubmission.studentName || '学生' }} ·
+              共 {{ linkedOpenAnswers.length }} 道开放题
+            </p>
+          </div>
+          <div v-if="linkedSubmission" class="linked-review-banner__actions">
+            <el-button @click="returnToPracticeReview">
+              <el-icon><Back /></el-icon>返回练习复核
+            </el-button>
+          </div>
+          <div v-if="linkedOpenAnswers.length" class="linked-question-nav">
+            <button
+              v-for="(answer, index) in linkedOpenAnswers"
+              :key="answer.questionId"
+              type="button"
+              :class="{ 'is-active': index === linkedQuestionIndex, 'is-applied': linkedAppliedQuestionIds.includes(Number(answer.questionId)) }"
+              @click="selectLinkedQuestion(index)"
+            >
+              <CircleCheck v-if="linkedAppliedQuestionIds.includes(Number(answer.questionId))" />
+              <span>开放题 {{ index + 1 }}</span>
+              <small>{{ answer.score }} 分</small>
+            </button>
+          </div>
+        </section>
+
         <div class="assistant-workspace grading-workspace">
           <section class="workspace-card input-panel grading-input-panel">
             <div class="panel-heading panel-heading--stack">
@@ -1350,7 +1562,7 @@ onMounted(loadCourses)
                 </div>
               </section>
 
-              <div class="form-actions form-span-full">
+              <div ref="gradingStartRef" class="form-actions form-span-full">
                 <el-button :disabled="gradingLoading" @click="clearGradingForm">
                   <el-icon><RefreshLeft /></el-icon>
                   清空
@@ -1376,13 +1588,25 @@ onMounted(loadCourses)
                 <span class="status-dot"></span>
                 {{ gradingStatusText }}
               </div>
-              <el-button
-                :icon="CopyDocument"
-                :disabled="!gradingResultReady || gradingLoading"
-                @click="copyResult(gradingResult, '批改结果已复制')"
-              >
-                复制结果
-              </el-button>
+              <div class="result-heading__actions">
+                <el-button
+                  :icon="CopyDocument"
+                  :disabled="!gradingResultReady || gradingLoading"
+                  @click="copyResult(gradingResult, '批改结果已复制')"
+                >
+                  复制结果
+                </el-button>
+                <el-button
+                  v-if="linkedSubmission"
+                  type="primary"
+                  :loading="applyingLinkedSuggestion"
+                  :disabled="!gradingResultReady || gradingLoading"
+                  @click="applyLinkedSuggestion"
+                >
+                  <el-icon><CircleCheck /></el-icon>
+                  {{ activeLinkedSuggestionApplied ? '更新此题建议' : '采用此题建议' }}
+                </el-button>
+              </div>
             </div>
 
             <div v-if="gradingLoading && !gradingResultReady" class="result-state result-state--loading">
@@ -1653,7 +1877,7 @@ onMounted(loadCourses)
                     </div>
                   </div>
                   <div class="answer-block answer-block--large">
-                    <p>{{ gradingDisplayResult.revisedAnswer || '暂无参考改写答案。' }}</p>
+                    <p>{{ gradingRevisedAnswer || '暂无参考改写答案。' }}</p>
                   </div>
                 </section>
               </div>
@@ -4802,6 +5026,101 @@ onMounted(loadCourses)
   white-space: nowrap;
 }
 
+.linked-review-banner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px 24px;
+  margin: 18px 0;
+  padding: 20px 22px;
+  border: 1px solid #3d3564;
+  border-radius: 7px;
+  background: linear-gradient(118deg, #fff1a8 0%, #f9ddec 52%, #d3f2f2 100%);
+  box-shadow: 5px 6px 0 rgb(61 53 100 / 18%);
+  color: #3d3564;
+}
+
+.linked-review-banner__copy span {
+  color: #665d85;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.linked-review-banner__copy h2 {
+  margin: 5px 0;
+  color: #3d3564;
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.linked-review-banner__copy p {
+  margin: 0;
+  color: #665d85;
+  font-size: 13px;
+}
+
+.linked-review-banner__actions :deep(.el-button) {
+  border: 1px solid #4e4473;
+  border-radius: 5px;
+  background: #fff;
+  color: #3d3564;
+  box-shadow: 3px 4px 0 rgb(61 53 100 / 18%);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.linked-question-nav {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.linked-question-nav button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 7px 11px;
+  border: 1px solid rgb(61 53 100 / 35%);
+  border-radius: 5px;
+  background: rgb(255 255 255 / 82%);
+  color: #3d3564;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.linked-question-nav button svg {
+  width: 15px;
+}
+
+.linked-question-nav button small {
+  color: #72698e;
+}
+
+.linked-question-nav button.is-active {
+  border-color: #4e4473;
+  background: #8178cf;
+  color: #fff;
+  box-shadow: 3px 4px 0 rgb(61 53 100 / 22%);
+}
+
+.linked-question-nav button.is-active small {
+  color: #fff;
+}
+
+.linked-question-nav button.is-applied:not(.is-active) {
+  border-color: #52bbc4;
+  background: #e9fbfc;
+}
+
+.result-heading__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 @media (max-width: 860px) {
   .workspace-hero {
     padding: 18px;
@@ -4822,6 +5141,14 @@ onMounted(loadCourses)
   .tab-switch-card {
     min-width: 0;
   }
+
+  .linked-review-banner {
+    grid-template-columns: 1fr;
+  }
+
+  .linked-review-banner__actions :deep(.el-button) {
+    width: 100%;
+  }
 }
 
 @media (max-width: 560px) {
@@ -4841,6 +5168,17 @@ onMounted(loadCourses)
 
   .form-actions {
     grid-template-columns: 1fr;
+  }
+
+  .result-heading__actions {
+    width: 100%;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .result-heading__actions :deep(.el-button) {
+    width: 100%;
+    margin-left: 0;
   }
 }
 </style>
