@@ -40,7 +40,7 @@ const SIDEBAR_BREAKPOINT = 980
 
 const senderRef = ref(null)
 const bubbleListRef = ref(null)
-const apiBaseURL = 'http://localhost:8080'
+const apiBaseURL = ''
 const composerValue = ref('')
 const isLoading = ref(false)
 const loadingConversationId = ref('')

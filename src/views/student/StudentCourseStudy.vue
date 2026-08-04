@@ -20,8 +20,9 @@ import StudentAiCompanion from '@/components/student/StudentAiCompanion.vue'
 import {
   getStudentCourse,
   getStudentCourseChapters,
-  listStudentCourseStudyRecords,
-  saveStudentCourseStudyRecord,
+  listStudentResourceStudyRecords,
+  saveStudentResourceStudyRecord,
+  openStudentBlockProject,
 } from '@/api/course'
 import cover1 from '@/assets/course/img1.webp'
 import cover2 from '@/assets/course/img2.webp'
@@ -45,6 +46,7 @@ const sessionStartedAt = ref(Date.now())
 let lastVideoReportAt = 0
 
 const courseId = computed(() => Number(route.params.courseId || route.query.courseId || 0))
+const assignmentId = computed(() => Number(route.query.assignmentId || 0))
 const selectedChapter = computed(() => chapters.value.find((item) => item.id === selectedChapterId.value) || null)
 const selectedResource = computed(() => {
   const resources = selectedChapter.value?.resources || []
@@ -60,14 +62,14 @@ const videoSubtitleUrl = computed(() => {
 const recordMap = computed(() => {
   const map = {}
   records.value.forEach((item) => {
-    map[item.chapterId] = item
+    map[item.resourceId] = item
   })
   return map
 })
 
 const chapterCount = computed(() => chapters.value.length)
 const completedCount = computed(() =>
-  chapters.value.filter((chapter) => Number(recordMap.value[chapter.id]?.finishStatus || 0) === 1).length,
+  chapters.value.filter(chapterCompleted).length,
 )
 const progressPercent = computed(() => {
   if (!chapterCount.value) return 0
@@ -79,6 +81,7 @@ const resourceTypes = {
   2: { label: 'PDF', icon: Document, tag: 'warning' },
   3: { label: '图片', icon: Picture, tag: 'info' },
   4: { label: '文件', icon: Files, tag: '' },
+  5: { label: '积木项目', icon: Collection, tag: 'success' },
 }
 
 function fallbackCover(item) {
@@ -104,11 +107,14 @@ function formatFileSize(size) {
 }
 
 function chapterProgress(chapter) {
-  return Number(recordMap.value[chapter.id]?.progress || 0)
+  const resources = chapter?.resources || []
+  if (!resources.length) return 0
+  return Math.round(resources.reduce((total, resource) => total + Number(recordMap.value[resource.id]?.progress || 0), 0) / resources.length)
 }
 
 function chapterCompleted(chapter) {
-  return Number(recordMap.value[chapter.id]?.finishStatus || 0) === 1
+  const resources = chapter?.resources || []
+  return resources.length > 0 && resources.every((resource) => Number(recordMap.value[resource.id]?.finishStatus || 0) === 1)
 }
 
 function selectResource(chapter, resource) {
@@ -121,7 +127,11 @@ function selectResource(chapter, resource) {
       videoRef.value.currentTime = 0
     }
   })
-  saveProgress({ progress: Math.max(chapterProgress(chapter), 10) }, false)
+  if (Number(resource?.type) === 5) {
+    launchBlockProject(chapter, resource)
+    return
+  }
+  saveProgress({ progress: Math.max(Number(recordMap.value[resource?.id]?.progress || 0), 10) }, false)
 }
 
 function selectFirstResource() {
@@ -162,7 +172,7 @@ async function loadAll() {
     const [courseData, chapterData, recordData] = await Promise.all([
       getStudentCourse(courseId.value),
       getStudentCourseChapters(courseId.value),
-      listStudentCourseStudyRecords(courseId.value),
+      listStudentResourceStudyRecords(courseId.value, { assignmentId: assignmentId.value || undefined }),
     ])
     course.value = courseData
     chapters.value = chapterData || []
@@ -178,7 +188,7 @@ async function loadAll() {
 }
 
 async function refreshRecords() {
-  records.value = (await listStudentCourseStudyRecords(courseId.value)) || []
+  records.value = (await listStudentResourceStudyRecords(courseId.value, { assignmentId: assignmentId.value || undefined })) || []
 }
 
 function buildProgressPayload(extra = {}) {
@@ -186,7 +196,9 @@ function buildProgressPayload(extra = {}) {
   return {
     chapterId: selectedChapterId.value,
     resourceId: selectedResource.value?.id || null,
-    progress: chapterProgress(selectedChapter.value || {}) || 10,
+    assignmentId: assignmentId.value || 0,
+    courseId: courseId.value,
+    progress: Number(recordMap.value[selectedResource.value?.id]?.progress || 0) || 10,
     studyDuration: elapsedMinutes,
     finishStatus: 0,
     ...extra,
@@ -197,11 +209,43 @@ async function saveProgress(extra = {}, showMessage = true) {
   if (!selectedChapterId.value || saving.value) return
   saving.value = true
   try {
-    await saveStudentCourseStudyRecord(courseId.value, buildProgressPayload(extra))
+    await saveStudentResourceStudyRecord(buildProgressPayload(extra))
     await refreshRecords()
     if (showMessage) ElMessage.success('学习进度已保存')
   } catch (error) {
     if (showMessage) ElMessage.error(error?.message || '学习进度保存失败')
+  } finally {
+    saving.value = false
+  }
+}
+
+async function launchBlockProject(chapter, resource) {
+  if (!resource?.blockProjectId || resource.blockProjectAvailable === false) {
+    ElMessage.error('项目已不可用，请联系教师重新选择')
+    return
+  }
+  saving.value = true
+  try {
+    await openStudentBlockProject({
+      assignmentId: assignmentId.value || 0,
+      courseId: courseId.value,
+      chapterId: chapter.id,
+      resourceId: resource.id,
+      studyDuration: 1,
+    })
+    router.push({
+      name: 'block-workshop',
+      query: {
+        projectId: resource.blockProjectId,
+        courseId: courseId.value,
+        chapterId: chapter.id,
+        resourceId: resource.id,
+        assignmentId: assignmentId.value || 0,
+        courseMode: '1',
+      },
+    })
+  } catch (error) {
+    ElMessage.error(error?.message || '项目打开失败')
   } finally {
     saving.value = false
   }
@@ -303,7 +347,7 @@ onBeforeUnmount(revokePdfViewerUrl)
             <el-icon><ChatDotRound /></el-icon>
             智能学伴
           </el-button>
-          <el-button type="success" :loading="saving" :disabled="!selectedChapter" @click="markCompleted">
+          <el-button v-if="selectedResource?.type !== 5" type="success" :loading="saving" :disabled="!selectedChapter" @click="markCompleted">
             <el-icon><Check /></el-icon>
             标记完成
           </el-button>
@@ -341,7 +385,7 @@ onBeforeUnmount(revokePdfViewerUrl)
           fit="contain"
           class="image-viewer"
         />
-        <div v-else class="file-viewer">
+        <div v-else-if="selectedResource.type !== 5" class="file-viewer">
           <el-icon><component :is="isExternalResource(selectedResource) ? Link : Files" /></el-icon>
           <strong>{{ selectedResource.name }}</strong>
           <span v-if="isExternalResource(selectedResource)">内容由课程发布机构提供，将在新窗口打开</span>
@@ -349,6 +393,12 @@ onBeforeUnmount(revokePdfViewerUrl)
           <el-link :href="selectedResource.url" target="_blank" type="primary">
             {{ isExternalResource(selectedResource) ? '进入官方课程' : '打开资源' }}
           </el-link>
+        </div>
+        <div v-else class="file-viewer">
+          <el-icon><Collection /></el-icon>
+          <strong>{{ selectedResource.name }}</strong>
+          <span>{{ selectedResource.blockProjectAvailable === false ? '项目已不可用，请联系教师重新选择' : '将在积木工坊中以只读方式运行。' }}</span>
+          <el-button type="primary" :disabled="selectedResource.blockProjectAvailable === false" @click="launchBlockProject(selectedChapter, selectedResource)">打开项目</el-button>
         </div>
       </div>
 

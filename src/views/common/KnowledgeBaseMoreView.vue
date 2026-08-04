@@ -7,7 +7,7 @@ import { getKnowledgeBaseCollectionStatus, pagePublicKnowledgeBases } from '@/ap
 import { useUserStore } from '@/stores/user'
 import KnowledgeBaseDetailDrawer from './KnowledgeBaseDetailDrawer.vue'
 
-const apiBaseURL = 'http://localhost:8080'
+const apiBaseURL = ''
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()

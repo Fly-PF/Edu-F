@@ -117,7 +117,7 @@ function coverUrl(objectName) {
     return ''
   }
 
-  return `http://localhost:8080/api/rag/kb/cover?objectName=${encodeURIComponent(objectName)}`
+  return `/api/rag/kb/cover?objectName=${encodeURIComponent(objectName)}`
 }
 
 function formatDocumentType(docType) {

@@ -23,6 +23,7 @@ import {
 } from '@element-plus/icons-vue'
 import {
   createChapter,
+  createBlockProjectResource,
   createExternalResource,
   deleteChapter,
   deleteResource,
@@ -36,6 +37,7 @@ import {
   uploadCourseCover,
   uploadCourseResource,
 } from '@/api/course'
+import { listBlockGallery } from '@/api/blockProject'
 import cover1 from '@/assets/course/img1.webp'
 
 const route = useRoute()
@@ -91,6 +93,12 @@ const editResourceForm = reactive({
 
 const previewVisible = ref(false)
 const previewResource = ref(null)
+const blockProjectVisible = ref(false)
+const blockProjectLoading = ref(false)
+const blockProjectSaving = ref(false)
+const blockProjectKeyword = ref('')
+const publicBlockProjects = ref([])
+const selectedBlockProjectId = ref(null)
 
 const selectedChapter = computed(() => {
   return chapters.value.find((item) => Number(item.id) === Number(selectedChapterId.value)) || null
@@ -118,6 +126,7 @@ function resourceTypeMeta(type) {
     2: { label: 'PDF', tag: 'warning', icon: Document },
     3: { label: '图片', tag: 'primary', icon: Picture },
     4: { label: '数据文件', tag: 'info', icon: Files },
+    5: { label: '积木项目', tag: 'success', icon: Collection },
   }
   return map[type] || map[4]
 }
@@ -356,6 +365,45 @@ function openExternalDialog() {
   externalVisible.value = true
 }
 
+async function openBlockProjectDialog() {
+  selectedBlockProjectId.value = null
+  blockProjectKeyword.value = ''
+  blockProjectVisible.value = true
+  await loadPublicBlockProjects()
+}
+
+async function loadPublicBlockProjects() {
+  blockProjectLoading.value = true
+  try {
+    publicBlockProjects.value = await listBlockGallery({ keyword: blockProjectKeyword.value.trim() }) || []
+  } catch (error) {
+    ElMessage.error(error?.message || '公开积木项目加载失败')
+  } finally {
+    blockProjectLoading.value = false
+  }
+}
+
+async function submitBlockProjectResource() {
+  if (!selectedChapter.value || !selectedBlockProjectId.value) {
+    ElMessage.warning('请选择一个公开积木项目')
+    return
+  }
+  blockProjectSaving.value = true
+  try {
+    await createBlockProjectResource(courseId.value, selectedChapter.value.id, {
+      projectId: selectedBlockProjectId.value,
+      sortOrder: selectedChapter.value.resources?.length || 0,
+    })
+    blockProjectVisible.value = false
+    await loadAll()
+    ElMessage.success('积木项目已添加到章节')
+  } catch (error) {
+    ElMessage.error(error?.message || '积木项目添加失败')
+  } finally {
+    blockProjectSaving.value = false
+  }
+}
+
 async function submitExternalResource() {
   if (!selectedChapter.value) return
   if (!externalForm.name.trim() || !externalForm.url.trim()) {
@@ -382,6 +430,10 @@ async function submitExternalResource() {
 }
 
 function openEditResource(resource) {
+  if (Number(resource?.type) === 5) {
+    ElMessage.info('积木项目请删除后重新选择')
+    return
+  }
   editingResource.value = resource
   Object.assign(editResourceForm, {
     name: resource.name,
@@ -393,6 +445,7 @@ function openEditResource(resource) {
 }
 
 function isManagedResource(resource) {
+  if (Number(resource?.type) === 5) return false
   return Boolean(resource?.storedUrl && !/^https?:\/\//i.test(resource.storedUrl))
 }
 
@@ -722,6 +775,10 @@ onMounted(loadAll)
                     <el-icon><Link /></el-icon>
                     外部链接
                   </el-button>
+                  <el-button type="primary" plain @click="openBlockProjectDialog">
+                    <el-icon><Collection /></el-icon>
+                    添加积木项目
+                  </el-button>
                 </div>
               </div>
 
@@ -802,6 +859,23 @@ onMounted(loadAll)
       <template #footer>
         <el-button @click="createChapterVisible = false">取消</el-button>
         <el-button type="primary" :loading="createChapterLoading" @click="submitCreateChapter">创建</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="blockProjectVisible" class="explore-dialog" title="添加公开积木项目" width="min(680px, 94vw)">
+      <el-input v-model.trim="blockProjectKeyword" placeholder="搜索项目名称、简介或作者" clearable @keyup.enter="loadPublicBlockProjects">
+        <template #append><el-button :loading="blockProjectLoading" @click="loadPublicBlockProjects">搜索</el-button></template>
+      </el-input>
+      <el-radio-group v-model="selectedBlockProjectId" class="block-project-picker" v-loading="blockProjectLoading">
+        <el-radio v-for="project in publicBlockProjects" :key="project.id" :value="project.id" class="block-project-option">
+          <strong>{{ project.title }}</strong>
+          <span>{{ project.ownerName || '匿名作者' }} · {{ project.description || '暂无简介' }}</span>
+        </el-radio>
+        <el-empty v-if="!blockProjectLoading && !publicBlockProjects.length" description="没有匹配的公开项目" :image-size="54" />
+      </el-radio-group>
+      <template #footer>
+        <el-button @click="blockProjectVisible = false">取消</el-button>
+        <el-button type="primary" :loading="blockProjectSaving" @click="submitBlockProjectResource">添加到当前章节</el-button>
       </template>
     </el-dialog>
 
@@ -1482,6 +1556,11 @@ onMounted(loadAll)
     padding: 18px 14px;
   }
 }
+.block-project-picker { display: grid; width: 100%; max-height: 360px; margin-top: 16px; overflow: auto; gap: 8px; }
+.block-project-option { display: grid; width: 100%; height: auto; margin: 0; padding: 10px 12px; border: 1px solid rgb(61 53 100 / 20%); border-radius: 6px; background: #fff; }
+.block-project-option :deep(.el-radio__label) { display: grid; min-width: 0; gap: 4px; padding-left: 8px; }
+.block-project-option strong,.block-project-option span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.block-project-option span { color: #756a94; font-size: 12px; }
 </style>
 
 <style scoped>

@@ -5,7 +5,7 @@ import { ElMessage } from 'element-plus'
 import { PictureFilled, Search } from '@element-plus/icons-vue'
 import { listMyKnowledgeBases } from '@/api/rag'
 
-const apiBaseURL = 'http://localhost:8080'
+const apiBaseURL = ''
 const router = useRouter()
 
 const loading = ref(false)
