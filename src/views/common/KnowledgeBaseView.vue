@@ -40,7 +40,7 @@ const SIDEBAR_BREAKPOINT = 980
 
 const senderRef = ref(null)
 const bubbleListRef = ref(null)
-const apiBaseURL = 'http://localhost:8080'
+const apiBaseURL = (import.meta.env.VITE_APP_REQUEST_BASE_URL || '').replace(/\/$/, '')
 const composerValue = ref('')
 const isLoading = ref(false)
 const loadingConversationId = ref('')
@@ -346,6 +346,17 @@ function pushMessage(role, content, extra = {}) {
 
   messages.value.push(message)
   return message
+}
+
+function createTemporaryMessageId() {
+  if (typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
+    const random = Math.floor(Math.random() * 16)
+    return (char === 'x' ? random : (random & 0x3) | 0x8).toString(16)
+  })
 }
 
 function stopTypingLoop() {
@@ -873,7 +884,7 @@ async function handleSend() {
   const requestConversationId = activeConversation.value
   shouldAutoScroll.value = true
   const chatImages = [...pendingChatImages.value]
-  const temporaryMessageId = crypto.randomUUID()
+  const temporaryMessageId = createTemporaryMessageId()
   const userMessage = pushMessage('user', question, {
     messageId: `${temporaryMessageId}-user`,
     qaImgs: chatImages,
@@ -2618,6 +2629,11 @@ onBeforeUnmount(() => {
   color: var(--kb-ink);
   outline: none;
   transform: translate(-1px, -1px);
+}
+
+.topbar-back:hover,
+.topbar-back:focus-visible {
+  transform: translateY(-50%);
 }
 
 .chat-main {

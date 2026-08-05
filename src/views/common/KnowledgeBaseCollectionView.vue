@@ -6,7 +6,7 @@ import { getKnowledgeBaseCollectionStatus, pageCollectedKnowledgeBases } from '@
 import { useUserStore } from '@/stores/user'
 import KnowledgeBaseDetailDrawer from './KnowledgeBaseDetailDrawer.vue'
 
-const apiBaseURL = 'http://localhost:8080'
+const apiBaseURL = (import.meta.env.VITE_APP_REQUEST_BASE_URL || '').replace(/\/$/, '')
 const userStore = useUserStore()
 
 const loading = ref(false)

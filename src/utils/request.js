@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { useUserStore } from '@/stores/user'
 
-const baseURL = 'http://localhost:8080'
+const baseURL = (import.meta.env.VITE_APP_REQUEST_BASE_URL || '').replace(/\/$/, '')
 const authExpiredCodes = [401]
 
 const instance = axios.create({
@@ -35,7 +35,8 @@ function isPublicCatalogRequest(config) {
 
   return (
     method === 'get' &&
-    (/^\/api\/course-categories(?:\/tags)?$/.test(url))
+    (/^\/api\/course-categories(?:\/tags)?$/.test(url) ||
+      /^\/api\/block-projects\/gallery$/.test(url))
   )
 }
 

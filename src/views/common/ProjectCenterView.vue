@@ -48,7 +48,7 @@ function loadPythonProjects() {
 }
 
 async function loadBlockProjects() {
-  if (!userStore.isLoggedIn) {
+  if (scope.value === 'mine' && !userStore.isLoggedIn) {
     blockProjects.value = []
     return
   }

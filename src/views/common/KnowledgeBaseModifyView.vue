@@ -3,8 +3,9 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, genFileId } from 'element-plus'
 import { ArrowLeft, Delete, Edit, Files, Plus, PictureFilled, Refresh, Search, UploadFilled, View } from '@element-plus/icons-vue'
-import { deleteKnowledgeBaseDocument, getMyKnowledgeBase, pageKnowledgeBaseDocuments, updateKnowledgeBase, updateKnowledgeBaseDocument, uploadKnowledgeBaseDocument } from '@/api/rag'
+import { deleteKnowledgeBase, deleteKnowledgeBaseDocument, getMyKnowledgeBase, pageKnowledgeBaseDocuments, updateKnowledgeBase, updateKnowledgeBaseDocument, uploadKnowledgeBaseDocument } from '@/api/rag'
 
+const apiBaseURL = (import.meta.env.VITE_APP_REQUEST_BASE_URL || '').replace(/\/$/, '')
 const route = useRoute()
 const router = useRouter()
 
@@ -22,6 +23,7 @@ const documentEditDialogVisible = ref(false)
 const documentEditSubmitting = ref(false)
 const editingDocument = ref(null)
 const documentDeletingId = ref(null)
+const deleting = ref(false)
 const loading = ref(false)
 const docLoading = ref(false)
 const kbId = Number(route.query.kb_id)
@@ -117,7 +119,7 @@ function coverUrl(objectName) {
     return ''
   }
 
-  return `http://localhost:8080/api/rag/kb/cover?objectName=${encodeURIComponent(objectName)}`
+  return `${apiBaseURL}/api/rag/kb/cover?objectName=${encodeURIComponent(objectName)}`
 }
 
 function formatDocumentType(docType) {
@@ -318,6 +320,30 @@ async function handleSubmit() {
     ElMessage.error(error?.message || '更新失败')
   } finally {
     submitting.value = false
+  }
+}
+
+async function handleDeleteKnowledgeBase() {
+  try {
+    await ElMessageBox.confirm('删除知识库后，其包含的所有文件和向量数据将无法访问，确定删除吗？', '删除知识库', {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      confirmButtonClass: 'el-button--danger',
+    })
+  } catch {
+    return
+  }
+
+  deleting.value = true
+  try {
+    await deleteKnowledgeBase(kbId)
+    ElMessage.success('删除成功')
+    backToKnowledgeBaseMy()
+  } catch (error) {
+    ElMessage.error(error?.message || '删除失败')
+  } finally {
+    deleting.value = false
   }
 }
 
@@ -586,7 +612,8 @@ onBeforeUnmount(revokeCoverPreview)
 
           <div class="form-actions">
             <template v-if="!isEditing">
-              <el-button type="primary" :disabled="loading || submitting" @click="handleEdit">编辑</el-button>
+              <el-button type="danger" :icon="Delete" :loading="deleting" :disabled="loading || submitting || deleting" @click="handleDeleteKnowledgeBase">删除</el-button>
+              <el-button type="primary" :disabled="loading || submitting || deleting" @click="handleEdit">编辑</el-button>
             </template>
             <template v-else>
               <el-button :disabled="submitting" @click="handleCancel">取消</el-button>

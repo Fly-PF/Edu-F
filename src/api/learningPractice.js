@@ -34,6 +34,14 @@ export function listTeacherPracticeSubmissions(status) {
   }))
 }
 
+export function getTeacherPracticeSubmission(submissionId) {
+  return resolve(request.get(`/api/teacher/learning-practices/submissions/${submissionId}`))
+}
+
+export function saveTeacherPracticeAiDraft(submissionId, data) {
+  return resolve(request.patch(`/api/teacher/learning-practices/submissions/${submissionId}/ai-draft`, data))
+}
+
 export function reviewPracticeSubmission(submissionId, data) {
   return resolve(request.patch(`/api/teacher/learning-practices/submissions/${submissionId}/review`, data))
 }

@@ -1,8 +1,7 @@
 import request from '@/utils/request'
 import { useUserStore } from '@/stores/user'
 
-const RAG_API_BASE_URL = 'http://localhost:8080'
-
+const RAG_API_BASE_URL = String(import.meta.env.VITE_APP_REQUEST_BASE_URL || '').replace(/\/+$/, '')
 function unwrap(response) {
   if (!response || typeof response !== 'object' || !Object.prototype.hasOwnProperty.call(response, 'code')) {
     return response
@@ -30,6 +29,10 @@ export function getMyKnowledgeBase(kbId) {
 
 export function updateKnowledgeBase(data) {
   return resolve(request.post('/api/rag/kb/update', data))
+}
+
+export function deleteKnowledgeBase(kbId) {
+  return resolve(request.delete(`/api/rag/kb/${kbId}`, { timeout: 120000 }))
 }
 
 export function listMyKnowledgeBases(params = {}) {

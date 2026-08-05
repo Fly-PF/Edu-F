@@ -12,13 +12,13 @@ const emit = defineEmits(['select-prompt'])
 <template>
   <div class="welcome-block">
     <div class="welcome-copy">
-      <span class="welcome-sticker">AI EXPLORATION LAB</span>
-      <h1>AI 探索乐园</h1>
-      <p>把好奇心变成问题，和知识库一起动手找答案。</p>
+      <span class="welcome-sticker">KNOWLEDGE BASE</span>
+      <h1>知识库探索</h1>
+      <p>围绕知识库提问，快速找到清晰可靠的答案。</p>
       <div class="welcome-actions" aria-hidden="true">
-        <span class="welcome-chip">ASK</span>
-        <span class="welcome-chip">MAKE</span>
-        <span class="welcome-chip">DISCOVER</span>
+        <span class="welcome-chip">提问</span>
+        <span class="welcome-chip">检索</span>
+        <span class="welcome-chip">学习</span>
       </div>
     </div>
     <div class="welcome-art" aria-hidden="true">

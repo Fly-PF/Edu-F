@@ -6,7 +6,7 @@ import { cancelKnowledgeBaseCollection, collectKnowledgeBase, listPublicKnowledg
 import router from '@/router'
 import { useUserStore } from '@/stores/user'
 
-const apiBaseURL = 'http://localhost:8080'
+const apiBaseURL = (import.meta.env.VITE_APP_REQUEST_BASE_URL || '').replace(/\/$/, '')
 const userStore = useUserStore()
 
 const visible = defineModel({ type: Boolean, default: false })

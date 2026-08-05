@@ -42,7 +42,7 @@ const previewUrl = computed(() => {
     return ''
   }
 
-  return `http://localhost:8080/api/rag/files/preview?file_url=${encodeURIComponent(fileUrl.value)}&kb_id=${encodeURIComponent(String(kbId.value || ''))}`
+  return `/api/rag/files/preview?file_url=${encodeURIComponent(fileUrl.value)}&kb_id=${encodeURIComponent(String(kbId.value || ''))}`
 })
 
 const displayTypeText = computed(() => {

@@ -13,12 +13,17 @@ const practice = ref(null)
 const answers = reactive({})
 const practiceId = computed(() => Number(route.params.practiceId))
 const isReadOnly = computed(() => ['SUBMITTED', 'REVIEWED'].includes(practice.value?.submissionStatus))
+const choiceLabels = ['A', 'B', 'C', 'D']
 
 function statusText(status) { return { SUBMITTED: '已提交，等待老师批改', REVIEWED: '老师已完成批改' }[status] || '未提交' }
 function choiceValue(value) {
   const text = String(value || '').trim().toUpperCase()
-  if (/^\d+$/.test(text)) return String.fromCharCode(64 + Number(text))
-  return text
+  if (/^\d+$/.test(text)) return choiceLabels[Number(text) - 1] || ''
+  return choiceLabels.includes(text) ? text : ''
+}
+
+function choiceLabel(index) {
+  return choiceLabels[index] || ''
 }
 
 async function loadPractice() {
@@ -71,7 +76,9 @@ onMounted(loadPractice)
         <article v-for="(question, index) in practice.questions" :key="question.id" class="question-card">
           <div class="question-title"><span>{{ index + 1 }}</span><h2>{{ question.content }}</h2><small>{{ question.score }} 分</small></div>
           <el-radio-group v-if="question.type === 'SINGLE'" v-model="answers[question.id]" :disabled="isReadOnly" class="option-list">
-            <el-radio v-for="option in question.options" :key="option" :value="option.slice(0, 1)">{{ option }}</el-radio>
+            <el-radio v-for="(option, optionIndex) in question.options.slice(0, 4)" :key="`${question.id}-${optionIndex}`" :value="choiceLabel(optionIndex)">
+              <span class="choice-option"><b>{{ choiceLabel(optionIndex) }}</b><span>{{ option }}</span></span>
+            </el-radio>
           </el-radio-group>
           <el-input v-else v-model="answers[question.id]" :disabled="isReadOnly" type="textarea" :rows="5" maxlength="500" show-word-limit placeholder="写下你的理解、观察或设计思路" />
           <div v-if="practice.submissionStatus === 'REVIEWED' && question.awardedScore !== null && question.awardedScore !== undefined" class="question-result">
@@ -105,6 +112,7 @@ onMounted(loadPractice)
 .question-title h2 { margin: 3px 0 0; color: var(--explore-ink); font-size: 17px; font-weight: 800; line-height: 1.6; }.question-title small { padding: 5px 8px; border: 1px solid rgb(61 53 100 / 17%); border-radius: 4px; background: rgb(255 255 255 / 70%); color: #655d7e; white-space: nowrap; }
 .option-list { display: grid; gap: 10px; margin: 20px 0 0 45px; }.option-list :deep(.el-radio) { display: flex; height: auto; min-height: 40px; align-items: center; margin: 0; padding: 9px 12px; border: 1px solid rgb(61 53 100 / 18%); border-radius: 6px; background: rgb(255 255 255 / 78%); color: var(--explore-ink); line-height: 1.6; }
 .option-list :deep(.el-radio:hover) { border-color: var(--explore-purple); background: #f7f4ff; }.option-list :deep(.el-radio.is-checked) { border-color: var(--explore-purple); background: #eeeafa; box-shadow: 3px 4px 0 rgb(129 120 207 / 18%); }.option-list :deep(.el-radio__label) { white-space: normal; word-break: break-word; }
+.choice-option { display: inline-flex; align-items: flex-start; gap: 8px; }.choice-option b { min-width: 18px; color: var(--explore-ink); font-weight: 900; }
 .question-card :deep(.el-textarea) { display: block; margin-top: 20px; }.question-card :deep(.el-textarea__inner) { border: 1px solid var(--explore-ink); border-radius: 6px; background: rgb(255 255 255 / 82%); color: var(--explore-ink); box-shadow: 3px 4px 0 rgb(61 53 100 / 9%); }
 .question-result { margin-top: 18px; padding: 13px 14px; border: 1px solid #398b82; border-radius: 6px; background: #ecfbf6; color: #276b62; }.question-result strong { font-size: 14px; }.question-result p { margin: 7px 0 0; font-size: 13px; line-height: 1.65; }
 .reference-answer { display: flex; gap: 10px; margin-top: 14px; padding: 14px; border: 1px solid rgb(82 187 196 / 35%); border-radius: 6px; background: #eefafa; color: #376c72; }.reference-answer .el-icon { margin-top: 2px; }.reference-answer strong { font-size: 13px; }.reference-answer p { margin: 6px 0 0; font-size: 13px; line-height: 1.65; }

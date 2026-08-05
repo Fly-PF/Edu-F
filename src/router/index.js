@@ -31,7 +31,19 @@ function getMainEntryPath(userStore) {
   return '/main/home'
 }
 
-const publicRouteNames = new Set(['main-home', 'course-list', 'course-search', 'knowledge-base-show', 'knowledge-base-more', 'login', 'register'])
+const publicRouteNames = new Set([
+  'main-home',
+  'course-list',
+  'course-search',
+  'project-center',
+  'block-workshop',
+  'block-project-gallery',
+  'ai-exhibit',
+  'knowledge-base-show',
+  'knowledge-base-more',
+  'login',
+  'register',
+])
 
 const personnelRoutes = [
   {
@@ -115,7 +127,7 @@ const teacherRoutes = [
   {
     path: 'teacher/ai-assistant',
     name: 'teacher-ai-assistant',
-    redirect: '/main/teacher/ai-preparation',
+    redirect: (to) => ({ name: 'teacher-ai-grading', query: to.query }),
   },
   {
     path: 'teacher/ai-preparation',
@@ -424,6 +436,15 @@ const router = createRouter({
           component: () => import('@/views/common/ProjectCenterView.vue'),
           meta: {
             title: '项目中心',
+          },
+        },
+        {
+          path: 'gewu',
+          name: 'gewu',
+          component: () => import('@/views/gewu/GewuView.vue'),
+          meta: {
+            title: '格物',
+            allowedRoles: ['STUDENT', 'TEACHER', 'ADMIN', 'SUPERADMIN'],
           },
         },
         {

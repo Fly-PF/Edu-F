@@ -1,8 +1,10 @@
 <script setup>
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { CopyDocument, Delete, MagicStick, Plus, RefreshLeft } from '@element-plus/icons-vue'
+import { Back, CircleCheck, CopyDocument, Delete, MagicStick, Plus, RefreshLeft } from '@element-plus/icons-vue'
 import { generateGrading } from '@/api/teacherAi'
+import { getTeacherPracticeSubmission, saveTeacherPracticeAiDraft } from '@/api/learningPractice'
 import GradingWorkspace from '@/components/teacher-ai/grading/GradingWorkspace.vue'
 import GradingReport from '@/components/teacher-ai/grading/GradingReport.vue'
 import RubricEditor from '@/components/teacher-ai/grading/RubricEditor.vue'
@@ -15,10 +17,18 @@ import {
 
 const emit = defineEmits(['use-learning-insight'])
 
+const route = useRoute()
+const router = useRouter()
 const gradingFormRef = ref()
+const gradingStartRef = ref()
 const gradingLoading = ref(false)
 const gradingResult = ref(null)
 const gradingResultMaxScore = ref(10)
+const linkedSubmission = ref(null)
+const linkedSubmissionLoading = ref(false)
+const linkedQuestionIndex = ref(0)
+const linkedAppliedQuestionIds = ref([])
+const applyingLinkedSuggestion = ref(false)
 let rubricSequence = 3
 
 function createGradingDefaults() {
@@ -37,6 +47,15 @@ function createGradingDefaults() {
 }
 
 const gradingForm = reactive(createGradingDefaults())
+const linkedOpenAnswers = computed(() =>
+  (linkedSubmission.value?.answers || []).filter((answer) => answer.questionType === 'SHORT'),
+)
+const activeLinkedAnswer = computed(() => linkedOpenAnswers.value[linkedQuestionIndex.value] || null)
+const activeLinkedSuggestionApplied = computed(() =>
+  activeLinkedAnswer.value
+    ? linkedAppliedQuestionIds.value.includes(Number(activeLinkedAnswer.value.questionId))
+    : false,
+)
 
 function validateRubric(_rule, value, callback) {
   if (!Array.isArray(value) || value.length === 0) {
@@ -103,6 +122,12 @@ function formatScore(value) {
   const numericValue = Number(value)
   if (!Number.isFinite(numericValue)) return '--'
   return Number.isInteger(numericValue) ? String(numericValue) : numericValue.toFixed(1).replace(/\.0$/, '')
+}
+
+function normalizeDisplayText(value) {
+  if (value === null || value === undefined) return ''
+  const text = String(value).trim()
+  return /^(null|undefined)$/i.test(text) ? '' : text
 }
 const gradingDisplayResult = computed(() => gradingResult.value)
 const gradingDimensionScores = computed(() => normalizeList(gradingDisplayResult.value?.dimensionScores))
@@ -218,6 +243,143 @@ watch(learningInsight, (insight) => {
   if (gradingResult.value && learningInsightReady.value) saveLearningInsight(insight)
 })
 
+function roundScore(value) {
+  return Math.round(Number(value || 0) * 10) / 10
+}
+
+function createLinkedRubric(maxScore) {
+  const total = Math.max(1, Number(maxScore || 1))
+  const accuracy = roundScore(total * 0.5)
+  const completeness = roundScore(total * 0.3)
+  const expression = roundScore(total - accuracy - completeness)
+  return [
+    { id: 1, criterion: '知识准确性', description: '核心概念、事实和结论准确', maxScore: accuracy },
+    { id: 2, criterion: '要点完整性', description: '覆盖题目要求和参考答案中的主要得分点', maxScore: completeness },
+    { id: 3, criterion: '逻辑与表达', description: '推理过程清晰，表达规范且有依据', maxScore: expression },
+  ]
+}
+
+function resolveLinkedReferenceAnswer(answer) {
+  const referenceAnswer = normalizeDisplayText(answer?.referenceAnswer)
+  const genericValues = new Set(['开放题', '简答题', '论述题', 'short'])
+  if (referenceAnswer && !genericValues.has(referenceAnswer.toLowerCase())) return referenceAnswer
+  return normalizeDisplayText(answer?.explanation) || '请结合题目要求和课程学习目标进行评价。'
+}
+
+async function scrollToGradingWorkspace() {
+  await nextTick()
+  gradingStartRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+function fillLinkedQuestion(answer) {
+  if (!answer) return
+  rubricSequence = 3
+  Object.assign(gradingForm, {
+    question: answer.questionContent || '',
+    questionType: '简答题',
+    referenceAnswer: resolveLinkedReferenceAnswer(answer),
+    rubric: createLinkedRubric(answer.score),
+    studentAnswer: answer.studentAnswer || '',
+    maxScore: Number(answer.score || 1),
+  })
+  gradingResult.value = null
+  gradingResultMaxScore.value = Number(answer.score || 1)
+  gradingFormRef.value?.clearValidate()
+}
+
+function selectLinkedQuestion(index) {
+  if (index < 0 || index >= linkedOpenAnswers.value.length) return
+  linkedQuestionIndex.value = index
+  fillLinkedQuestion(linkedOpenAnswers.value[index])
+}
+
+async function loadLinkedSubmission() {
+  const submissionId = Number(route.query.submissionId)
+  if (!Number.isInteger(submissionId) || submissionId <= 0) return
+  linkedSubmissionLoading.value = true
+  try {
+    linkedSubmission.value = await getTeacherPracticeSubmission(submissionId)
+    linkedAppliedQuestionIds.value = linkedOpenAnswers.value
+      .filter((answer) => answer.reviewSource?.startsWith('AI'))
+      .map((answer) => Number(answer.questionId))
+    if (!linkedOpenAnswers.value.length) {
+      ElMessage.warning('这份练习没有需要 AI 辅助批改的开放题')
+      return
+    }
+    const requestedQuestionId = Number(route.query.questionId)
+    const requestedIndex = linkedOpenAnswers.value.findIndex(
+      (answer) => Number(answer.questionId) === requestedQuestionId,
+    )
+    selectLinkedQuestion(requestedIndex >= 0 ? requestedIndex : 0)
+    await scrollToGradingWorkspace()
+  } catch (error) {
+    linkedSubmission.value = null
+    ElMessage.error(error?.message || '学生练习加载失败')
+  } finally {
+    linkedSubmissionLoading.value = false
+  }
+}
+
+function buildLinkedFeedback(result) {
+  const parts = []
+  if (result?.strengths?.length) parts.push(`优点：${result.strengths.join('；')}`)
+  if (result?.deductions?.length) parts.push(`需要改进：${result.deductions.join('；')}`)
+  if (result?.suggestions?.length) parts.push(`建议：${result.suggestions.join('；')}`)
+  return parts.join('\n').slice(0, 500) || '请教师结合 AI 分项评分进一步复核本题答案。'
+}
+
+function buildLinkedReasoning(result) {
+  return (result?.dimensionScores || [])
+    .map((item) => `${item.criterion} ${formatScore(item.score)}/${formatScore(item.maxScore)}：${item.reason || '待教师复核'}`)
+    .join('\n')
+    .slice(0, 2000)
+}
+
+async function applyLinkedSuggestion() {
+  if (!linkedSubmission.value || !activeLinkedAnswer.value || !gradingResult.value) return
+  const maxScore = Number(activeLinkedAnswer.value.score || 0)
+  const suggestedScore = Math.max(0, Math.min(maxScore, Math.round(Number(gradingResult.value.totalScore || 0))))
+  applyingLinkedSuggestion.value = true
+  try {
+    linkedSubmission.value = await saveTeacherPracticeAiDraft(linkedSubmission.value.submissionId, {
+      questionId: activeLinkedAnswer.value.questionId,
+      score: suggestedScore,
+      feedback: buildLinkedFeedback(gradingResult.value),
+      reasoning: buildLinkedReasoning(gradingResult.value),
+      confidence: Number(gradingResult.value.confidence || 0),
+    })
+    const questionId = Number(activeLinkedAnswer.value.questionId)
+    if (!linkedAppliedQuestionIds.value.includes(questionId)) {
+      linkedAppliedQuestionIds.value = [...linkedAppliedQuestionIds.value, questionId]
+    }
+    const nextIndex = linkedOpenAnswers.value.findIndex(
+      (answer, index) => index > linkedQuestionIndex.value
+        && !linkedAppliedQuestionIds.value.includes(Number(answer.questionId)),
+    )
+    if (nextIndex >= 0) {
+      ElMessage.success('本题 AI 建议已保存，继续批改下一道开放题')
+      selectLinkedQuestion(nextIndex)
+    } else {
+      ElMessage.success('AI 建议已保存，请返回练习页面进行教师复核')
+    }
+  } catch (error) {
+    ElMessage.error(error?.message || 'AI 建议保存失败')
+  } finally {
+    applyingLinkedSuggestion.value = false
+  }
+}
+
+async function returnToPracticeReview() {
+  await router.push({
+    name: 'teacher-practice-review',
+    query: {
+      submissionId: String(linkedSubmission.value?.submissionId || route.query.submissionId || ''),
+      status: String(route.query.returnStatus || 'SUBMITTED'),
+      returnStatus: String(route.query.returnStatus || 'SUBMITTED'),
+    },
+  })
+}
+
 async function submitGrading() {
   const valid = await gradingFormRef.value?.validate().catch(() => false)
   if (!valid) return
@@ -302,6 +464,8 @@ async function copyResult(result, successMessage) {
     textarea?.remove()
   }
 }
+
+onMounted(loadLinkedSubmission)
 </script>
 
 <template>
@@ -333,7 +497,41 @@ async function copyResult(result, successMessage) {
       </div>
     </section>
 
-    <section id="grading-lab" class="active-workbench" aria-label="智能批改流程">
+    <section ref="gradingStartRef" id="grading-lab" class="active-workbench" aria-label="智能批改流程">
+      <section
+        v-if="linkedSubmission || linkedSubmissionLoading"
+        v-loading="linkedSubmissionLoading"
+        class="linked-practice-context"
+        aria-label="学习练习批改上下文"
+      >
+        <div class="linked-practice-context__meta">
+          <span class="linked-practice-context__source">来自学习练习</span>
+          <h2>{{ linkedSubmission?.practiceTitle || '正在读取学生练习' }}</h2>
+          <p v-if="linkedSubmission">
+            {{ linkedSubmission.courseName }} · {{ linkedSubmission.studentName || '学生' }} ·
+            当前开放题 {{ linkedQuestionIndex + 1 }} / {{ linkedOpenAnswers.length }}
+          </p>
+        </div>
+        <el-button v-if="linkedSubmission" class="linked-practice-context__back" @click="returnToPracticeReview">
+          <el-icon><Back /></el-icon>
+          返回练习复核
+        </el-button>
+        <nav v-if="linkedOpenAnswers.length" class="linked-question-switcher" aria-label="开放题切换">
+          <button
+            v-for="(answer, index) in linkedOpenAnswers"
+            :key="answer.questionId"
+            type="button"
+            :class="{
+              'is-active': index === linkedQuestionIndex,
+              'is-applied': linkedAppliedQuestionIds.includes(Number(answer.questionId)),
+            }"
+            @click="selectLinkedQuestion(index)"
+          >
+            <el-icon v-if="linkedAppliedQuestionIds.includes(Number(answer.questionId))"><CircleCheck /></el-icon>
+            第 {{ index + 1 }} 题
+          </button>
+        </nav>
+      </section>
         <GradingWorkspace
           :grading-form="gradingForm"
           :grading-result="gradingResult"
@@ -934,6 +1132,21 @@ async function copyResult(result, successMessage) {
               完成一次有效批改后，AI会从学生作答中提取可用于教学调整的学习反馈。
             </div>
           </section>
+          <div v-if="linkedSubmission" class="linked-suggestion-actions">
+            <el-button
+              type="primary"
+              :loading="applyingLinkedSuggestion"
+              :disabled="!gradingResultReady || gradingLoading"
+              @click="applyLinkedSuggestion"
+            >
+              <el-icon><CircleCheck /></el-icon>
+              {{ activeLinkedSuggestionApplied ? '更新AI建议并继续' : '保存AI建议并批改下一题' }}
+            </el-button>
+            <el-button @click="returnToPracticeReview">
+              <el-icon><Back /></el-icon>
+              返回练习复核
+            </el-button>
+          </div>
           </section>
           </template>
         </GradingWorkspace>
@@ -2627,7 +2840,140 @@ async function copyResult(result, successMessage) {
 .calibration-step { margin-top: 58px; }
 .grading-learning-insight { margin-top: 52px; }
 
+.linked-practice-context {
+  display: grid;
+  width: min(1120px, 94%);
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px 28px;
+  align-items: center;
+  margin: 0 auto 32px;
+  padding: 22px 26px;
+  border: 1px solid rgb(61 53 100 / 24%);
+  border-left: 5px solid var(--ai-mint-dark);
+  border-radius: 8px;
+  background: rgb(255 255 255 / 92%);
+  box-shadow: 4px 5px 0 rgb(61 53 100 / 14%);
+}
+
+.linked-practice-context__source {
+  display: inline-flex;
+  margin-bottom: 6px;
+  color: var(--ai-purple-dark);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.linked-practice-context h2 {
+  margin: 0;
+  color: var(--ai-ink);
+  font-size: 22px;
+  line-height: 1.35;
+}
+
+.linked-practice-context p {
+  margin: 7px 0 0;
+  color: #6d6681;
+  font-size: 14px;
+}
+
+.linked-practice-context__back,
+.linked-suggestion-actions :deep(.el-button) {
+  white-space: nowrap;
+  word-break: keep-all;
+}
+
+.linked-question-switcher {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-top: 2px;
+}
+
+.linked-question-switcher button {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: 1px solid rgb(61 53 100 / 24%);
+  border-radius: 5px;
+  background: #fff;
+  color: #625a7d;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.linked-question-switcher button:hover,
+.linked-question-switcher button:focus-visible {
+  border-color: var(--ai-purple);
+  color: var(--ai-purple-dark);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.linked-question-switcher button.is-active {
+  border-color: var(--ai-purple-dark);
+  background: #eeeaff;
+  color: var(--ai-purple-dark);
+}
+
+.linked-question-switcher button.is-applied:not(.is-active) {
+  border-color: #6ebbb2;
+  background: #ecfaf7;
+  color: #397e76;
+}
+
+.linked-suggestion-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+.linked-suggestion-actions :deep(.el-button) {
+  min-height: 46px;
+  margin-left: 0;
+  padding-inline: 20px;
+  border-radius: 5px;
+  font-weight: 750;
+}
+
+.linked-suggestion-actions :deep(.el-button--primary) {
+  border-color: var(--ai-purple-dark);
+  background: var(--ai-purple);
+  box-shadow: 3px 4px 0 rgb(61 53 100 / 25%);
+}
+
 @media (max-width: 600px) {
+  .linked-practice-context {
+    width: 100%;
+    grid-template-columns: 1fr;
+    padding: 20px;
+  }
+
+  .linked-practice-context__back {
+    width: 100%;
+  }
+
+  .linked-question-switcher {
+    grid-column: 1;
+  }
+
+  .linked-suggestion-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .linked-suggestion-actions :deep(.el-button) {
+    width: 100%;
+  }
+
   .answer-exploration-sheet {
     width: 100%;
     padding: 28px 20px 26px !important;
