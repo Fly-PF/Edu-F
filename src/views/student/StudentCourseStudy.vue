@@ -54,9 +54,10 @@ const selectedResource = computed(() => {
 })
 const videoSubtitleUrl = computed(() => {
   const url = selectedResource.value?.url || ''
-  return /codeorg-ai-machine-learning\.mp4(?:\?.*)?$/i.test(url)
-    ? url.replace(/\.mp4(?:\?.*)?$/i, '-zh-CN.vtt')
-    : ''
+  if (!/\/api\/course-files\/course\/\d+\//i.test(url) || !/\.mp4(?:\?.*)?$/i.test(url)) {
+    return ''
+  }
+  return url.replace(/\.mp4(?:\?.*)?$/i, '-zh-CN.vtt')
 })
 
 const recordMap = computed(() => {
@@ -72,8 +73,13 @@ const completedCount = computed(() =>
   chapters.value.filter(chapterCompleted).length,
 )
 const progressPercent = computed(() => {
-  if (!chapterCount.value) return 0
-  return Math.round((completedCount.value / chapterCount.value) * 100)
+  const resources = chapters.value.flatMap((chapter) => chapter.resources || [])
+  if (!resources.length) return 0
+  const totalProgress = resources.reduce(
+    (total, resource) => total + Number(recordMap.value[resource.id]?.progress || 0),
+    0,
+  )
+  return Math.round(totalProgress / resources.length)
 })
 
 const resourceTypes = {
@@ -169,14 +175,19 @@ async function loadAll() {
   }
   loading.value = true
   try {
-    const [courseData, chapterData, recordData] = await Promise.all([
+    const [courseResult, chapterResult, recordResult] = await Promise.allSettled([
       getStudentCourse(courseId.value),
       getStudentCourseChapters(courseId.value),
       listStudentResourceStudyRecords(courseId.value, { assignmentId: assignmentId.value || undefined }),
     ])
-    course.value = courseData
-    chapters.value = chapterData || []
-    records.value = recordData || []
+    if (courseResult.status === 'rejected') throw courseResult.reason
+    if (chapterResult.status === 'rejected') throw chapterResult.reason
+    course.value = courseResult.value
+    chapters.value = chapterResult.value || []
+    records.value = recordResult.status === 'fulfilled' ? (recordResult.value || []) : []
+    if (recordResult.status === 'rejected') {
+      ElMessage.warning('学习进度暂时无法加载，课程内容仍可正常学习')
+    }
     if (!selectedChapterId.value) {
       selectFirstResource()
     }

@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ChatDotRound, Clock, Delete, DocumentChecked, MagicStick, Opportunity, Plus, Promotion, RefreshRight, User } from '@element-plus/icons-vue'
+import { ChatDotRound, Clock, Delete, DocumentChecked, DocumentCopy, MagicStick, Opportunity, Plus, Promotion, RefreshRight, User } from '@element-plus/icons-vue'
 import {
   createAiCompanionSession,
   clearAiCompanionConversations,
@@ -161,6 +161,34 @@ function regenerateAnswer(message) {
     return
   }
   sendMessage(previousQuestion)
+}
+
+async function copyAnswer(message) {
+  const content = String(message?.content || '').trim()
+  if (!content) {
+    ElMessage.info('当前回答没有可复制的内容')
+    return
+  }
+
+  let textarea = null
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(content)
+    } else {
+      textarea = document.createElement('textarea')
+      textarea.value = content
+      textarea.style.position = 'fixed'
+      textarea.style.opacity = '0'
+      document.body.appendChild(textarea)
+      textarea.select()
+      if (!document.execCommand('copy')) throw new Error('copy failed')
+    }
+    ElMessage.success('本次对话内容已复制')
+  } catch {
+    ElMessage.error('复制失败，请检查浏览器剪贴板权限')
+  } finally {
+    textarea?.remove()
+  }
 }
 
 function sessionLabel(session) {
@@ -402,6 +430,9 @@ watch([() => props.chapterId, () => props.resourceId], () => {
               </button>
               <button type="button" :disabled="thinking" @click="continueAsking(message)">
                 <el-icon><ChatDotRound /></el-icon>继续追问
+              </button>
+              <button type="button" :disabled="thinking" @click="copyAnswer(message)">
+                <el-icon><DocumentCopy /></el-icon>复制本次对话内容
               </button>
             </div>
           </div>
