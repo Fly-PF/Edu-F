@@ -40,7 +40,7 @@ const SIDEBAR_BREAKPOINT = 980
 
 const senderRef = ref(null)
 const bubbleListRef = ref(null)
-const apiBaseURL = `${import.meta.env.VITE_APP_REQUEST_BASE_URL}`
+const apiBaseURL = (import.meta.env.VITE_APP_REQUEST_BASE_URL || '').replace(/\/$/, '')
 const composerValue = ref('')
 const isLoading = ref(false)
 const loadingConversationId = ref('')

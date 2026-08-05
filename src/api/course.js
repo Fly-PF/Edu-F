@@ -80,6 +80,22 @@ export function saveStudentCourseStudyRecord(courseId, data) {
   return resolve(request.post('/api/student/study-records', { ...data, courseId }))
 }
 
+export function listStudentResourceStudyRecords(courseId, params = {}) {
+  return resolve(request.get(`/api/student/courses/${courseId}/resource-study-records`, { params }))
+}
+
+export function saveStudentResourceStudyRecord(data) {
+  return resolve(request.post('/api/student/resource-study-records', data))
+}
+
+export function openStudentBlockProject(data) {
+  return resolve(request.post('/api/student/resource-study-records/open-block-project', data))
+}
+
+export function completeStudentBlockProject(data) {
+  return resolve(request.post('/api/student/resource-study-records/complete-block-project', data))
+}
+
 export function listTeacherCourses(params = {}) {
   return resolve(request.get('/api/teacher/courses', { params }))
 }
@@ -132,6 +148,10 @@ export function reorderChapters(courseId, data) {
 
 export function createExternalResource(courseId, chapterId, data) {
   return resolve(request.post(`/api/teacher/courses/${courseId}/chapters/${chapterId}/resources`, data))
+}
+
+export function createBlockProjectResource(courseId, chapterId, data) {
+  return resolve(request.post(`/api/teacher/courses/${courseId}/chapters/${chapterId}/block-projects`, data))
 }
 
 export function uploadCourseResource(courseId, chapterId, file, duration, onUploadProgress) {

@@ -9,7 +9,6 @@ import { getKnowledgeBaseDocumentPreviewContent, getKnowledgeBaseDocumentPreview
 
 const route = useRoute()
 const router = useRouter()
-const apiBaseURL = String(import.meta.env.VITE_APP_REQUEST_BASE_URL || '').replace(/\/+$/, '')
 
 const previewLoading = ref(false)
 const previewError = ref('')
@@ -43,7 +42,7 @@ const previewUrl = computed(() => {
     return ''
   }
 
-  return `${apiBaseURL}/api/rag/files/preview?file_url=${encodeURIComponent(fileUrl.value)}&kb_id=${encodeURIComponent(String(kbId.value || ''))}`
+  return `/api/rag/files/preview?file_url=${encodeURIComponent(fileUrl.value)}&kb_id=${encodeURIComponent(String(kbId.value || ''))}`
 })
 
 const displayTypeText = computed(() => {

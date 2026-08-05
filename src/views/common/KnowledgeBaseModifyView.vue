@@ -5,7 +5,7 @@ import { ElMessage, ElMessageBox, genFileId } from 'element-plus'
 import { ArrowLeft, Delete, Edit, Files, Plus, PictureFilled, Refresh, Search, UploadFilled, View } from '@element-plus/icons-vue'
 import { deleteKnowledgeBaseDocument, getMyKnowledgeBase, pageKnowledgeBaseDocuments, updateKnowledgeBase, updateKnowledgeBaseDocument, uploadKnowledgeBaseDocument } from '@/api/rag'
 
-const apiBaseURL = `${import.meta.env.VITE_APP_REQUEST_BASE_URL}`
+const apiBaseURL = (import.meta.env.VITE_APP_REQUEST_BASE_URL || '').replace(/\/$/, '')
 const route = useRoute()
 const router = useRouter()
 

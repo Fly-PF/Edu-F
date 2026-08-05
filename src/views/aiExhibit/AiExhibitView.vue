@@ -4,11 +4,13 @@ import { useRouter } from 'vue-router'
 import { ArrowRight, MagicStick, Search, StarFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { listAiProjectCases } from '@/api/aiExhibit'
+import { useUserStore } from '@/stores/user'
 import drawGuessCover from '@/assets/img/ai-draw-guess.png'
 import textClassificationCover from '@/assets/img/ai-text-classification.png'
 import faceRecognitionCover from '@/assets/img/ai-face-recognition.png'
 
 const router = useRouter()
+const userStore = useUserStore()
 const loading = ref(false)
 const cases = ref([])
 
@@ -223,6 +225,11 @@ function resolveCoverImage(projectCode, coverImage, preset = {}) {
 }
 
 async function loadCases() {
+  if (!userStore.isLoggedIn) {
+    cases.value = []
+    return
+  }
+
   loading.value = true
   try {
     const result = await listAiProjectCases({ pageNum: 1, pageSize: 20 })

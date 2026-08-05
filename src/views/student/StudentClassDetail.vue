@@ -91,6 +91,7 @@ function goStudy(course) {
   router.push({
     name: 'course-learn',
     params: { courseId: course.courseId },
+    query: { assignmentId: course.assignmentId },
   })
 }
 

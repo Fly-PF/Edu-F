@@ -31,7 +31,19 @@ function getMainEntryPath(userStore) {
   return '/main/home'
 }
 
-const publicRouteNames = new Set(['main-home', 'course-list', 'course-search', 'knowledge-base-show', 'knowledge-base-more', 'login', 'register'])
+const publicRouteNames = new Set([
+  'main-home',
+  'course-list',
+  'course-search',
+  'project-center',
+  'block-workshop',
+  'block-project-gallery',
+  'ai-exhibit',
+  'knowledge-base-show',
+  'knowledge-base-more',
+  'login',
+  'register',
+])
 
 const personnelRoutes = [
   {

@@ -146,7 +146,7 @@ const activePath = computed(() => {
   return route.path
 })
 
-const isFullscreenRoute = computed(() => route.name === 'python-workshop')
+const isFullscreenRoute = computed(() => ['python-workshop', 'block-workshop'].includes(route.name))
 
 const headerAvatar = computed(() => {
   if (headerAvatarLoadFailed.value || !userStore.avatar) {

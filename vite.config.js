@@ -17,5 +17,17 @@ export default defineConfig({
     port: 8088,
     open: true,
     host: "0.0.0.0",
+    // The hostname is supplied by the current local/tunnel entry point.
+    allowedHosts: true,
+    proxy: {
+      "/api": {
+        target: "http://localhost:8080",
+        changeOrigin: true,
+      },
+      "/user": {
+        target: "http://localhost:8080",
+        changeOrigin: true,
+      },
+    },
   },
 });
