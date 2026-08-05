@@ -33,7 +33,8 @@ const teacherNavItems = [
   { label: '课程管理', path: '/main/teacher/courses', roles: ['TEACHER'] },
   { label: '班级学情', path: '/main/teacher/learning-analysis', roles: ['TEACHER'] },
   { label: 'AI展馆', path: '/main/ai-exhibit', roles: ['TEACHER'] },
-  { label: 'AI备课与批改', path: '/main/teacher/ai-assistant', roles: ['TEACHER'] },
+  { label: '智能备课', path: '/main/teacher/ai-preparation', roles: ['TEACHER'] },
+  { label: '智能批改', path: '/main/teacher/ai-grading', roles: ['TEACHER'] },
 ]
 
 const navItems = computed(() => {

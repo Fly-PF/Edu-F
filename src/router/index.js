@@ -115,9 +115,23 @@ const teacherRoutes = [
   {
     path: 'teacher/ai-assistant',
     name: 'teacher-ai-assistant',
-    component: () => import('@/views/teacher/TeacherAiAssistant.vue'),
+    redirect: '/main/teacher/ai-preparation',
+  },
+  {
+    path: 'teacher/ai-preparation',
+    name: 'teacher-ai-preparation',
+    component: () => import('@/views/teacher/TeacherAiPreparation.vue'),
     meta: {
-      title: 'AI备课与批改',
+      title: 'AI智能备课',
+      allowedRoles: ['TEACHER'],
+    },
+  },
+  {
+    path: 'teacher/ai-grading',
+    name: 'teacher-ai-grading',
+    component: () => import('@/views/teacher/TeacherAiGrading.vue'),
+    meta: {
+      title: 'AI智能批改',
       allowedRoles: ['TEACHER'],
     },
   },
