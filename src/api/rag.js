@@ -31,6 +31,10 @@ export function updateKnowledgeBase(data) {
   return resolve(request.post('/api/rag/kb/update', data))
 }
 
+export function deleteKnowledgeBase(kbId) {
+  return resolve(request.delete(`/api/rag/kb/${kbId}`, { timeout: 120000 }))
+}
+
 export function listMyKnowledgeBases(params = {}) {
   return resolve(request.get('/api/rag/kb/my', { params }))
 }
