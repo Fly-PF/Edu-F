@@ -413,6 +413,15 @@ const router = createRouter({
           },
         },
         {
+          path: 'gewu',
+          name: 'gewu',
+          component: () => import('@/views/gewu/GewuView.vue'),
+          meta: {
+            title: '格物',
+            allowedRoles: ['STUDENT', 'TEACHER', 'ADMIN', 'SUPERADMIN'],
+          },
+        },
+        {
           path: 'ai-exhibit',
           name: 'ai-exhibit',
           component: () => import('@/views/aiExhibit/AiExhibitView.vue'),

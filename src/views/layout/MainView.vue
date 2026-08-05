@@ -65,6 +65,10 @@ const navItems = computed(() => {
     },
   ]
 
+  if (userStore.isLoggedIn) {
+    items.push({ label: '格物', path: '/main/gewu', roles: [] })
+  }
+
   if (userStore.roleCode === 'STUDENT') {
     items.push(...studentNavItems)
   }

@@ -1,0 +1,1478 @@
+/* ============================================================
+   武林秘籍主题 · 古籍宣纸质感
+   纸：宣纸米黄 / 墨：松烟黑褐 / 朱：朱砂印泥
+   ============================================================ */
+.gewu-shell {
+  --paper: #fbfbff;
+  --paper-2: #f0eeff;
+  --paper-edge: #d8d3ed;
+  --ink: #3d3564;
+  --ink-soft: #625878;
+  --ink-faint: #756a94;
+  --cinnabar: #8178cf;
+  --cinnabar-soft: #a49de0;
+  --jade: #52bbc4;
+  --gold: #dfa62b;
+  --rule: #3d3564;
+  --highlight: rgb(129 120 207 / 13%);
+  --code-font: "Microsoft YaHei", Arial, sans-serif;
+  --mono: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --serif: "Microsoft YaHei", Arial, sans-serif;
+}
+
+.gewu-shell, .gewu-shell * { box-sizing: border-box; }
+
+.gewu-shell {
+  height: 100%;
+}
+.gewu-shell {
+  margin: 0;
+  background: #2a241c;        /* 书房暗木色背景,衬托纸卷 */
+  color: var(--ink);
+  font-family: var(--serif);
+  line-height: 1.9;
+  overflow: hidden;           /* 整页不滚动,滚动交给各栏 */
+}
+
+/* 整页纸卷 */
+.gewu-shell .app {
+  max-width: 1560px;
+  height: calc(100% - 44px);
+  margin: 22px auto;
+  padding: 0;
+  background: var(--paper);
+  background-image:
+    /* 纸张纤维质感:多层极淡斜纹 */
+    repeating-linear-gradient(0deg, transparent 0 3px, rgba(120,90,50,0.020) 3px 4px),
+    repeating-linear-gradient(90deg, transparent 0 3px, rgba(120,90,50,0.020) 3px 4px),
+    radial-gradient(ellipse at 20% 10%, rgba(180,140,80,0.12), transparent 55%),
+    radial-gradient(ellipse at 85% 90%, rgba(150,110,60,0.14), transparent 55%);
+  border: 1px solid var(--paper-edge);
+  border-radius: 2px;
+  box-shadow:
+    0 0 0 10px var(--paper),
+    0 0 0 12px #b89a64,        /* 描金内框 */
+    0 0 0 16px #2a241c,
+    0 22px 60px rgba(0,0,0,0.55);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 文武双边栏(古籍特征:粗线+细线包边) */
+.gewu-shell .app::before {
+  content: "";
+  position: absolute;
+  inset: 14px;
+  border: 2px solid var(--rule);
+  box-shadow: inset 0 0 0 3px var(--paper), inset 0 0 0 4px var(--rule);
+  pointer-events: none;
+  border-radius: 1px;
+  z-index: 2;
+}
+
+.gewu-shell .page-inner {
+  padding: 30px 44px 26px;
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---------- 书名 / 卷首 ---------- */
+.gewu-shell .app-header { text-align: center; margin-bottom: 4px; position: relative; flex-shrink: 0; }
+.gewu-shell .app-header .book-title {
+  font-family: var(--code-font);
+  font-size: 32px;
+  letter-spacing: 9px;
+  color: var(--ink);
+  margin: 0;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.25);
+}
+.gewu-shell .app-header .book-sub {
+  font-size: 15px;
+  color: var(--ink-soft);
+  letter-spacing: 3px;
+  margin-top: 6px;
+}
+.gewu-shell .book-switch {
+  display: inline-flex;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 3px;
+  border: 1px solid rgba(107,58,46,0.35);
+  background: rgba(228,214,186,0.45);
+}
+.gewu-shell .book-tab {
+  border: none;
+  background: transparent;
+  color: var(--ink-faint);
+  padding: 4px 12px;
+  font-family: var(--code-font);
+  font-size: 13px;
+  letter-spacing: 2px;
+  cursor: pointer;
+}
+.gewu-shell .book-tab:hover {
+  color: var(--ink-soft);
+  background: rgba(63,107,79,0.07);
+}
+.gewu-shell .book-tab.active {
+  color: var(--cinnabar);
+  background: var(--highlight);
+}
+/* 朱砂印章 */
+.gewu-shell .seal {
+  position: absolute;
+  top: -6px; right: 6px;
+  width: 64px; height: 64px;
+  border: 3px solid var(--cinnabar);
+  border-radius: 6px;
+  color: var(--cinnabar);
+  font-family: var(--code-font);
+  font-size: 18px;
+  line-height: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  align-items: center;
+  justify-items: center;
+  gap: 1px;
+  padding: 6px;
+  transform: rotate(-6deg);
+  opacity: 0.86;
+  box-shadow: 0 0 0 2px rgba(158,43,30,0.25) inset;
+}
+.gewu-shell .seal span {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+}
+
+.gewu-shell .divider {
+  text-align: center;
+  color: var(--cinnabar);
+  letter-spacing: 6px;
+  margin: 10px 0 16px;
+  font-size: 14px;
+  opacity: 0.8;
+  flex-shrink: 0;
+}
+
+/* ---------- 整页布局:左导航 · 中正文 · 右批注,三栏各自滚动 ---------- */
+.gewu-shell .book-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 196px minmax(0, 1fr) minmax(300px, 360px);
+  gap: 28px;
+  align-items: stretch;
+}
+
+/* 三栏都各自独立滚动,整页不动 */
+.gewu-shell .vol-nav, .gewu-shell .middle, .gewu-shell .zone-notes {
+  min-height: 0;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+/* 细朱砂滚动条 */
+.gewu-shell .vol-nav::-webkit-scrollbar,
+.gewu-shell .middle::-webkit-scrollbar,
+.gewu-shell .zone-notes::-webkit-scrollbar { width: 7px; }
+.gewu-shell .vol-nav::-webkit-scrollbar-thumb,
+.gewu-shell .middle::-webkit-scrollbar-thumb,
+.gewu-shell .zone-notes::-webkit-scrollbar-thumb {
+  background: rgba(107,58,46,0.3);
+  border-radius: 4px;
+}
+.gewu-shell .vol-nav::-webkit-scrollbar-thumb:hover,
+.gewu-shell .middle::-webkit-scrollbar-thumb:hover,
+.gewu-shell .zone-notes::-webkit-scrollbar-thumb:hover { background: rgba(107,58,46,0.5); }
+
+/* 中栏:经文 + 演武场左右并排 */
+.gewu-shell .middle { padding: 0 6px; }
+.gewu-shell .codex-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 408px;
+  gap: 26px;
+  align-items: start;
+}
+.gewu-shell .zone-code  { min-width: 0; }
+.gewu-shell .zone-arena { min-width: 0; }
+
+/* 右批注栏:右对齐,与中栏留出间隔 */
+.gewu-shell .zone-notes {
+  border-left: 1px solid var(--paper-edge);
+  padding-left: 24px;
+}
+
+/* ---------- 卷册切换(左侧竖排导航) ---------- */
+.gewu-shell .vol-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-right: 22px;
+  border-right: 1px solid var(--paper-edge);
+}
+.gewu-shell .vol-nav-title {
+  font-family: var(--code-font);
+  font-size: 13px;
+  letter-spacing: 4px;
+  color: var(--ink-faint);
+  margin-bottom: 8px;
+  padding-left: 10px;
+}
+.gewu-shell .vol-tab {
+  background: transparent;
+  border: none;
+  border-left: 3px solid transparent;
+  color: var(--ink-faint);
+  padding: 8px 10px;
+  cursor: pointer;
+  font-family: var(--code-font);
+  font-size: 15px;
+  letter-spacing: 2px;
+  text-align: left;
+  line-height: 1.5;
+  transition: all 0.18s;
+}
+.gewu-shell .vol-tab:hover { color: var(--ink-soft); background: rgba(63,107,79,0.07); }
+.gewu-shell .vol-tab.active {
+  color: var(--cinnabar);
+  border-left-color: var(--cinnabar);
+  background: var(--highlight);
+}
+.gewu-shell .vol-empty {
+  color: var(--ink-faint);
+  padding: 8px 10px;
+  font-family: var(--code-font);
+  font-size: 14px;
+  line-height: 1.7;
+}
+.gewu-shell .book-placeholder {
+  grid-column: span 2;
+  min-height: 0;
+  height: 100%;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  color: var(--ink-soft);
+  border-left: 1px solid var(--paper-edge);
+  padding: 24px;
+}
+.gewu-shell .book-placeholder h2 {
+  margin: 0 0 10px;
+  font-family: var(--code-font);
+  font-size: 22px;
+  letter-spacing: 4px;
+  color: var(--cinnabar);
+}
+.gewu-shell .book-placeholder p {
+  margin: 0;
+  font-size: 15px;
+  color: var(--ink-faint);
+}
+
+/* ---------- 卷目(章节) ---------- */
+.gewu-shell .scrolls { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 18px; }
+.gewu-shell .scroll-tab {
+  background: var(--paper-2);
+  border: 1px solid var(--paper-edge);
+  color: var(--ink-soft);
+  padding: 8px 16px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: var(--code-font);
+  font-size: 15px;
+  letter-spacing: 2px;
+  transition: all 0.18s;
+}
+.gewu-shell .scroll-tab:hover { color: var(--ink); border-color: var(--cinnabar-soft); }
+.gewu-shell .scroll-tab.active {
+  background: var(--cinnabar);
+  color: var(--paper);
+  border-color: var(--cinnabar);
+  box-shadow: 0 2px 8px rgba(158,43,30,0.4);
+}
+
+/* 中宽屏:演武场叠到经文下方(中栏内部竖排),三大栏仍各自滚动 */
+@media (max-width: 1180px) {
+  .gewu-shell .codex-pair { grid-template-columns: 1fr; }
+  .gewu-shell .zone-notes { min-width: 260px; }
+  .gewu-shell .book-body { grid-template-columns: 180px minmax(0, 1fr) minmax(260px, 320px); }
+}
+/* 窄屏:取消整页固定,导航转横排,三栏竖排,整页恢复正常滚动 */
+@media (max-width: 860px) {
+  .gewu-shell { overflow: auto; }
+  .gewu-shell .app { height: auto; overflow: visible; }
+  .gewu-shell .page-inner { display: block; }
+  .gewu-shell .book-body {
+    display: block;
+    min-height: 0;
+  }
+  .gewu-shell .vol-nav, .gewu-shell .middle, .gewu-shell .zone-notes {
+    height: auto;
+    overflow: visible;
+  }
+  .gewu-shell .vol-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    border-right: none;
+    border-bottom: 1px solid var(--paper-edge);
+    padding-right: 0;
+    padding-bottom: 14px;
+    margin-bottom: 18px;
+  }
+  .gewu-shell .vol-nav-title { width: 100%; }
+  .gewu-shell .bridge-panel { grid-template-columns: 1fr; }
+  .gewu-shell .zone-notes {
+    border-left: none;
+    border-top: 1px solid var(--paper-edge);
+    padding-left: 0;
+    padding-top: 18px;
+    margin-top: 18px;
+  }
+  .gewu-shell .codex-pair { grid-template-columns: 1fr; }
+}
+
+.gewu-shell .scroll-intro {
+  border-left: 3px solid var(--cinnabar);
+  padding: 4px 0 4px 16px;
+  margin-bottom: 20px;
+  color: var(--ink-soft);
+  font-size: 15px;
+}
+.gewu-shell .scroll-intro b { color: var(--cinnabar); font-weight: 600; }
+.gewu-shell .scroll-intro p { margin: 0 0 10px; }
+.gewu-shell .scroll-intro p:last-child { margin-bottom: 0; }
+.gewu-shell .scroll-intro code {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 13px;
+  background: rgba(158, 43, 30, 0.08);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+.gewu-shell .scroll-intro ol.intro-qa {
+  margin: 0 0 12px;
+  padding-left: 22px;
+}
+.gewu-shell .scroll-intro ol.intro-qa li { margin-bottom: 7px; line-height: 1.6; }
+.gewu-shell .scroll-intro ol.intro-qa i {
+  color: var(--cinnabar);
+  font-style: normal;
+  font-weight: 600;
+}
+.gewu-shell .scroll-intro .intro-arena-tip {
+  font-size: 13.5px;
+  color: var(--ink-soft);
+  opacity: 0.85;
+}
+
+.gewu-shell .bridge-panel {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: -4px 0 18px;
+}
+.gewu-shell .bridge-item {
+  min-width: 0;
+  border: 1px solid var(--paper-edge);
+  border-left: 3px solid var(--gold);
+  background: rgba(228, 214, 186, 0.72);
+  padding: 8px 10px;
+  border-radius: 2px;
+}
+.gewu-shell .bridge-label {
+  font-family: var(--code-font);
+  color: var(--cinnabar);
+  font-size: 12px;
+  letter-spacing: 2px;
+  margin-bottom: 2px;
+}
+.gewu-shell .bridge-text {
+  color: var(--ink-soft);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+@media (max-width: 860px) {
+  .gewu-shell .bridge-panel { grid-template-columns: 1fr; }
+}
+
+/* 小节标题:仿古籍黑底白字牌记 */
+.gewu-shell .section-label {
+  font-family: var(--code-font);
+  font-size: 17px;
+  letter-spacing: 3px;
+  color: var(--ink);
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 6px;
+  margin: 0 0 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.gewu-shell .section-label::before { content: "❖"; color: var(--cinnabar); }
+
+/* ---------- 心法（代码面板）: 仿古籍界行 ---------- */
+.gewu-shell .manual {
+  background: var(--paper-2);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  box-shadow: inset 0 0 18px rgba(120,80,40,0.12);
+  padding: 14px 0;
+  font-family: var(--mono);
+  font-size: 13.5px;
+  line-height: 1.95;
+  overflow-x: auto;
+}
+.gewu-shell .manual-line {
+  display: flex;
+  align-items: baseline;
+  white-space: pre;
+  padding: 1px 18px;
+  border-left: 3px solid transparent;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.gewu-shell .manual-line:hover { background: rgba(63,107,79,0.10); }
+.gewu-shell .manual-line.active {
+  background: var(--highlight);
+  border-left-color: var(--cinnabar);
+}
+.gewu-shell .manual-line .ln {
+  color: var(--ink-faint);
+  width: 24px;
+  text-align: right;
+  margin-right: 14px;
+  flex-shrink: 0;
+  user-select: none;
+  font-size: 12px;
+}
+.gewu-shell .manual-line .src { color: var(--ink); }
+.gewu-shell .tok-kw  { color: var(--cinnabar); font-weight: 600; }
+.gewu-shell .tok-fn  { color: var(--jade); }
+.gewu-shell .tok-num { color: var(--gold); font-weight: 600; }
+.gewu-shell .tok-str { color: #6b7d3f; }
+.gewu-shell .tok-com { color: var(--ink-faint); font-style: italic; }
+.gewu-shell .tok-op  { color: var(--ink-soft); }
+
+/* 可拖动数值:嵌在代码里的"活字" */
+.gewu-shell .live-num {
+  color: var(--gold);
+  font-weight: 700;
+  cursor: ew-resize;
+  border-bottom: 1px dashed var(--cinnabar-soft);
+  padding: 0 1px;
+  user-select: none;
+}
+.gewu-shell .live-num:hover { background: rgba(156,123,46,0.18); border-radius: 2px; }
+
+/* ---------- 演武场（可视化区） ---------- */
+.gewu-shell .arena {
+  background: var(--paper-2);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  box-shadow: inset 0 0 18px rgba(120,80,40,0.12);
+  padding: 14px;
+  min-height: 320px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.gewu-shell .arena svg { max-width: 100%; height: auto; }
+.gewu-shell .arena text { font-family: var(--serif); }
+
+/* 注解卷批 */
+.gewu-shell .note {
+  margin-top: 0;
+  padding: 12px 16px;
+  background: var(--paper);
+  border: 1px dashed var(--rule);
+  border-radius: 2px;
+  font-size: 14.5px;
+  color: var(--ink);
+  min-height: 30px;
+}
+.gewu-shell .note .label { color: var(--cinnabar); font-weight: 700; margin-right: 6px; }
+.gewu-shell .note b { color: var(--jade); }
+
+/* 释义 · 小词典:解释正文里的小知识点 */
+.gewu-shell .glossary {
+  margin-top: 14px;
+  padding: 12px 16px 14px;
+  background: var(--paper-2);
+  border: 1px solid var(--paper-edge);
+  border-left: 3px solid var(--gold);
+  border-radius: 2px;
+}
+.gewu-shell .glossary-title {
+  font-family: var(--code-font);
+  font-size: 14px;
+  letter-spacing: 2px;
+  color: var(--gold);
+  margin-bottom: 8px;
+}
+.gewu-shell .glossary dl { margin: 0; }
+.gewu-shell .glossary .gloss-item { margin: 0 0 8px; }
+.gewu-shell .glossary .gloss-item:last-child { margin-bottom: 0; }
+.gewu-shell .glossary dt {
+  font-family: var(--code-font);
+  font-size: 14px;
+  color: var(--cinnabar);
+  font-weight: 600;
+  margin-bottom: 1px;
+}
+.gewu-shell .glossary dd {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--ink-soft);
+}
+.gewu-shell .glossary dd b { color: var(--jade); font-weight: 600; }
+.gewu-shell .glossary dd code {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  background: var(--paper);
+  padding: 0 3px;
+  border-radius: 2px;
+  color: var(--ink);
+}
+
+/* 演法控制条 */
+.gewu-shell .play-bar {
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.gewu-shell .btn-play {
+  background: var(--jade);
+  color: var(--paper);
+  border: none;
+  padding: 7px 16px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: var(--serif);
+  font-size: 14px;
+  letter-spacing: 2px;
+}
+.gewu-shell .btn-play:hover { filter: brightness(1.08); }
+.gewu-shell .btn-play.ghost {
+  background: transparent;
+  color: var(--ink-soft);
+  border: 1px solid var(--rule);
+  padding: 6px 12px;
+  letter-spacing: 1px;
+}
+.gewu-shell .btn-play.ghost:hover { background: var(--paper); color: var(--ink); }
+.gewu-shell .play-count {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--gold);
+  font-family: var(--mono);
+  letter-spacing: 1px;
+}
+
+/* 参数旋钮区 */
+.gewu-shell .knobs { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 18px; }
+.gewu-shell .knob { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--ink-soft); }
+.gewu-shell .knob label { letter-spacing: 1px; }
+.gewu-shell .knob input[type="range"] { width: 150px; accent-color: var(--cinnabar); }
+.gewu-shell .knob .val { color: var(--gold); font-weight: 700; font-family: var(--mono); }
+
+/* 提示横幅 */
+.gewu-shell .tip-banner {
+  text-align: center;
+  font-size: 13px;
+  color: var(--ink-faint);
+  margin: 22px 0 0;
+  letter-spacing: 1px;
+}
+
+/* Edu-F visual alignment */
+.gewu-shell {
+  min-height: 100%;
+  height: auto;
+  overflow: visible;
+  background-color: #fbfbff;
+  background-image:
+    linear-gradient(90deg, rgb(129 120 207 / 5%) 1px, transparent 1px),
+    linear-gradient(rgb(238 145 187 / 5%) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.gewu-shell .app {
+  width: 100%;
+  max-width: 1560px;
+  min-height: 100%;
+  height: auto;
+  margin: 0 auto;
+  padding: clamp(20px, 3vw, 38px);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+
+.gewu-shell .app::before {
+  display: none;
+}
+
+.gewu-shell .page-inner {
+  display: block;
+  min-height: 0;
+  padding: 0;
+}
+
+.gewu-shell .app-header {
+  margin: 0;
+  padding: 4px 0 0;
+  text-align: left;
+}
+
+.gewu-shell .app-header .book-title {
+  margin: 0;
+  color: var(--ink);
+  font-family: 'Trebuchet MS', 'Microsoft YaHei', sans-serif;
+  font-size: 28px;
+  font-weight: 900;
+  letter-spacing: 0;
+  line-height: 1.15;
+  text-shadow: none;
+}
+
+.gewu-shell .app-header .book-sub {
+  margin-top: 8px;
+  color: var(--ink-soft);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+.gewu-shell .book-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+}
+.gewu-shell .book-meta .book-sub { margin-top: 0; }
+
+.gewu-shell .book-switch {
+  gap: 5px;
+  margin-top: 0;
+  padding: 4px;
+  border: 1px solid rgb(61 53 100 / 24%);
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.gewu-shell .book-tab {
+  min-height: 34px;
+  padding: 6px 14px;
+  border-radius: 4px;
+  color: var(--ink-soft);
+  font-family: 'Microsoft YaHei', Arial, sans-serif;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.gewu-shell .book-tab:hover {
+  color: var(--ink);
+  background: #efedff;
+}
+
+.gewu-shell .book-tab.active {
+  color: #ffffff;
+  background: var(--cinnabar);
+  box-shadow: 2px 3px 0 rgb(61 53 100 / 24%);
+}
+
+.gewu-shell .seal {
+  display: none;
+}
+
+.gewu-shell .divider {
+  margin: 18px 0;
+  color: var(--ink-faint);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-align: left;
+}
+
+.gewu-shell .book-body {
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr) minmax(280px, 330px);
+  gap: 20px;
+  align-items: start;
+}
+
+.gewu-shell .vol-nav,
+.gewu-shell .middle,
+.gewu-shell .zone-notes {
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+}
+
+.gewu-shell .vol-nav {
+  gap: 5px;
+  padding: 14px;
+  border: 1px solid rgb(61 53 100 / 20%);
+  border-radius: 8px;
+  background: rgb(255 255 255 / 82%);
+  box-shadow: 3px 4px 0 rgb(61 53 100 / 12%);
+}
+
+.gewu-shell .vol-nav-title {
+  margin: 0 0 8px;
+  padding: 0 7px;
+  color: var(--ink);
+  font-family: 'Trebuchet MS', 'Microsoft YaHei', sans-serif;
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.gewu-shell .vol-tab {
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-left: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--ink-soft);
+  font-family: 'Microsoft YaHei', Arial, sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.45;
+}
+
+.gewu-shell .vol-tab:hover {
+  color: var(--ink);
+  background: #efedff;
+}
+
+.gewu-shell .vol-tab.active {
+  border-color: rgb(61 53 100 / 24%);
+  border-left-color: var(--cinnabar);
+  background: #e9e5ff;
+  color: var(--ink);
+  box-shadow: 2px 3px 0 rgb(61 53 100 / 12%);
+}
+
+.gewu-shell .middle {
+  padding: 0;
+}
+
+.gewu-shell .scrolls {
+  gap: 8px;
+  margin: 0 0 14px;
+}
+
+.gewu-shell .scroll-tab {
+  min-height: 36px;
+  padding: 7px 12px;
+  border-color: rgb(61 53 100 / 23%);
+  border-radius: 5px;
+  background: #ffffff;
+  color: var(--ink-soft);
+  font-family: 'Microsoft YaHei', Arial, sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0;
+  box-shadow: 1px 2px 0 rgb(61 53 100 / 10%);
+}
+
+.gewu-shell .scroll-tab:hover {
+  border-color: var(--cinnabar);
+  color: var(--ink);
+  background: #efedff;
+}
+
+.gewu-shell .scroll-tab.active {
+  border-color: var(--cinnabar);
+  background: var(--cinnabar);
+  color: #ffffff;
+  box-shadow: 2px 3px 0 rgb(61 53 100 / 22%);
+}
+
+.gewu-shell .scroll-intro {
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1px solid rgb(82 187 196 / 34%);
+  border-left: 4px solid var(--jade);
+  border-radius: 6px;
+  background: #e8f8f8;
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.gewu-shell .context-panel {
+  margin: 0 0 16px;
+  border: 1px solid rgb(61 53 100 / 18%);
+  border-radius: 7px;
+  background: rgb(255 255 255 / 72%);
+}
+
+.gewu-shell .context-panel summary {
+  padding: 9px 12px;
+  cursor: pointer;
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 800;
+  list-style-position: inside;
+}
+
+.gewu-shell .context-panel[open] summary {
+  border-bottom: 1px solid rgb(61 53 100 / 14%);
+  color: var(--ink);
+}
+
+.gewu-shell .context-panel .scroll-intro {
+  margin: 12px;
+}
+
+.gewu-shell .context-panel .bridge-panel {
+  margin: 0 12px 12px;
+}
+
+.gewu-shell .scroll-intro b,
+.gewu-shell .scroll-intro i {
+  color: var(--cinnabar);
+}
+
+.gewu-shell .bridge-panel {
+  gap: 0;
+  margin: 0 0 16px;
+  border-top: 1px solid rgb(61 53 100 / 18%);
+  border-bottom: 1px solid rgb(61 53 100 / 18%);
+  background: transparent;
+}
+
+.gewu-shell .bridge-item {
+  padding: 10px 12px;
+  border: 0;
+  border-left: 1px solid rgb(61 53 100 / 16%);
+  border-radius: 0;
+  background: transparent;
+}
+
+.gewu-shell .bridge-item:first-child {
+  border-left: 0;
+}
+
+.gewu-shell .bridge-label {
+  color: var(--cinnabar);
+  font-family: 'Microsoft YaHei', Arial, sans-serif;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.gewu-shell .bridge-text {
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.gewu-shell .codex-pair {
+  gap: 16px;
+}
+
+.gewu-shell .section-label {
+  gap: 0;
+  margin: 0 0 10px;
+  padding-bottom: 8px;
+  border-bottom-color: rgb(61 53 100 / 22%);
+  color: var(--ink);
+  font-family: 'Trebuchet MS', 'Microsoft YaHei', sans-serif;
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.gewu-shell .section-label::before {
+  display: none;
+}
+
+.gewu-shell .manual,
+.gewu-shell .arena {
+  border-color: rgb(61 53 100 / 26%);
+  border-radius: 7px;
+  background: #ffffff;
+  box-shadow: 3px 4px 0 rgb(61 53 100 / 11%);
+}
+
+.gewu-shell .manual {
+  padding: 10px 0;
+  font-size: 13px;
+  line-height: 1.85;
+}
+
+.gewu-shell .manual-line {
+  padding: 2px 14px;
+  border-left-width: 3px;
+}
+
+.gewu-shell .manual-line:hover {
+  background: rgb(157 228 235 / 28%);
+}
+
+.gewu-shell .manual-line.active {
+  border-left-color: var(--cinnabar);
+  background: #efedff;
+}
+
+.gewu-shell .arena {
+  min-height: 330px;
+  padding: 14px;
+  background: #fbfbff;
+}
+
+.gewu-shell .arena text {
+  font-family: 'Microsoft YaHei', Arial, sans-serif;
+}
+
+.gewu-shell .zone-notes {
+  position: sticky;
+  top: 12px;
+  max-height: calc(100vh - 92px);
+  overflow-y: auto;
+  padding: 16px;
+  border: 1px solid rgb(61 53 100 / 20%);
+  border-radius: 8px;
+  background: rgb(255 255 255 / 86%);
+  box-shadow: 3px 4px 0 rgb(61 53 100 / 12%);
+}
+
+.gewu-shell .note {
+  padding: 12px;
+  border: 1px solid rgb(129 120 207 / 30%);
+  border-radius: 6px;
+  background: #f0eeff;
+  color: var(--ink-soft);
+  font-size: 14px;
+}
+
+.gewu-shell .note .label,
+.gewu-shell .note b,
+.gewu-shell .glossary dt,
+.gewu-shell .glossary dd b {
+  color: var(--cinnabar);
+}
+
+.gewu-shell .glossary {
+  padding: 12px;
+  border-color: rgb(82 187 196 / 40%);
+  border-left-color: var(--jade);
+  border-radius: 6px;
+  background: #e8f8f8;
+}
+
+.gewu-shell .glossary-title {
+  color: var(--ink);
+  font-family: 'Trebuchet MS', 'Microsoft YaHei', sans-serif;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.gewu-shell .btn-play {
+  min-height: 36px;
+  border: 1px solid var(--cinnabar);
+  border-radius: 5px;
+  background: var(--cinnabar);
+  color: #ffffff;
+  font-family: 'Microsoft YaHei', Arial, sans-serif;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0;
+  box-shadow: 2px 3px 0 rgb(61 53 100 / 22%);
+}
+
+.gewu-shell .btn-play.ghost {
+  border-color: rgb(61 53 100 / 26%);
+  background: #ffffff;
+  color: var(--ink-soft);
+  box-shadow: 1px 2px 0 rgb(61 53 100 / 10%);
+}
+
+.gewu-shell .btn-play.ghost:hover {
+  background: #efedff;
+  color: var(--ink);
+}
+
+.gewu-shell .play-count,
+.gewu-shell .live-num {
+  color: var(--cinnabar);
+}
+
+.gewu-shell .live-num {
+  border-bottom-color: var(--cinnabar-soft);
+}
+
+.gewu-shell .live-num:hover {
+  background: rgb(157 228 235 / 34%);
+}
+
+.gewu-shell .arena [fill="#9e2b1e"],
+.gewu-shell .arena [fill="#b5503f"] {
+  fill: var(--cinnabar);
+}
+
+.gewu-shell .arena [stroke="#9e2b1e"],
+.gewu-shell .arena [stroke="#b5503f"] {
+  stroke: var(--cinnabar);
+}
+
+.gewu-shell .arena [fill="#3f6b4f"] {
+  fill: var(--jade);
+}
+
+.gewu-shell .arena [stroke="#3f6b4f"] {
+  stroke: var(--jade);
+}
+
+.gewu-shell .arena [fill="#9c7b2e"] {
+  fill: var(--gold);
+}
+
+.gewu-shell .arena [stroke="#9c7b2e"] {
+  stroke: var(--gold);
+}
+
+.gewu-shell .arena [fill="#2b2117"],
+.gewu-shell .arena [fill="#5a4a36"] {
+  fill: var(--ink);
+}
+
+.gewu-shell .arena [stroke="#6b3a2e"] {
+  stroke: var(--ink);
+}
+
+.gewu-shell .arena [fill="#8a7656"],
+.gewu-shell .arena [fill="#6b7d3f"] {
+  fill: var(--ink-faint);
+}
+
+@media (max-width: 1180px) {
+  .gewu-shell .book-body {
+    grid-template-columns: 190px minmax(0, 1fr);
+  }
+
+  .gewu-shell .zone-notes {
+    position: static;
+    grid-column: 2;
+    max-height: none;
+  }
+}
+
+@media (max-width: 860px) {
+  .gewu-shell .app {
+    padding: 16px;
+  }
+
+  .gewu-shell .book-meta {
+    justify-content: flex-start;
+  }
+
+  .gewu-shell .book-body {
+    display: block;
+  }
+
+  .gewu-shell .vol-nav {
+    display: flex;
+    margin-bottom: 16px;
+  }
+
+  .gewu-shell .vol-tab {
+    flex: 1 1 150px;
+  }
+
+  .gewu-shell .middle,
+  .gewu-shell .zone-notes {
+    overflow: visible;
+  }
+
+  .gewu-shell .zone-notes {
+    margin-top: 16px;
+  }
+
+  .gewu-shell .bridge-item {
+    border-left: 0;
+    border-top: 1px solid rgb(61 53 100 / 16%);
+  }
+
+  .gewu-shell .bridge-item:first-child {
+    border-top: 0;
+  }
+}
+
+/* Interactive teaching additions */
+.gewu-shell .arena-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.gewu-shell .arena-head .section-label {
+  flex: 1;
+}
+
+.gewu-shell .demo-mode-badge {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border: 1px solid rgb(82 187 196 / 36%);
+  border-radius: 999px;
+  background: #e8f8f8;
+  color: #347f86;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.gewu-shell .step-timeline {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  padding-top: 3px;
+}
+
+.gewu-shell .step-dot {
+  width: 25px;
+  height: 25px;
+  padding: 0;
+  border: 1px solid rgb(61 53 100 / 24%);
+  border-radius: 50%;
+  background: #ffffff;
+  color: var(--ink-faint);
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 23px;
+  text-align: center;
+}
+
+.gewu-shell .step-dot:hover,
+.gewu-shell .step-dot:focus-visible {
+  border-color: var(--cinnabar);
+  outline: 2px solid rgb(129 120 207 / 24%);
+  outline-offset: 1px;
+}
+
+.gewu-shell .step-dot.done {
+  border-color: var(--jade);
+  background: #e8f8f8;
+  color: #347f86;
+}
+
+.gewu-shell .step-dot.active {
+  border-color: var(--cinnabar);
+  background: var(--cinnabar);
+  color: #ffffff;
+}
+
+.gewu-shell .step-guide {
+  width: 100%;
+  padding: 6px 9px;
+  border-left: 3px solid var(--gold);
+  background: #fff8e8;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.gewu-shell .step-guide-label {
+  margin-right: 6px;
+  color: var(--gold);
+  font-weight: 800;
+}
+
+.gewu-shell .live-num:focus-visible {
+  outline: 2px solid var(--cinnabar);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+@media (max-width: 1180px) {
+  .gewu-shell .zone-arena { order: -1; }
+}
+
+/* 共享交互、学习闭环与窄屏阅读 */
+.gewu-shell .scroll-tab.done::after {
+  content: " ✓";
+  color: var(--jade);
+}
+
+.gewu-shell .scroll-tab.active.done::after {
+  color: #ffffff;
+}
+
+.gewu-shell .learning-progress {
+  margin-left: 10px;
+  color: var(--jade);
+  letter-spacing: 0;
+}
+
+.gewu-shell .manual {
+  overflow-x: hidden;
+}
+
+.gewu-shell .manual-line,
+.gewu-shell .manual-line .src {
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.gewu-shell .param-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.gewu-shell .param-control {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 6px 9px;
+  border: 1px solid rgb(61 53 100 / 20%);
+  border-radius: 5px;
+  background: #ffffff;
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.gewu-shell .learning-check,
+.gewu-shell .reference-panel {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid rgb(61 53 100 / 20%);
+  border-left: 4px solid var(--gold);
+  border-radius: 6px;
+  background: #fffdf4;
+}
+
+.gewu-shell .learning-check-title,
+.gewu-shell .reference-panel summary {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.gewu-shell .learning-check p {
+  margin: 5px 0 9px;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.gewu-shell .check-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.gewu-shell .check-options button {
+  min-height: 32px;
+  padding: 6px 9px;
+  border: 1px solid rgb(61 53 100 / 24%);
+  border-radius: 5px;
+  background: #ffffff;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.gewu-shell .check-options button.selected {
+  border-color: var(--cinnabar);
+  background: #efedff;
+  color: var(--ink);
+}
+
+.gewu-shell .check-button {
+  margin-top: 9px;
+}
+
+.gewu-shell .check-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.gewu-shell .check-feedback {
+  border-left: 3px solid var(--cinnabar);
+  padding-left: 8px;
+}
+
+.gewu-shell .check-feedback.correct {
+  border-left-color: var(--jade);
+}
+
+.gewu-shell .check-transfer {
+  color: var(--ink) !important;
+  font-weight: 700;
+}
+
+.gewu-shell .reference-panel pre {
+  max-height: 260px;
+  overflow: auto;
+  margin: 10px 0;
+  padding: 10px;
+  border-radius: 4px;
+  background: #29243c;
+  color: #f4f1ff;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 1181px) {
+  .gewu-shell .zone-arena {
+    position: sticky;
+    top: 12px;
+  }
+}
+
+@media (max-width: 860px) {
+  .gewu-shell .vol-nav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    max-height: 164px;
+    overflow-y: auto;
+  }
+
+  .gewu-shell .vol-nav-title {
+    grid-column: 1 / -1;
+  }
+
+  .gewu-shell .vol-tab {
+    min-width: 0;
+    flex: none;
+  }
+}
+
+.gewu-shell .catalog-toggle {
+  display: none;
+}
+
+.gewu-shell .learning-goal {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  margin: 0 0 14px;
+  padding: 9px 12px;
+  border-left: 4px solid var(--gold);
+  background: #fff8e8;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.gewu-shell .learning-goal span {
+  flex: 0 0 auto;
+  color: var(--gold);
+  font-weight: 900;
+}
+
+.gewu-shell .learning-goal p {
+  margin: 0;
+}
+
+.gewu-shell .autoplay-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 36px;
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.gewu-shell .autoplay-control input {
+  accent-color: var(--cinnabar);
+}
+
+.gewu-shell .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gewu-shell .arena *,
+  .gewu-shell .manual-line,
+  .gewu-shell .step-dot {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+@media (max-width: 860px) {
+  .gewu-shell .catalog-toggle {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-height: 40px;
+    margin: 0 0 12px;
+    padding: 8px 12px;
+    border: 1px solid rgb(61 53 100 / 24%);
+    border-radius: 5px;
+    background: #ffffff;
+    color: var(--ink);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 800;
+    text-align: left;
+  }
+
+  .gewu-shell .vol-nav {
+    display: none;
+  }
+
+  .gewu-shell .vol-nav.open {
+    display: grid;
+    margin-bottom: 16px;
+  }
+
+  .gewu-shell .learning-goal {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .gewu-shell .arena {
+    overflow-x: auto;
+  }
+
+  .gewu-shell .arena svg {
+    min-width: 420px;
+    max-width: none;
+  }
+}
