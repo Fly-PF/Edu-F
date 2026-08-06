@@ -16,6 +16,7 @@ import {
   renameChatSession,
   sendRagChatStream,
 } from '@/api/rag'
+import { runSafetyBeforeAi } from '@/utils/safetyAiRoute'
 import {
   ArrowLeft,
   ArrowRight,
@@ -882,10 +883,29 @@ async function handleSend() {
   }
 
   const requestConversationId = activeConversation.value
+  let safeQuestion = question
+  if (userStore.roleCode === 'TEACHER') {
+    try {
+      const inputGuard = await runSafetyBeforeAi({
+        sourceModule: 'EDUCATION_RAG',
+        scene: 'TEACHER_COURSE',
+        userRole: 'TEACHER',
+        gradeLevel: 'SENIOR',
+        inputText: question,
+      })
+      if (!inputGuard?.passed) {
+        return
+      }
+      safeQuestion = String(inputGuard.safeInputText || question).trim() || question
+    } catch (error) {
+      ElMessage.error(error?.message || '知识库提问安全检测失败')
+      return
+    }
+  }
   shouldAutoScroll.value = true
   const chatImages = [...pendingChatImages.value]
   const temporaryMessageId = createTemporaryMessageId()
-  const userMessage = pushMessage('user', question, {
+  const userMessage = pushMessage('user', safeQuestion, {
     messageId: `${temporaryMessageId}-user`,
     qaImgs: chatImages,
   })
@@ -956,7 +976,7 @@ async function handleSend() {
   try {
     await sendRagChatStream({
       sessionId: Number(requestConversationId),
-      message: question,
+      message: safeQuestion,
       imgFiles: chatImages.map((item) => item.file),
     }, async (frame) => {
       if (frame.status === 'stream') {

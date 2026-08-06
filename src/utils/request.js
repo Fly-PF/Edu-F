@@ -1,7 +1,14 @@
 import axios from 'axios'
 import { useUserStore } from '@/stores/user'
 
-const baseURL = (import.meta.env.VITE_APP_REQUEST_BASE_URL || '').replace(/\/$/, '')
+function normalizeBaseURL(value) {
+  return String(value || '')
+    .trim()
+    .replace(/^['"]|['"]$/g, '')
+    .replace(/\/$/, '')
+}
+
+const baseURL = normalizeBaseURL(import.meta.env.VITE_APP_REQUEST_BASE_URL)
 const authExpiredCodes = [401]
 
 const instance = axios.create({

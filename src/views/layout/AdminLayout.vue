@@ -31,6 +31,11 @@ const personnelMenus = [
 
 const utilityMenus = [
   {
+    label: '安全治理',
+    path: '/main/admin/safety',
+    roles: ['ADMIN', 'SUPERADMIN'],
+  },
+  {
     label: '知识库问答',
     path: '/main/knowledge-qa/chat',
     roles: ['ADMIN', 'SUPERADMIN'],
@@ -50,6 +55,10 @@ const activeMenu = computed(() => {
     return route.path
   }
 
+  if (route.path.startsWith('/main/admin/safety')) {
+    return '/main/admin/safety'
+  }
+
   if (route.path.startsWith('/main/knowledge-qa')) {
     return '/main/knowledge-qa/chat'
   }
@@ -65,6 +74,12 @@ watch(
     if (path.startsWith('/main/admin/personnel/')) {
       shellStore.openMenu('personnel')
       shellStore.setActiveMenu(path)
+      return
+    }
+
+    if (path.startsWith('/main/admin/safety')) {
+      shellStore.openMenu('utility')
+      shellStore.setActiveMenu('/main/admin/safety')
       return
     }
 
@@ -100,6 +115,10 @@ function handleClose(index) {
 function handleSelect(index) {
   if (index.startsWith('/main/admin/personnel/')) {
     shellStore.openMenu('personnel')
+  }
+
+  if (index.startsWith('/main/admin/safety')) {
+    shellStore.openMenu('utility')
   }
 
   if (index.startsWith('/main/knowledge-qa')) {

@@ -167,6 +167,7 @@ onBeforeUnmount(revokeCoverPreview)
 
 <style scoped>
 .create-page {
+  height: 100%;
   min-height: 0;
   overflow: auto;
   padding: clamp(20px, 3vw, 46px) clamp(18px, 5vw, 80px) 64px;

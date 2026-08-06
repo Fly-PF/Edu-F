@@ -505,7 +505,18 @@ const router = createRouter({
           meta: {
             allowedRoles: ['ADMIN', 'SUPERADMIN'],
           },
-          children: personnelRoutes,
+          children: [
+            {
+              path: 'safety',
+              name: 'admin-safety-cockpit',
+              component: () => import('@/views/safety/SafetyCockpitView.vue'),
+              meta: {
+                title: 'AI安全治理',
+                allowedRoles: ['ADMIN', 'SUPERADMIN'],
+              },
+            },
+            ...personnelRoutes,
+          ],
         },
       ],
     },
