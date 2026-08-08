@@ -38,6 +38,35 @@ export function getStudentGrowthOverview() {
   return resolve(request.get('/api/learning-analysis/student/growth-overview'))
 }
 
+export function getStudentWrongBooks() {
+  return resolve(request.get('/api/learning-analysis/student/wrong-books'))
+}
+
+export function createStudentWrongBook(name) {
+  return resolve(request.post('/api/learning-analysis/student/wrong-books', { name }))
+}
+
+export function renameStudentWrongBook(bookId, name) {
+  return resolve(request.patch(`/api/learning-analysis/student/wrong-books/${bookId}`, { name }))
+}
+
+export function deleteStudentWrongBook(bookId) {
+  return resolve(request.delete(`/api/learning-analysis/student/wrong-books/${bookId}`))
+}
+
+export function addQuestionToWrongBook(bookId, question) {
+  return resolve(request.post(`/api/learning-analysis/student/wrong-books/${bookId}/questions`, {
+    practiceId: question.practiceId,
+    questionId: question.questionId,
+  }))
+}
+
+export function removeQuestionFromWrongBook(bookId, question) {
+  return resolve(request.delete(
+    `/api/learning-analysis/student/wrong-books/${bookId}/questions/${question.practiceId}/${question.questionId}`,
+  ))
+}
+
 export function askStudentLearningAssistant(data) {
   return resolve(request.post('/api/learning-analysis/student/assistant', data, { timeout: 40000 }))
 }
