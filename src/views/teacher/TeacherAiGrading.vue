@@ -1,10 +1,11 @@
 <script setup>
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Back, CircleCheck, CopyDocument, Delete, MagicStick, Plus, RefreshLeft } from '@element-plus/icons-vue'
 import { generateGrading } from '@/api/teacherAi'
 import { getTeacherPracticeSubmission, saveTeacherPracticeAiDraft } from '@/api/learningPractice'
+import { useUserStore } from '@/stores/user'
 import GradingWorkspace from '@/components/teacher-ai/grading/GradingWorkspace.vue'
 import GradingReport from '@/components/teacher-ai/grading/GradingReport.vue'
 import RubricEditor from '@/components/teacher-ai/grading/RubricEditor.vue'
@@ -19,17 +20,26 @@ const emit = defineEmits(['use-learning-insight'])
 
 const route = useRoute()
 const router = useRouter()
+const userStore = useUserStore()
 const gradingFormRef = ref()
 const gradingStartRef = ref()
 const gradingLoading = ref(false)
+const gradingSlowNotice = ref(false)
 const gradingResult = ref(null)
 const gradingResultMaxScore = ref(10)
+const gradingResultInputSignature = ref('')
 const linkedSubmission = ref(null)
 const linkedSubmissionLoading = ref(false)
 const linkedQuestionIndex = ref(0)
 const linkedAppliedQuestionIds = ref([])
 const applyingLinkedSuggestion = ref(false)
+const teacherScore = ref(null)
+const reviewComment = ref('')
+const reviewStatus = ref('pending')
+let gradingSlowNoticeTimer = null
+let manualDraftSaveSuppressed = false
 let rubricSequence = 3
+const MANUAL_GRADING_DRAFT_KEY = 'edu-f:teacher-ai:manual-grading-draft'
 
 function createGradingDefaults() {
   return {
@@ -47,6 +57,107 @@ function createGradingDefaults() {
 }
 
 const gradingForm = reactive(createGradingDefaults())
+
+function isPracticeSubmissionMode() {
+  const submissionId = Number(route.query.submissionId)
+  return Number.isInteger(submissionId) && submissionId > 0
+}
+
+function createGradingInputSignature() {
+  return JSON.stringify({
+    question: gradingForm.question,
+    questionType: gradingForm.questionType,
+    referenceAnswer: gradingForm.referenceAnswer,
+    studentAnswer: gradingForm.studentAnswer,
+    maxScore: Number(gradingForm.maxScore),
+    rubric: gradingForm.rubric.map((item) => ({
+      criterion: item.criterion,
+      description: item.description,
+      maxScore: Number(item.maxScore),
+    })),
+  })
+}
+
+function clearManualGradingDraft() {
+  if (typeof window === 'undefined') return
+  try {
+    window.sessionStorage.removeItem(MANUAL_GRADING_DRAFT_KEY)
+  } catch {
+    // Session storage availability should not block grading.
+  }
+}
+
+function saveManualGradingDraft() {
+  if (isPracticeSubmissionMode() || typeof window === 'undefined') return
+  try {
+    window.sessionStorage.setItem(
+      MANUAL_GRADING_DRAFT_KEY,
+      JSON.stringify({
+        mode: 'manual',
+        gradingForm: {
+          question: gradingForm.question,
+          questionType: gradingForm.questionType,
+          referenceAnswer: gradingForm.referenceAnswer,
+          studentAnswer: gradingForm.studentAnswer,
+          maxScore: gradingForm.maxScore,
+          rubric: gradingForm.rubric,
+        },
+        totalPoints: gradingForm.maxScore,
+        gradingResult: gradingResult.value,
+        resultInputSignature: gradingResultInputSignature.value,
+        teacherScore: teacherScore.value,
+        reviewComment: reviewComment.value,
+        reviewStatus: reviewStatus.value,
+        learningInsight: learningInsight.value,
+      }),
+    )
+  } catch {
+    // Session storage availability should not block grading.
+  }
+}
+
+function restoreManualGradingDraft() {
+  if (isPracticeSubmissionMode() || typeof window === 'undefined') return
+  try {
+    const rawDraft = window.sessionStorage.getItem(MANUAL_GRADING_DRAFT_KEY)
+    if (!rawDraft) return
+    const draft = JSON.parse(rawDraft)
+    if (draft?.mode !== 'manual' || !draft.gradingForm) return
+
+    const storedRubric = Array.isArray(draft.gradingForm.rubric) && draft.gradingForm.rubric.length
+      ? draft.gradingForm.rubric.map((item, index) => ({
+        id: item.id ?? index + 1,
+        criterion: String(item.criterion || ''),
+        description: String(item.description || ''),
+        maxScore: Number(item.maxScore || 0),
+      }))
+      : createGradingDefaults().rubric
+    Object.assign(gradingForm, {
+      question: String(draft.gradingForm.question || ''),
+      questionType: String(draft.gradingForm.questionType || '简答题'),
+      referenceAnswer: String(draft.gradingForm.referenceAnswer || ''),
+      studentAnswer: String(draft.gradingForm.studentAnswer || ''),
+      maxScore: Number(draft.totalPoints ?? draft.gradingForm.maxScore ?? 10),
+      rubric: storedRubric,
+    })
+
+    const resultMatchesCurrentInput = Boolean(
+      draft.gradingResult
+      && draft.resultInputSignature
+      && draft.resultInputSignature === createGradingInputSignature(),
+    )
+    gradingResult.value = resultMatchesCurrentInput ? draft.gradingResult : null
+    gradingResultMaxScore.value = Number(gradingForm.maxScore) || 10
+    gradingResultInputSignature.value = resultMatchesCurrentInput ? draft.resultInputSignature : ''
+    teacherScore.value = resultMatchesCurrentInput && Number.isFinite(Number(draft.teacherScore))
+      ? Number(draft.teacherScore)
+      : null
+    reviewComment.value = resultMatchesCurrentInput ? String(draft.reviewComment || '') : ''
+    reviewStatus.value = resultMatchesCurrentInput ? String(draft.reviewStatus || 'pending') : 'pending'
+  } catch {
+    clearManualGradingDraft()
+  }
+}
 const linkedOpenAnswers = computed(() =>
   (linkedSubmission.value?.answers || []).filter((answer) => answer.questionType === 'SHORT'),
 )
@@ -134,8 +245,29 @@ const gradingDimensionScores = computed(() => normalizeList(gradingDisplayResult
 const gradingStrengths = computed(() => normalizeList(gradingDisplayResult.value?.strengths))
 const gradingDeductions = computed(() => normalizeList(gradingDisplayResult.value?.deductions))
 const gradingSuggestions = computed(() => normalizeList(gradingDisplayResult.value?.suggestions))
-const learningInsight = computed(() => buildLearningInsight(gradingDisplayResult.value))
+const learningInsight = computed(() => buildLearningInsight(gradingDisplayResult.value, {
+  teacherScore: teacherScore.value,
+  reviewComment: reviewComment.value,
+  reviewStatus: reviewStatus.value,
+}))
 const learningInsightReady = computed(() => hasLearningInsight(learningInsight.value))
+const reviewState = computed(() => ({
+  score: teacherScore.value,
+  opinion: reviewComment.value,
+  status: reviewStatus.value,
+}))
+const manualGradingDraft = computed(() => {
+  if (isPracticeSubmissionMode()) return null
+  return {
+    gradingForm,
+    gradingResult: gradingResult.value,
+    resultInputSignature: gradingResultInputSignature.value,
+    teacherScore: teacherScore.value,
+    reviewComment: reviewComment.value,
+    reviewStatus: reviewStatus.value,
+    learningInsight: learningInsight.value,
+  }
+})
 const coveredDimensionCount = computed(() =>
   gradingDimensionScores.value.filter((item) => Number(item?.score || 0) > 0).length,
 )
@@ -144,25 +276,11 @@ const knowledgeCoveragePercent = computed(() => {
   if (!total) return 0
   return Math.max(0, Math.min(100, Math.round((coveredDimensionCount.value / total) * 100)))
 })
-const gradingWeakDimensionLabels = computed(() =>
-  gradingDimensionScores.value
-    .map((item) => {
-      const maxScore = Number(item?.maxScore || 0)
-      const score = Number(item?.score || 0)
-      return {
-        criterion: item?.criterion,
-        ratio: maxScore > 0 ? score / maxScore : 0,
-      }
-    })
-    .filter((item) => item.criterion)
-    .sort((a, b) => a.ratio - b.ratio)
-    .slice(0, 2)
-    .map((item) => item.criterion),
-)
+const gradingWeakDimensionLabels = computed(() => learningInsight.value.weakPoints.slice(0, 2))
 
 const gradingResultReady = computed(() => Boolean(gradingResult.value))
 const gradingStatusText = computed(() =>
-  gradingLoading.value ? '正在分析答案' : gradingResultReady.value ? '批改已完成' : '等待批改',
+  gradingLoading.value ? '正在结合评分标准生成建议' : gradingResultReady.value ? '批改已完成' : '等待批改',
 )
 const gradingReferenceAnswer = computed(() => gradingDisplayResult.value?.referenceAnswer || gradingForm.referenceAnswer)
 const gradingCaseQuestion = computed(
@@ -239,9 +357,34 @@ const gradingTeachingInsights = computed(() => [
   },
 ])
 
+function getLearningInsightContext() {
+  return {
+    ownerId: userStore.userId || null,
+    ownerUsername: userStore.username || null,
+    sourceQuestion: gradingForm.question.trim(),
+    sourceTopic: gradingForm.question.trim(),
+    courseId: linkedSubmission.value?.courseId || route.query.courseId || null,
+    classId: linkedSubmission.value?.classId || route.query.classId || null,
+    submissionId: linkedSubmission.value?.submissionId || route.query.submissionId || null,
+  }
+}
+
 watch(learningInsight, (insight) => {
-  if (gradingResult.value && learningInsightReady.value) saveLearningInsight(insight)
+  if (gradingResult.value && learningInsightReady.value) {
+    saveLearningInsight(insight, getLearningInsightContext())
+  }
 })
+
+watch(manualGradingDraft, (draft) => {
+  if (draft && !manualDraftSaveSuppressed) saveManualGradingDraft()
+}, { deep: true })
+
+function handleReviewChange(change = {}) {
+  const score = Number(change.score)
+  teacherScore.value = Number.isFinite(score) ? score : null
+  reviewComment.value = String(change.opinion || '')
+  reviewStatus.value = String(change.status || 'pending')
+}
 
 function roundScore(value) {
   return Math.round(Number(value || 0) * 10) / 10
@@ -283,7 +426,11 @@ function fillLinkedQuestion(answer) {
     maxScore: Number(answer.score || 1),
   })
   gradingResult.value = null
+  gradingResultInputSignature.value = ''
   gradingResultMaxScore.value = Number(answer.score || 1)
+  teacherScore.value = null
+  reviewComment.value = ''
+  reviewStatus.value = 'pending'
   gradingFormRef.value?.clearValidate()
 }
 
@@ -380,11 +527,59 @@ async function returnToPracticeReview() {
   })
 }
 
+async function useLearningInsightForPreparation() {
+  if (!gradingResult.value || !learningInsightReady.value) {
+    ElMessage.warning('完成一次有效批改后，才能带入学习反馈。')
+    return
+  }
+
+  const context = getLearningInsightContext()
+  saveLearningInsight(learningInsight.value, context)
+  emit('use-learning-insight', learningInsight.value)
+
+  const query = {}
+  const topic = context.sourceTopic || context.sourceQuestion
+  if (topic) query.topic = topic
+  if (context.courseId) query.courseId = String(context.courseId)
+  if (context.classId) query.classId = String(context.classId)
+  if (context.submissionId) query.submissionId = String(context.submissionId)
+
+  try {
+    await router.push({
+      name: 'teacher-ai-preparation',
+      query,
+    })
+  } catch {
+    ElMessage.error('无法打开智能备课，请稍后重试。')
+  }
+}
+
+function startGradingWaitNotice() {
+  stopGradingWaitNotice()
+  gradingSlowNoticeTimer = window.setTimeout(() => {
+    if (gradingLoading.value) gradingSlowNotice.value = true
+  }, 9000)
+}
+
+function stopGradingWaitNotice() {
+  if (gradingSlowNoticeTimer !== null) window.clearTimeout(gradingSlowNoticeTimer)
+  gradingSlowNoticeTimer = null
+  gradingSlowNotice.value = false
+}
+
 async function submitGrading() {
+  if (gradingLoading.value) return
   const valid = await gradingFormRef.value?.validate().catch(() => false)
   if (!valid) return
 
+  gradingResult.value = null
+  gradingResultInputSignature.value = ''
+  gradingResultMaxScore.value = Number(gradingForm.maxScore) || 10
+  teacherScore.value = null
+  reviewComment.value = ''
+  reviewStatus.value = 'pending'
   gradingLoading.value = true
+  startGradingWaitNotice()
   try {
     const maxScore = Number(gradingForm.maxScore)
     gradingResult.value = await generateGrading({
@@ -399,12 +594,15 @@ async function submitGrading() {
       studentAnswer: gradingForm.studentAnswer.trim(),
       maxScore,
     })
+    gradingResultInputSignature.value = createGradingInputSignature()
     gradingResultMaxScore.value = maxScore
     ElMessage.success('批改已完成')
   } catch (error) {
-    ElMessage.error(error?.message || '智能批改失败，请稍后重试')
+    gradingResult.value = null
+    ElMessage.error(error?.message || 'AI 服务暂时不可用，请稍后重试。')
   } finally {
     gradingLoading.value = false
+    stopGradingWaitNotice()
   }
 }
 
@@ -433,10 +631,22 @@ function validateRubricField() {
 }
 
 function clearGradingForm() {
+  const shouldClearManualDraft = !isPracticeSubmissionMode()
+  if (shouldClearManualDraft) manualDraftSaveSuppressed = true
   rubricSequence = 3
   Object.assign(gradingForm, createGradingDefaults())
   gradingResult.value = null
+  gradingResultInputSignature.value = ''
   gradingResultMaxScore.value = 10
+  teacherScore.value = null
+  reviewComment.value = ''
+  reviewStatus.value = 'pending'
+  if (shouldClearManualDraft) {
+    clearManualGradingDraft()
+    nextTick(() => {
+      manualDraftSaveSuppressed = false
+    })
+  }
   gradingFormRef.value?.clearValidate()
 }
 async function copyResult(result, successMessage) {
@@ -465,7 +675,11 @@ async function copyResult(result, successMessage) {
   }
 }
 
-onMounted(loadLinkedSubmission)
+onMounted(() => {
+  restoreManualGradingDraft()
+  loadLinkedSubmission()
+})
+onUnmounted(stopGradingWaitNotice)
 </script>
 
 <template>
@@ -593,7 +807,7 @@ onMounted(loadLinkedSubmission)
                   <el-icon><RefreshLeft /></el-icon>
                   清空
                 </el-button>
-                <el-button type="primary" :loading="gradingLoading" @click="gradingActions.submit">
+                <el-button type="primary" :loading="gradingLoading" :disabled="gradingLoading" @click="gradingActions.submit">
                   <el-icon><MagicStick /></el-icon>
                   发现回答中的线索
                 </el-button>
@@ -737,7 +951,7 @@ onMounted(loadLinkedSubmission)
             aria-label="答案分析结果"
           >
             <div class="manual-review-focus__heading">
-              <strong>{{ gradingLoading ? 'AI正在阅读这份回答……' : '学生学习表现' }}</strong>
+              <strong>{{ gradingLoading ? 'AI 正在分析学生答案…' : '学生学习表现' }}</strong>
               <span>{{ gradingStatusText }}</span>
             </div>
             <div v-if="!gradingLoading" class="manual-review-focus__metrics">
@@ -796,7 +1010,9 @@ onMounted(loadLinkedSubmission)
             :grading-strengths="gradingStrengths"
             :grading-deductions="gradingDeductions"
             :grading-suggestions="gradingSuggestions"
+            :review-state="reviewState"
             @copy="copyResult(gradingResult, '批改结果已复制')"
+            @review-change="handleReviewChange"
           >
           <template #default="{ actions: reviewActions }">
           <details v-if="gradingResultReady" class="ai-analysis-disclosure">
@@ -806,7 +1022,7 @@ onMounted(loadLinkedSubmission)
                 <strong>深入查看评分依据</strong>
               </span>
               <span class="ai-analysis-disclosure__summary-score">
-                <b>{{ gradingDisplayResult?.totalScore ?? '--' }} / {{ gradingResultMaxScore }}</b>
+                <b>AI建议 {{ gradingDisplayResult?.totalScore ?? '--' }} / {{ gradingResultMaxScore }}</b>
                 <small>可信度 {{ confidencePercent || Math.round(Number(gradingDisplayResult?.confidence || 0) * 100) }}%</small>
               </span>
             </summary>
@@ -838,8 +1054,9 @@ onMounted(loadLinkedSubmission)
                 <span></span>
                 <span></span>
               </div>
-              <h3>正在对照 Rubric 拆解评分依据</h3>
-              <p>系统会依次理解题目、核对评分标准，并整理出分项得分、扣分原因与修改建议。</p>
+              <h3>AI 正在分析学生答案…</h3>
+              <p>正在结合评分标准生成建议，请稍候。</p>
+              <p v-if="gradingSlowNotice">模型正在深入分析，本次生成可能需要十几秒。</p>
               <div class="loading-progress-bar" aria-hidden="true">
                 <span></span>
               </div>
@@ -1091,8 +1308,8 @@ onMounted(loadLinkedSubmission)
               <el-button
                 class="insight-next-lesson"
                 type="primary"
-                :disabled="!learningInsightReady"
-                @click="emit('use-learning-insight', learningInsight)"
+                :disabled="gradingLoading"
+                @click="useLearningInsightForPreparation"
               >
                 把这些发现带到下一节课
               </el-button>

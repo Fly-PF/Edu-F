@@ -60,7 +60,7 @@ const differenceReason = computed(() => {
 
     <div class="score-compare-grid">
       <article class="score-compare-card score-compare-card--ai">
-        <span>建议评分</span>
+        <span>AI建议分</span>
         <strong>{{ aiScore ?? '--' }}</strong>
         <small>系统评估结果</small>
       </article>
@@ -74,7 +74,7 @@ const differenceReason = computed(() => {
         <strong :class="{ 'is-positive': scoreDifference > 0, 'is-negative': scoreDifference < 0 }">
           {{ differenceLabel }}
         </strong>
-        <small>教师评分 - 建议评分</small>
+        <small>教师评分 - AI建议分</small>
       </article>
     </div>
 
