@@ -1,9 +1,11 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { CopyDocument, MagicStick, RefreshLeft } from '@element-plus/icons-vue'
 import { listTeacherCourses } from '@/api/course'
 import { generateLessonPlan } from '@/api/teacherAi'
+import { useUserStore } from '@/stores/user'
 import LessonPlanningWorkspace from '@/components/teacher-ai/lesson-planning/LessonPlanningWorkspace.vue'
 import {
   createEmptyLearningInsight,
@@ -13,15 +15,22 @@ import {
 
 const courseLoading = ref(false)
 const courseOptions = ref([])
+const route = useRoute()
+const userStore = useUserStore()
 const lessonFormRef = ref()
 const lessonLoading = ref(false)
+const lessonSlowNotice = ref(false)
 const lessonResult = ref(null)
 const learningInsight = ref(createEmptyLearningInsight())
+let lessonSlowNoticeTimer = null
 
 function createLessonDefaults() {
+  const queryTopic = Array.isArray(route.query.topic) ? route.query.topic[0] : route.query.topic
+  const queryCourseId = Array.isArray(route.query.courseId) ? route.query.courseId[0] : route.query.courseId
+
   return {
-    courseId: null,
-    topic: '',
+    courseId: queryCourseId && Number.isFinite(Number(queryCourseId)) ? Number(queryCourseId) : null,
+    topic: typeof queryTopic === 'string' ? queryTopic : '',
     grade: '大学',
     durationMinutes: 45,
     objectives: '',
@@ -107,7 +116,7 @@ const lessonSupplementCards = computed(() =>
 const lessonResultReady = computed(() => Boolean(lessonResult.value))
 const learningInsightReady = computed(() => hasLearningInsight(learningInsight.value))
 const lessonStatusText = computed(() =>
-  lessonLoading.value ? 'AI正在构建课堂方案' : lessonResultReady.value ? '课堂探索地图已展开' : '准备开始探索',
+  lessonLoading.value ? 'AI 正在生成课堂方案…' : lessonResultReady.value ? '课堂探索地图已展开' : '准备开始探索',
 )
 const lessonLoadingStages = [
   {
@@ -140,10 +149,13 @@ async function loadCourses() {
 }
 
 async function submitLessonPlan() {
+  if (lessonLoading.value) return
   const valid = await lessonFormRef.value?.validate().catch(() => false)
   if (!valid) return
 
+  lessonResult.value = null
   lessonLoading.value = true
+  startLessonWaitNotice()
   try {
     lessonResult.value = await generateLessonPlan({
       courseId: lessonForm.courseId || undefined,
@@ -156,9 +168,11 @@ async function submitLessonPlan() {
     })
     ElMessage.success('课堂方案已展开')
   } catch (error) {
-    ElMessage.error(error?.message || '教案生成失败，请稍后重试')
+    lessonResult.value = null
+    ElMessage.error(error?.message || 'AI 服务暂时不可用，请稍后重试。')
   } finally {
     lessonLoading.value = false
+    stopLessonWaitNotice()
   }
 }
 
@@ -168,8 +182,27 @@ function clearLessonForm() {
   lessonFormRef.value?.clearValidate()
 }
 
-function loadLatestLearningInsight() {
-  learningInsight.value = loadLearningInsight()
+function loadRelevantLearningInsight() {
+  learningInsight.value = loadLearningInsight({
+    ownerId: userStore.userId || null,
+    ownerUsername: userStore.username || null,
+    sourceTopic: lessonForm.topic,
+    sourceQuestion: lessonForm.topic,
+    courseId: lessonForm.courseId,
+  })
+}
+
+function startLessonWaitNotice() {
+  stopLessonWaitNotice()
+  lessonSlowNoticeTimer = window.setTimeout(() => {
+    if (lessonLoading.value) lessonSlowNotice.value = true
+  }, 9000)
+}
+
+function stopLessonWaitNotice() {
+  if (lessonSlowNoticeTimer !== null) window.clearTimeout(lessonSlowNoticeTimer)
+  lessonSlowNoticeTimer = null
+  lessonSlowNotice.value = false
 }
 
 async function copyResult(result, successMessage) {
@@ -199,7 +232,12 @@ async function copyResult(result, successMessage) {
 }
 
 onMounted(loadCourses)
-onMounted(loadLatestLearningInsight)
+onUnmounted(stopLessonWaitNotice)
+watch(
+  () => [lessonForm.topic, lessonForm.courseId],
+  loadRelevantLearningInsight,
+  { immediate: true },
+)
 </script>
 
 <template>
@@ -343,8 +381,8 @@ onMounted(loadLatestLearningInsight)
                   </div>
                 </div>
                 <div v-else class="class-learning-radar__invitation">
-                  <strong>完成一次智能批改后，AI会逐渐了解你的班级。</strong>
-                  <p>新的作答反馈会在这里沉淀为薄弱点、错误模式和下一步教学建议。</p>
+                  <strong>当前主题暂无可用的近期学习反馈。</strong>
+                  <p>完成与当前主题相关的智能批改后，这里会呈现薄弱点、错误模式和下一步教学建议。</p>
                 </div>
               </section>
 
@@ -398,7 +436,7 @@ onMounted(loadLatestLearningInsight)
                   <el-icon><RefreshLeft /></el-icon>
                   清空
                 </el-button>
-                <el-button type="primary" :loading="lessonLoading" @click="submitLessonPlan">
+                <el-button type="primary" :loading="lessonLoading" :disabled="lessonLoading" @click="submitLessonPlan">
                   <el-icon><MagicStick /></el-icon>
                   生成课堂方案
                 </el-button>
@@ -436,8 +474,9 @@ onMounted(loadLatestLearningInsight)
                   <i>练习</i>
                 </div>
               </div>
-              <h3>AI正在构建课堂方案</h3>
-              <p>正在连接教学目标、课堂活动与练习设计，让课程路径逐步清晰。</p>
+              <h3>AI 正在生成课堂方案…</h3>
+              <p>正在组织教学目标、活动与练习，请稍候。</p>
+              <p v-if="lessonSlowNotice">模型正在深入分析，本次生成可能需要十几秒。</p>
               <div class="loading-progress-bar" aria-hidden="true">
                 <span></span>
               </div>
@@ -474,7 +513,7 @@ onMounted(loadLatestLearningInsight)
                         <p>{{ learningInsight.errorPatterns.slice(0, 2).join('；') || '本次反馈未发现集中错误模式' }}</p>
                       </div>
                     </div>
-                    <p v-else class="map-guidance-text">完成智能批改后，这里会呈现当前班级最值得关注的学习情况。</p>
+                    <p v-else class="map-guidance-text">当前主题暂无可用的近期学习反馈，先依据教师输入展开课堂地图。</p>
                   </div>
                 </article>
 
@@ -567,8 +606,8 @@ onMounted(loadLatestLearningInsight)
                   </div>
                 </div>
                 <div v-else class="design-reasoning-surface__invitation">
-                  <strong>当前方案主要依据教师输入的主题与教学目标展开。</strong>
-                  <p>完成智能批改后，AI会在这里解释如何根据班级表现调整案例、练习和任务难度。</p>
+                  <strong>当前主题暂无可用的近期学习反馈。</strong>
+                  <p>本次方案仅依据教师输入生成；相关批改完成后，AI会说明如何调整案例、练习和任务难度。</p>
                 </div>
               </section>
 
