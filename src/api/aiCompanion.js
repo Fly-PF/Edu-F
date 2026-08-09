@@ -42,6 +42,10 @@ export function listAiCompanionMessages(sessionId) {
   return resolve(request.get(`/api/student/ai-companion/sessions/${sessionId}/messages`))
 }
 
+export function deleteAiCompanionConversation(sessionId) {
+  return resolve(request.delete(`/api/student/ai-companion/sessions/${sessionId}`))
+}
+
 export function clearAiCompanionConversations() {
   return resolve(request.delete('/api/student/ai-companion/sessions'))
 }
