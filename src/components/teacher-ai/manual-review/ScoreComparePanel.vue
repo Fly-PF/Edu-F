@@ -88,8 +88,8 @@ const differenceReason = computed(() => {
 <style scoped>
 .score-compare-panel {
   display: grid;
-  gap: 12px;
-  padding: 14px;
+  gap: 14px;
+  padding: 16px;
   border: 1px solid #dfe6ed;
   border-radius: 8px;
   background: #fff;
@@ -131,14 +131,14 @@ const differenceReason = computed(() => {
 .score-compare-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  gap: 12px;
 }
 
 .score-compare-card {
   display: grid;
-  gap: 5px;
+  gap: 6px;
   min-width: 0;
-  padding: 12px;
+  padding: 14px;
   border: 1px solid #e5eaf0;
   border-radius: 8px;
   background: #f9fbfd;
@@ -177,7 +177,7 @@ const differenceReason = computed(() => {
 }
 
 .score-compare-reason {
-  padding-top: 10px;
+  padding-top: 12px;
   border-top: 1px solid #e8edf2;
 }
 

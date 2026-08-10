@@ -245,8 +245,8 @@ const actions = {
 
 .manual-review-panel {
   display: grid;
-  gap: 16px;
-  padding: 18px;
+  gap: 22px;
+  padding: 22px;
   border: 1px solid rgba(52, 211, 153, 0.2);
   border-radius: 6px;
   background: linear-gradient(180deg, rgb(255 255 255 / 97%), rgb(244 255 249 / 94%));
@@ -347,16 +347,16 @@ const actions = {
 
 .manual-review-editor {
   display: grid;
-  grid-template-columns: minmax(150px, 0.72fr) minmax(0, 1.28fr);
-  gap: 14px;
+  grid-template-columns: 0.9fr 1.1fr;
+  gap: 20px;
 }
 
 .manual-review-editor__score,
 .manual-review-field {
   display: grid;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
-  padding: 14px;
+  padding: 18px;
   border: 1px solid rgba(139, 92, 246, 0.12);
   border-radius: 6px;
   background: rgb(255 255 255 / 82%);
@@ -384,10 +384,16 @@ const actions = {
   width: 100%;
 }
 
+.manual-review-field :deep(.el-textarea__inner) {
+  min-height: 132px !important;
+  resize: vertical;
+}
+
 .manual-review-panel__actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 16px;
+  margin-top: -6px;
   justify-content: flex-end;
 }
 
@@ -405,6 +411,18 @@ const actions = {
 
   .manual-review-editor {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .manual-review-panel {
+    gap: 18px;
+    padding: 18px;
+  }
+
+  .manual-review-editor__score,
+  .manual-review-field {
+    padding: 16px;
   }
 }
 </style>
