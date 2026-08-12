@@ -5,6 +5,7 @@ import { ChatDotRound, Clock, Delete, DocumentChecked, DocumentCopy, MagicStick,
 import {
   createAiCompanionSession,
   clearAiCompanionConversations,
+  deleteAiCompanionConversation,
   getAiCompanionContext,
   listAiCompanionMessages,
   listAiCompanionSessions,
@@ -306,6 +307,30 @@ async function startNewConversation() {
   }
 }
 
+async function deleteCurrentConversation() {
+  if (thinking.value || loadingConversation.value || !sessionId.value) return
+  const currentSessionId = sessionId.value
+  try {
+    await ElMessageBox.confirm(
+      '这会删除当前对话中的全部问答，删除后无法恢复，其他历史对话不会受影响。',
+      '删除当前对话',
+      { confirmButtonText: '确认删除', cancelButtonText: '取消', type: 'warning' },
+    )
+    loadingConversation.value = true
+    await deleteAiCompanionConversation(currentSessionId)
+    sessions.value = sessions.value.filter((session) => session.id !== currentSessionId)
+    sessionId.value = null
+    messages.value = [createWelcomeMessage('当前对话已删除。请点击顶部的“+”开始新的学习对话。')]
+    ElMessage.success('当前智能学伴对话已删除')
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') {
+      ElMessage.error(error?.message || '删除当前对话失败')
+    }
+  } finally {
+    loadingConversation.value = false
+  }
+}
+
 async function clearAllConversations() {
   if (thinking.value || loadingConversation.value) return
   try {
@@ -377,6 +402,11 @@ watch([() => props.chapterId, () => props.resourceId], () => {
           <i></i>{{ thinking ? '模型回答中' : generationLabel }}
         </span>
         <span><el-icon><ChatDotRound /></el-icon>学习对话</span>
+        <el-tooltip content="删除当前对话" placement="bottom">
+          <el-button circle text type="danger" aria-label="删除当前对话" :disabled="thinking || loadingConversation || !sessionId" @click="deleteCurrentConversation">
+            <el-icon><Delete /></el-icon>
+          </el-button>
+        </el-tooltip>
         <el-tooltip content="新建对话" placement="bottom">
           <el-button circle text aria-label="新建对话" :disabled="loadingConversation" @click="startNewConversation">
             <el-icon><Plus /></el-icon>

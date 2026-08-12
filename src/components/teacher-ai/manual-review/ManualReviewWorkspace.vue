@@ -48,6 +48,10 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  reviewState: {
+    type: Object,
+    default: null,
+  },
 })
 
 const emit = defineEmits(['copy', 'review-change'])
@@ -75,10 +79,18 @@ const reviewStatusText = computed(() => {
 })
 
 function resetReviewState(result) {
-  const score = Number(result?.totalScore)
-  reviewScore.value = Number.isFinite(score) ? score : null
-  reviewOpinion.value = ''
-  reviewStatus.value = 'pending'
+  const resultScore = Number(result?.totalScore)
+  const savedScore = props.reviewState?.score
+  const normalizedSavedScore = Number(savedScore)
+  reviewScore.value = savedScore !== null
+    && savedScore !== undefined
+    && Number.isFinite(normalizedSavedScore)
+    ? normalizedSavedScore
+    : Number.isFinite(resultScore) ? resultScore : null
+  reviewOpinion.value = String(props.reviewState?.opinion || '')
+  reviewStatus.value = ['pending', 'accepted', 'modified'].includes(props.reviewState?.status)
+    ? props.reviewState.status
+    : 'pending'
 }
 
 function acceptAiResult() {
@@ -96,10 +108,20 @@ function saveReviewChanges() {
 }
 
 function markReviewPending() {
-  if (canReview.value) reviewStatus.value = 'pending'
+  if (!canReview.value) return
+  reviewStatus.value = 'pending'
+  emit('review-change', {
+    status: reviewStatus.value,
+    score: hasValidReviewScore.value ? Number(reviewScore.value) : null,
+    opinion: reviewOpinion.value,
+  })
 }
 
-watch(() => props.gradingResult, resetReviewState, { immediate: true })
+watch(
+  [() => props.gradingResult, () => props.reviewState],
+  ([result]) => resetReviewState(result),
+  { immediate: true, deep: true },
+)
 
 const actions = {
   copy: () => emit('copy'),
@@ -147,7 +169,7 @@ const actions = {
         <div class="manual-review-editor__score">
           <div class="manual-review-field__head">
             <label for="manual-review-score">教师确认分数</label>
-            <span>建议评分 {{ gradingDisplayResult?.totalScore ?? '--' }} / {{ gradingResultMaxScore }}</span>
+            <span>AI建议分 {{ gradingDisplayResult?.totalScore ?? '--' }} / {{ gradingResultMaxScore }}</span>
           </div>
           <el-input-number
             id="manual-review-score"
@@ -167,7 +189,7 @@ const actions = {
         <div class="manual-review-field">
           <div class="manual-review-field__head">
             <label for="manual-review-opinion">审核意见</label>
-            <span>仅保存在当前页面</span>
+            <span>临时保存在当前会话</span>
           </div>
           <el-input
             id="manual-review-opinion"
@@ -223,8 +245,8 @@ const actions = {
 
 .manual-review-panel {
   display: grid;
-  gap: 16px;
-  padding: 18px;
+  gap: 22px;
+  padding: 22px;
   border: 1px solid rgba(52, 211, 153, 0.2);
   border-radius: 6px;
   background: linear-gradient(180deg, rgb(255 255 255 / 97%), rgb(244 255 249 / 94%));
@@ -325,16 +347,16 @@ const actions = {
 
 .manual-review-editor {
   display: grid;
-  grid-template-columns: minmax(150px, 0.72fr) minmax(0, 1.28fr);
-  gap: 14px;
+  grid-template-columns: 0.9fr 1.1fr;
+  gap: 20px;
 }
 
 .manual-review-editor__score,
 .manual-review-field {
   display: grid;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
-  padding: 14px;
+  padding: 18px;
   border: 1px solid rgba(139, 92, 246, 0.12);
   border-radius: 6px;
   background: rgb(255 255 255 / 82%);
@@ -362,10 +384,16 @@ const actions = {
   width: 100%;
 }
 
+.manual-review-field :deep(.el-textarea__inner) {
+  min-height: 132px !important;
+  resize: vertical;
+}
+
 .manual-review-panel__actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 16px;
+  margin-top: -6px;
   justify-content: flex-end;
 }
 
@@ -383,6 +411,18 @@ const actions = {
 
   .manual-review-editor {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .manual-review-panel {
+    gap: 18px;
+    padding: 18px;
+  }
+
+  .manual-review-editor__score,
+  .manual-review-field {
+    padding: 16px;
   }
 }
 </style>
