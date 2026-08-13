@@ -1,7 +1,7 @@
 ﻿<script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, provide, reactive, ref, watch } from 'vue'
+import { computed, h, nextTick, onBeforeUnmount, onMounted, provide, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox, ElNotification } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import {
   createChatSession,
@@ -313,6 +313,27 @@ watch(
     scrollBubbleListToBottom(false, true)
   }
 )
+
+watch(
+  () => [route.query.session_id, route.query.sessionId, route.query.reviewRecordId],
+  async () => {
+    const sessionId = getRouteSessionId()
+    const reviewRecordId = getRouteReviewRecordId()
+
+    if (!sessionId) {
+      return
+    }
+
+    if (String(activeConversation.value) !== sessionId) {
+      await handleSelectConversation(sessionId)
+    }
+
+    if (reviewRecordId) {
+      focusReviewMessage(reviewRecordId, sessionId)
+    }
+  }
+)
+
 function cloneMessages(list = []) {
   return list.map(({ typing, loading, ...item }) => ({
     ...item,
@@ -447,6 +468,18 @@ function showChatPage() {
   }
 }
 
+function getRouteSessionId() {
+  const value = route.query.session_id ?? route.query.sessionId
+  const normalizedValue = Array.isArray(value) ? value[0] : value
+  return String(normalizedValue || '').trim()
+}
+
+function getRouteReviewRecordId() {
+  const value = route.query.reviewRecordId
+  const normalizedValue = Array.isArray(value) ? value[0] : value
+  return String(normalizedValue || '').trim()
+}
+
 function normalizeConversation(item) {
   return {
     id: String(item.id),
@@ -459,6 +492,28 @@ function formatMessageTime(value) {
     return new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
   }
   return new Date(value).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+}
+
+function getReviewNotificationStorageKey() {
+  const ownerKey = userStore.userId || userStore.username || 'guest'
+  return `edu:safety-review-seen:${ownerKey}`
+}
+
+function readSeenReviewRecordIds() {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(getReviewNotificationStorageKey()) || '[]')
+    return new Set(Array.isArray(parsed) ? parsed.map((item) => String(item)) : [])
+  } catch {
+    return new Set()
+  }
+}
+
+function saveSeenReviewRecordIds(ids) {
+  try {
+    window.localStorage.setItem(getReviewNotificationStorageKey(), JSON.stringify(Array.from(ids)))
+  } catch {
+    // ignore
+  }
 }
 
 function getFileExtension(value) {
@@ -479,6 +534,19 @@ function parseQaImages(metadata) {
       : []
   } catch {
     return []
+  }
+}
+
+function parseReviewRecordId(metadata) {
+  try {
+    const value = JSON.parse(metadata || '{}').reviewRecordId
+    if (value === null || value === undefined || value === '') {
+      return null
+    }
+    const numberValue = Number(value)
+    return Number.isFinite(numberValue) ? numberValue : null
+  } catch {
+    return null
   }
 }
 
@@ -517,6 +585,117 @@ function mapDocRefsToSources(docRefs = []) {
       description: item.description || null,
     }))
     .filter((item) => item.label)
+}
+
+function getAssistantQuestionPreview(assistantMessage) {
+  const messageId = String(assistantMessage?.messageId || '')
+  const baseMessageId = messageId.replace(/-assistant$/, '')
+  if (!baseMessageId) {
+    return ''
+  }
+
+  const userMessage = messages.value.find((item) => item?.messageId === `${baseMessageId}-user`)
+  const content = String(userMessage?.content || '').trim()
+  return content.length > 32 ? `${content.slice(0, 32)}...` : content
+}
+
+function focusReviewMessage(reviewRecordId, sessionId) {
+  if (!reviewRecordId) {
+    return
+  }
+
+  const scrollTarget = () => {
+    const target = document.querySelector(`[data-review-record-id="${reviewRecordId}"]`)
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      return
+    }
+    scrollBubbleListToBottom(true, true)
+  }
+
+  if (sessionId && String(activeConversation.value) !== String(sessionId)) {
+    handleSelectConversation(String(sessionId))
+      .then(() => nextTick())
+      .then(scrollTarget)
+    return
+  }
+
+  nextTick().then(scrollTarget)
+}
+
+function openReviewMessage(reviewRecordId, sessionId) {
+  if (!reviewRecordId || !sessionId) {
+    return
+  }
+
+  router.push({
+    path: '/main/knowledge-qa/chat',
+    query: {
+      session_id: sessionId,
+      reviewRecordId,
+    },
+  })
+}
+
+function renderReviewNotificationMessage(preview, onOpen) {
+  const text = preview ? `点击查看：${preview}` : '点击查看这条问答内容'
+
+  return h('div', {
+    style: { display: 'grid', gap: '10px', cursor: 'pointer' },
+    onClick: onOpen,
+  }, [
+    h('div', { style: { color: '#5f6b7a', lineHeight: '1.6' } }, text),
+    h(
+      'button',
+      {
+        type: 'button',
+        style: {
+          justifySelf: 'start',
+          padding: '6px 12px',
+          border: '1px solid #67c23a',
+          borderRadius: '6px',
+          background: '#f0f9eb',
+          color: '#3d8b24',
+          cursor: 'pointer',
+          fontWeight: '700',
+        },
+        onClick: (event) => {
+          event.stopPropagation()
+          onOpen()
+        },
+      },
+      '查看问答',
+    ),
+  ])
+}
+
+function notifyApprovedReviewMessages(sessionId = activeConversation.value) {
+  if (!sessionId || userStore.roleCode === 'ADMIN' || userStore.roleCode === 'SUPERADMIN') {
+    return
+  }
+
+  const seenIds = readSeenReviewRecordIds()
+  const pendingMessages = messages.value.filter((item) => item?.role === 'assistant' && item?.reviewRecordId && !seenIds.has(String(item.reviewRecordId)))
+  if (!pendingMessages.length) {
+    return
+  }
+
+  pendingMessages.forEach((item) => seenIds.add(String(item.reviewRecordId)))
+  saveSeenReviewRecordIds(seenIds)
+
+  const latestMessage = pendingMessages[pendingMessages.length - 1]
+  const countText = pendingMessages.length === 1 ? '1 条审核已通过' : `${pendingMessages.length} 条审核已通过`
+  const previewText = getAssistantQuestionPreview(latestMessage)
+  const openTarget = () => openReviewMessage(latestMessage.reviewRecordId, sessionId)
+
+  ElNotification({
+    title: countText,
+    message: () => renderReviewNotificationMessage(previewText, openTarget),
+    type: 'success',
+    duration: 0,
+    position: 'bottom-right',
+    onClick: openTarget,
+  })
 }
 
 async function ensureSessionKnowledgeBasesLoaded() {
@@ -579,6 +758,7 @@ function normalizeChatMessage(item) {
     metadata: item.metadata,
     qaImgs: parseQaImages(item.metadata),
     docRefCount: item.docRefCount || 0,
+    reviewRecordId: item.reviewRecordId ?? parseReviewRecordId(item.metadata),
   }
 }
 
@@ -597,6 +777,7 @@ async function loadChatMessages(sessionId) {
     messages.value = cachedMessages
     chatMessagesLoaded.value = true
     chatMessageLoading.value = false
+    notifyApprovedReviewMessages(sessionId)
     return
   }
 
@@ -605,6 +786,7 @@ async function loadChatMessages(sessionId) {
     messages.value = (result || []).map(normalizeChatMessage)
     cacheConversationMessages(sessionId)
     chatMessagesLoaded.value = true
+    notifyApprovedReviewMessages(sessionId)
   } catch (error) {
     messages.value = []
     ElMessage.error(error?.message || '历史消息加载失败')
@@ -646,7 +828,14 @@ async function loadConversationPage(reset = false) {
     conversationPage.pageNum = pageNum + 1
 
     if (!activeConversation.value && conversations.value.length) {
-      await handleSelectConversation(conversations.value[0].id)
+      const routeSessionId = getRouteSessionId()
+      const targetConversation = conversations.value.find((item) => String(item.id) === routeSessionId)
+      await handleSelectConversation(targetConversation?.id || conversations.value[0].id)
+
+      const reviewRecordId = getRouteReviewRecordId()
+      if (targetConversation && reviewRecordId) {
+        focusReviewMessage(reviewRecordId, targetConversation.id)
+      }
     } else if (reset && conversations.value.length === 0) {
       activeConversation.value = ''
       messages.value = []
@@ -928,6 +1117,7 @@ async function handleSend() {
   cacheConversationMessages(requestConversationId)
   let receivedStreamChunk = false
   let typingCompleted = false
+  let waitingForReview = false
   let resolveTypingDone = () => {}
   const typingDone = new Promise((resolve) => {
     resolveTypingDone = resolve
@@ -936,6 +1126,7 @@ async function handleSend() {
   function applyAssistantFrame(frame = {}) {
     assistantMessage.messageId = frame.messageId || assistantMessage.messageId
     assistantMessage.metadata = frame.metadata ?? assistantMessage.metadata
+    assistantMessage.reviewRecordId = frame.reviewRecordId ?? assistantMessage.reviewRecordId
 
     if (Array.isArray(frame.docRefInfo)) {
       assistantMessage.docRefInfo = frame.docRefInfo
@@ -961,6 +1152,9 @@ async function handleSend() {
       }
       assistantMessage.id = frame.id || assistantMessage.id
       assistantMessage.time = formatMessageTime(frame.createTime)
+      if (assistantMessage.reviewRecordId) {
+        notifyApprovedReviewMessages(requestConversationId)
+      }
     } else if (frame.status === 'error') {
       assistantMessage.content = frame.content || 'AI回答生成失败'
       ElMessage.error(assistantMessage.content)
@@ -982,10 +1176,17 @@ async function handleSend() {
       if (frame.status === 'stream') {
         receivedStreamChunk = true
         applyAssistantFrame(frame)
-        if (assistantMessage.loading) {
-          assistantMessage.loading = false
+        if (waitingForReview) {
+          assistantMessage.content = ''
+          waitingForReview = false
         }
+        assistantMessage.loading = false
         pushTypingChunk(frame.content || '')
+      } else if (frame.status === 'review_pending') {
+        applyAssistantFrame(frame)
+        waitingForReview = true
+        assistantMessage.loading = false
+        assistantMessage.content = frame.content || '内容已提交人工审核，请等待管理员处理'
       } else if (frame.status === 'done') {
         userMessage.messageId = String(frame.messageId || '').replace(/-assistant$/, '-user')
         applyAssistantFrame(frame)
@@ -1048,6 +1249,7 @@ async function executeChatStream({
   let receivedStreamChunk = false
   let typingCompleted = false
   let finalStatus = ''
+  let waitingForReview = false
   let resolveTypingDone = () => {}
   const typingDone = new Promise((resolve) => {
     resolveTypingDone = resolve
@@ -1056,6 +1258,7 @@ async function executeChatStream({
   function applyAssistantFrame(frame = {}) {
     assistantMessage.messageId = frame.messageId || assistantMessage.messageId
     assistantMessage.metadata = frame.metadata ?? assistantMessage.metadata
+    assistantMessage.reviewRecordId = frame.reviewRecordId ?? assistantMessage.reviewRecordId
 
     if (Array.isArray(frame.docRefInfo)) {
       assistantMessage.docRefInfo = frame.docRefInfo
@@ -1082,6 +1285,9 @@ async function executeChatStream({
       }
       assistantMessage.id = frame.id || assistantMessage.id
       assistantMessage.time = formatMessageTime(frame.createTime)
+      if (assistantMessage.reviewRecordId) {
+        notifyApprovedReviewMessages(requestConversationId)
+      }
     } else if (frame.status === 'error') {
       assistantMessage.content = frame.content || 'AI回答生成失败'
       ElMessage.error(assistantMessage.content)
@@ -1103,10 +1309,17 @@ async function executeChatStream({
       if (frame.status === 'stream') {
         receivedStreamChunk = true
         applyAssistantFrame(frame)
-        if (assistantMessage.loading) {
-          assistantMessage.loading = false
+        if (waitingForReview) {
+          assistantMessage.content = ''
+          waitingForReview = false
         }
+        assistantMessage.loading = false
         pushTypingChunk(frame.content || '')
+      } else if (frame.status === 'review_pending') {
+        applyAssistantFrame(frame)
+        waitingForReview = true
+        assistantMessage.loading = false
+        assistantMessage.content = frame.content || '内容已提交人工审核，请等待管理员处理'
       } else if (frame.status === 'done') {
         if (typeof onDoneFrame === 'function') {
           onDoneFrame(frame)

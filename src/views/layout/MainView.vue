@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { fetchUserProfile } from '@/api/user'
 import { useUserStore } from '@/stores/user'
+import { checkApprovedReviewNotifications } from '@/utils/reviewNotification'
 
 const route = useRoute()
 const router = useRouter()
@@ -218,7 +219,10 @@ watch(
   },
 )
 
-onMounted(loadCurrentUserProfile)
+onMounted(() => {
+  loadCurrentUserProfile()
+  checkApprovedReviewNotifications({ userStore, router })
+})
 </script>
 
 <template>

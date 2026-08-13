@@ -193,7 +193,7 @@ onBeforeUnmount(stopReading)
       @scroll="handleBubbleListScroll"
     >
       <template #item="{ item }">
-        <div class="message-row">
+        <div class="message-row" :data-review-record-id="item.reviewRecordId || ''">
           <Bubble
             class="message-item"
             :class="`is-${item.role}`"

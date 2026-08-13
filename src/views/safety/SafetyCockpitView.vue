@@ -221,6 +221,7 @@ const recordReviewActionLoading = ref(false)
 const selectedRecord = ref(null)
 let recordRequestSeq = 0
 let stopSafetyReviewSync = () => {}
+let cockpitRefreshTimer = null
 
 const sandboxForm = reactive({
   sourceModule: 'MANUAL_TEST',
@@ -261,6 +262,60 @@ const evaluationResult = reactive({
 })
 
 const detailTabs = ref('basic')
+
+const detailCardDefs = [
+  { key: 'sourceModule', label: '来源模块', icon: Monitor, accent: '#7c3aed', tint: 'rgba(124, 58, 237, 0.14)' },
+  { key: 'scene', label: '场景', icon: Aim, accent: '#0ea5e9', tint: 'rgba(14, 165, 233, 0.14)' },
+  { key: 'roleGrade', label: '角色 / 策略档位', icon: CircleCheck, accent: '#22c55e', tint: 'rgba(34, 197, 94, 0.14)' },
+  { key: 'riskTypes', label: '风险类型', icon: Warning, accent: '#f97316', tint: 'rgba(249, 115, 22, 0.14)' },
+]
+
+const compareCardDefs = [
+  { key: 'inputText', label: '输入文本', icon: Search, accent: '#0ea5e9', tint: 'rgba(14, 165, 233, 0.14)' },
+  { key: 'outputText', label: '输出文本', icon: Monitor, accent: '#7c3aed', tint: 'rgba(124, 58, 237, 0.14)' },
+  { key: 'processedText', label: '处理后文本', icon: DataAnalysis, accent: '#22c55e', tint: 'rgba(34, 197, 94, 0.14)' },
+  { key: 'suggestion', label: '建议', icon: Bell, accent: '#f97316', tint: 'rgba(249, 115, 22, 0.14)' },
+]
+
+const detailCards = computed(() => {
+  const record = selectedRecord.value
+  if (!record) {
+    return []
+  }
+
+  return detailCardDefs.map((card) => ({
+    ...card,
+    value:
+      card.key === 'sourceModule'
+        ? listLabel(sourceModuleOptions, record.sourceModule)
+        : card.key === 'scene'
+          ? listLabel(sceneOptions, record.scene)
+          : card.key === 'roleGrade'
+            ? `${listLabel(userRoleOptions, record.userRole)} / ${record.userRole === 'TEACHER' || record.userRole === 'ADMIN'
+                ? '默认策略（按高中档）'
+                : listLabel(gradeOptions, record.gradeLevel)}`
+            : mapListLabel(riskTypeOptions, record.riskTypes),
+  }))
+})
+
+const compareCards = computed(() => {
+  const record = selectedRecord.value
+  if (!record) {
+    return []
+  }
+
+  return compareCardDefs.map((card) => ({
+    ...card,
+    value:
+      card.key === 'inputText'
+        ? record.inputText || '-'
+        : card.key === 'outputText'
+          ? record.outputText || '-'
+          : card.key === 'processedText'
+            ? record.processedText || '-'
+            : record.suggestion || '-',
+  }))
+})
 
 function unwrapResult(res, fallback = '请求失败') {
   if (Number(res?.code) !== 200) {
@@ -453,6 +508,7 @@ const riskDonutStyle = computed(() => {
 })
 
 const sourceList = computed(() => normalizeMetricList(dashboard.sourceModuleDistribution))
+const sourceRankList = computed(() => sourceList.value.slice(0, 3))
 const gradeList = computed(() => normalizeMetricList(dashboard.gradeDistribution))
 const trendList = computed(() => normalizeTrendList(dashboard.dailyTrend))
 
@@ -464,6 +520,7 @@ const trendMax = computed(() => {
 const trendPolyline = computed(() => buildPolyline(trendList.value, 'totalCount', trendMax.value))
 const trendRiskPolyline = computed(() => buildPolyline(trendList.value, 'highRiskCount', trendMax.value))
 
+const sourceRankMax = computed(() => Math.max(...sourceRankList.value.map((row) => row.count), 1))
 const sourceTop = computed(() => sourceList.value[0]?.label || '-')
 const riskTop = computed(() => riskSegments.value[0]?.label || '-')
 const gradeTop = computed(() => gradeList.value[0]?.label || '-')
@@ -529,9 +586,9 @@ const strategyCards = computed(() => [
     desc: `近期高风险内容主要来自 ${sourceTop.value}`,
   },
   {
-    title: '主要学段',
+    title: '主要治理学段',
     value: gradeTop.value,
-    desc: `当前风险密度最高的学段是 ${gradeTop.value}`,
+    desc: `当前风险密度最高的治理学段是 ${gradeTop.value}`,
   },
   {
     title: '人工复审',
@@ -1020,12 +1077,21 @@ onMounted(() => {
   })
   window.addEventListener('focus', handleAdminWindowFocus)
   document.addEventListener('visibilitychange', handleAdminVisibilityChange)
+  cockpitRefreshTimer = window.setInterval(() => {
+    if (activeView.value === 'dashboard' || activeView.value === 'records') {
+      refreshAdminReviewState()
+    }
+  }, 8000)
 })
 
 onBeforeUnmount(() => {
   stopSafetyReviewSync()
   window.removeEventListener('focus', handleAdminWindowFocus)
   document.removeEventListener('visibilitychange', handleAdminVisibilityChange)
+  if (cockpitRefreshTimer) {
+    window.clearInterval(cockpitRefreshTimer)
+    cockpitRefreshTimer = null
+  }
 })
 </script>
 
@@ -1194,7 +1260,7 @@ onBeforeUnmount(() => {
               </div>
             </div>
             <div class="bar-list">
-              <div v-for="(item, index) in sourceList" :key="item.label" class="bar-row">
+              <div v-for="(item, index) in sourceRankList" :key="item.label" class="bar-row">
                 <div class="bar-head">
                   <strong>{{ item.label }}</strong>
                   <span>{{ formatCount(item.count) }}</span>
@@ -1202,7 +1268,7 @@ onBeforeUnmount(() => {
                 <div class="bar-track">
                   <i
                     :style="{
-                      width: `${(item.count / Math.max(...sourceList.map((row) => row.count), 1)) * 100}%`,
+                      width: `${(item.count / sourceRankMax) * 100}%`,
                       background: `linear-gradient(90deg, ${barColor(index)}, rgba(255,255,255,0.22))`,
                     }"
                   />
@@ -1428,9 +1494,19 @@ onBeforeUnmount(() => {
         <div v-loading="detailLoading" class="detail-shell">
           <template v-if="selectedRecord">
             <div class="detail-top">
-              <div>
-                <strong>{{ selectedRecord.id }}</strong>
-                <p>{{ formatDateTime(selectedRecord.createTime) }}</p>
+              <div class="detail-top-main">
+                <div class="detail-top-meta">
+                  <strong>{{ selectedRecord.id }}</strong>
+                  <p>{{ formatDateTime(selectedRecord.createTime) }}</p>
+                </div>
+                <el-tooltip content="查看调试信息" placement="left">
+                  <el-button
+                    class="detail-icon-btn"
+                    :icon="Grid"
+                    aria-label="查看调试信息"
+                    @click="detailTabs = 'debug'"
+                  />
+                </el-tooltip>
               </div>
               <div class="detail-tags">
                 <el-tag class="detail-tag detail-risk-tag" :type="selectedRecord.riskLevel === 'HIGH' ? 'danger' : 'warning'">
@@ -1445,41 +1521,37 @@ onBeforeUnmount(() => {
               </div>
             </div>
 
-            <div class="detail-grid">
-              <section>
-                <span>来源模块</span>
-                <p>{{ listLabel(sourceModuleOptions, selectedRecord.sourceModule) }}</p>
-              </section>
-              <section>
-                <span>场景</span>
-                <p>{{ listLabel(sceneOptions, selectedRecord.scene) }}</p>
-              </section>
-              <section>
-                <span>角色 / 学段</span>
-                <p>{{ listLabel(userRoleOptions, selectedRecord.userRole) }} / {{ listLabel(gradeOptions, selectedRecord.gradeLevel) }}</p>
-              </section>
-              <section>
-                <span>风险类型</span>
-                <p>{{ mapListLabel(riskTypeOptions, selectedRecord.riskTypes) }}</p>
+            <div class="detail-grid colorful-grid">
+              <section
+                v-for="card in detailCards"
+                :key="card.key"
+                class="info-card"
+                :style="{ '--accent': card.accent, '--tint': card.tint }"
+              >
+                <div class="info-card-head">
+                  <span class="info-icon">
+                    <el-icon><component :is="card.icon" /></el-icon>
+                  </span>
+                  <span>{{ card.label }}</span>
+                </div>
+                <p>{{ card.value }}</p>
               </section>
             </div>
 
-            <div class="compare-grid">
-              <section>
-                <span>输入文本</span>
-                <p>{{ selectedRecord.inputText || '-' }}</p>
-              </section>
-              <section>
-                <span>输出文本</span>
-                <p>{{ selectedRecord.outputText || '-' }}</p>
-              </section>
-              <section>
-                <span>处理后文本</span>
-                <p>{{ selectedRecord.processedText || '-' }}</p>
-              </section>
-              <section>
-                <span>建议</span>
-                <p>{{ selectedRecord.suggestion || '-' }}</p>
+            <div class="compare-grid colorful-grid">
+              <section
+                v-for="card in compareCards"
+                :key="card.key"
+                class="info-card"
+                :style="{ '--accent': card.accent, '--tint': card.tint }"
+              >
+                <div class="info-card-head">
+                  <span class="info-icon">
+                    <el-icon><component :is="card.icon" /></el-icon>
+                  </span>
+                  <span>{{ card.label }}</span>
+                </div>
+                <p>{{ card.value }}</p>
               </section>
             </div>
 
@@ -2090,10 +2162,7 @@ onBeforeUnmount(() => {
 }
 
 .result-boxes p,
-.sample-texts :deep(.el-textarea__inner),
-.detail-shell p,
-.detail-shell pre,
-.detail-shell span {
+.sample-texts :deep(.el-textarea__inner) {
   color: #dbeafe;
 }
 
@@ -2308,13 +2377,21 @@ onBeforeUnmount(() => {
 }
 
 .detail-risk-tag {
-  background: rgba(251, 113, 133, 0.16);
-  border-color: rgba(251, 113, 133, 0.32);
+  background: rgba(251, 113, 133, 0.22);
+  border-color: rgba(251, 113, 133, 0.44);
+  color: #9f1239 !important;
+}
+
+.detail-review-tag {
+  background: rgba(255, 229, 157, 0.28);
+  border-color: rgba(245, 158, 11, 0.42);
+  color: #8a5b00 !important;
 }
 
 .detail-decision-tag {
-  background: rgba(96, 165, 250, 0.16);
-  border-color: rgba(96, 165, 250, 0.32);
+  background: rgba(96, 165, 250, 0.22);
+  border-color: rgba(96, 165, 250, 0.44);
+  color: #1d4ed8 !important;
 }
 
 .detail-grid,
@@ -2813,7 +2890,12 @@ onBeforeUnmount(() => {
 
 .detail-drawer :deep(.el-drawer__header),
 .detail-drawer :deep(.el-drawer__body) {
-  background: #fbfbff;
+  background:
+    linear-gradient(0deg, rgba(126, 102, 255, 0.03), rgba(126, 102, 255, 0.03)),
+    linear-gradient(90deg, rgba(126, 102, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(rgba(126, 102, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(180deg, #ffffff, #faf7ff);
+  background-size: auto, 34px 34px, 34px 34px, auto;
   border-color: rgba(126, 102, 255, 0.12);
 }
 
@@ -3033,6 +3115,21 @@ onBeforeUnmount(() => {
   background:
     radial-gradient(circle at calc(100% - 52px) 40%, rgba(157, 228, 235, 0.34) 0 22px, transparent 23px),
     linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(250, 248, 255, 0.92));
+}
+
+.dashboard-grid > article:nth-child(3).source-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-grid > article:nth-child(3).source-panel .bar-list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-evenly;
+  gap: 0;
+  min-height: 0;
+  padding: 8px 0 4px;
 }
 
 .dashboard-grid > article:nth-child(4) {
@@ -3757,64 +3854,194 @@ onBeforeUnmount(() => {
 }
 
 .detail-shell {
-  gap: 12px;
+  gap: 10px;
 }
 
 .detail-top {
-  padding: 14px 16px;
-  border: 2px solid rgba(65, 56, 99, 0.22);
+  display: block;
+  padding: 11px 12px;
+  border: 2px solid rgba(65, 56, 99, 0.48);
   border-radius: 10px;
   background:
     radial-gradient(circle at 94% 24%, rgba(157, 228, 235, 0.34) 0 18px, transparent 19px),
     linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(250, 248, 255, 0.92));
   box-shadow:
-    4px 5px 0 rgba(65, 56, 99, 0.12),
+    5px 6px 0 rgba(65, 56, 99, 0.18),
     inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
 .detail-top strong {
   color: #302854;
-  font-size: 20px;
+  font-size: 18px;
 }
 
 .detail-top p {
+  margin: 4px 0 0;
   color: #8d83b8;
+  font-size: 12px;
+}
+
+.detail-top-main {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.detail-top-meta {
+  min-width: 0;
+}
+
+.detail-icon-btn {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  padding: 0;
+  border: 2px solid rgba(65, 56, 99, 0.46);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 3px 4px 0 rgba(65, 56, 99, 0.16);
+  color: #5f55a0;
+}
+
+.detail-icon-btn:hover {
+  border-color: rgba(126, 102, 255, 0.5);
+  background: #f6f2ff;
 }
 
 .detail-tags {
-  gap: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
 }
 
 .detail-tag {
-  min-width: 74px;
-  border: 1px solid rgba(126, 102, 255, 0.16);
+  min-width: 70px;
+  border: 2px solid rgba(65, 56, 99, 0.3);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.95);
-  box-shadow: 2px 3px 0 rgba(65, 56, 99, 0.08);
+  box-shadow: 2px 3px 0 rgba(65, 56, 99, 0.14);
   color: #3d3564 !important;
+  height: 30px;
+  line-height: 28px;
+}
+
+.detail-review-tag {
+  background: rgba(255, 229, 157, 0.28);
+  border-color: rgba(245, 158, 11, 0.42);
+  color: #8a5b00 !important;
 }
 
 .detail-grid section {
-  padding: 12px;
-  border: 1px solid rgba(126, 102, 255, 0.12);
+  padding: 10px 11px;
+  border: 2px solid rgba(65, 56, 99, 0.26);
   border-radius: 8px;
   background:
-    radial-gradient(circle at 92% 18%, rgba(157, 228, 235, 0.16) 0 18px, transparent 19px),
+    radial-gradient(circle at 92% 18%, rgba(157, 228, 235, 0.18) 0 18px, transparent 19px),
     linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(250, 248, 255, 0.9));
+  box-shadow: 4px 5px 0 rgba(65, 56, 99, 0.14);
+}
+
+.compare-grid section {
+  padding: 10px 11px;
+  border: 2px solid rgba(65, 56, 99, 0.26);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 92% 18%, rgba(157, 228, 235, 0.18) 0 18px, transparent 19px),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(250, 248, 255, 0.9));
+  box-shadow: 4px 5px 0 rgba(65, 56, 99, 0.14);
 }
 
 .detail-grid span,
 .compare-grid span {
-  color: #8d83b8;
+  color: #7267ac;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .detail-grid p,
 .compare-grid p {
   color: #3d3564;
+  line-height: 1.5;
+  font-size: 13px;
+}
+
+.info-card {
+  position: relative;
+  overflow: hidden;
+  padding: 10px 11px 11px;
+  border: 2px solid var(--accent);
+  border-radius: 10px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(249, 247, 255, 0.96)),
+    linear-gradient(135deg, var(--tint), transparent 74%);
+  box-shadow: 4px 5px 0 rgba(65, 56, 99, 0.16);
+}
+
+.info-card::after {
+  position: absolute;
+  top: 7px;
+  right: 9px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--tint);
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.46);
+  content: '';
+}
+
+.info-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.info-icon {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  place-items: center;
+  border: 2px solid var(--accent);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--accent);
+  box-shadow: 2px 3px 0 rgba(65, 56, 99, 0.14);
+}
+
+.info-icon :deep(.el-icon) {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  line-height: 1;
+}
+
+.info-icon :deep(svg) {
+  display: block;
+  width: 16px;
+  height: 16px;
+  transform: translateY(3px);
+}
+
+.info-card-head > span:last-child {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+}
+
+.info-card p {
+  margin: 0;
 }
 
 .detail-tabs :deep(.el-tabs__header) {
-  margin: 0 0 10px;
+  margin: 0 0 8px;
 }
 
 .detail-tabs :deep(.el-tabs__item) {
@@ -3836,40 +4063,54 @@ onBeforeUnmount(() => {
 }
 
 .detail-tabs :deep(.el-descriptions__table) {
-  background: rgba(255, 255, 255, 0.96);
+  background: #fff;
+  border: 2px solid rgba(65, 56, 99, 0.52);
+  box-shadow: 4px 5px 0 rgba(65, 56, 99, 0.18);
+}
+
+.detail-tabs :deep(.el-descriptions) {
+  color: #3d3564;
 }
 
 .detail-tabs :deep(.el-descriptions__label) {
   width: 120px;
-  background: rgba(245, 242, 255, 0.98);
-  color: #6f64aa;
-  border-color: rgba(126, 102, 255, 0.12);
+  background: linear-gradient(135deg, #efe6ff, #e0f7ff);
+  color: #43378d;
+  border-color: rgba(65, 56, 99, 0.3);
+  font-weight: 800;
 }
 
 .detail-tabs :deep(.el-descriptions__content) {
   color: #3d3564;
-  background: rgba(255, 255, 255, 0.96);
+  background: #fff;
+  border-color: rgba(65, 56, 99, 0.24);
+  font-weight: 700;
 }
 
 .detail-tabs :deep(pre) {
   margin: 0;
-  padding: 10px 12px;
-  border: 1px solid rgba(126, 102, 255, 0.12);
+  padding: 9px 10px;
+  border: 2px solid rgba(65, 56, 99, 0.28);
   border-radius: 8px;
-  background: rgba(250, 248, 255, 0.96);
+  background: #fff;
   color: #3d3564;
+  line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .review-action-panel {
-  padding: 12px 14px;
-  border: 1px solid rgba(126, 102, 255, 0.14);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 2px solid rgba(65, 56, 99, 0.5);
   border-radius: 10px;
   background:
     radial-gradient(circle at 95% 20%, rgba(157, 228, 235, 0.22) 0 18px, transparent 19px),
     linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(250, 248, 255, 0.92));
-  box-shadow: 4px 5px 0 rgba(65, 56, 99, 0.12);
+  box-shadow: 5px 6px 0 rgba(65, 56, 99, 0.22);
 }
 
 .review-action-panel strong {
@@ -3877,33 +4118,44 @@ onBeforeUnmount(() => {
 }
 
 .review-action-panel p {
+  margin: 4px 0 0;
   color: #8d83b8;
+  line-height: 1.6;
 }
 
 .review-actions {
   margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
 }
 
 .review-actions :deep(.el-button) {
-  min-width: 88px;
+  min-width: 86px;
   height: 34px;
   padding: 0 14px;
-  border: 1px solid rgba(126, 102, 255, 0.2);
+  border: 2px solid rgba(65, 56, 99, 0.26);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.96);
   color: #3d3564;
-  box-shadow: 3px 4px 0 rgba(65, 56, 99, 0.1);
+  box-shadow: 3px 4px 0 rgba(65, 56, 99, 0.16);
+  white-space: nowrap;
 }
 
 .review-actions :deep(.el-button--success) {
-  border-color: rgba(52, 211, 153, 0.28);
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(239, 252, 245, 0.96));
+  border-color: rgba(34, 197, 94, 0.36);
+  background: linear-gradient(135deg, rgba(250, 255, 250, 0.98), rgba(221, 255, 237, 0.96));
   color: #15803d;
 }
 
 .review-actions :deep(.el-button--danger) {
-  border-color: rgba(251, 113, 133, 0.28);
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(255, 241, 244, 0.96));
+  border-color: rgba(251, 113, 133, 0.36);
+  background: linear-gradient(135deg, rgba(255, 251, 252, 0.98), rgba(255, 231, 236, 0.96));
   color: #be123c;
 }
 

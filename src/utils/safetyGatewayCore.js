@@ -47,6 +47,14 @@ function needsAttention(result) {
   )
 }
 
+function isCheatingOnly(result) {
+  return Array.isArray(result?.riskTypes) && result.riskTypes.length === 1 && result.riskTypes[0] === 'CHEATING'
+}
+
+function shouldBypassCheatingForTeacher(payload, result) {
+  return payload?.userRole && payload.userRole !== 'STUDENT' && isCheatingOnly(result)
+}
+
 function buildSafetyMessage(result, title) {
   const lines = []
   if (result?.decision) {
@@ -140,7 +148,7 @@ async function guardSafetyBeforeAi(payload, options = {}) {
     'AI 输入安全评测失败',
   )
 
-  if (isBlocked(result)) {
+  if (isBlocked(result) && !shouldBypassCheatingForTeacher(payload, result)) {
     if (options.showDialog !== false) {
       await showBlockedDialog(result, 'AI 输入未通过安全评测')
     }
@@ -185,7 +193,7 @@ async function guardSafetyAfterAi(payload, outputText, options = {}) {
     'AI 输出安全评测失败',
   )
 
-  if (isBlocked(result)) {
+  if (isBlocked(result) && !shouldBypassCheatingForTeacher(payload, result)) {
     if (options.showDialog !== false) {
       await showBlockedDialog(result, 'AI 输出未通过安全评测')
     }
