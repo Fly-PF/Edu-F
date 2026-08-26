@@ -274,6 +274,39 @@ const toolRoutes = [
   },
 ]
 
+const govRoutes = [
+  {
+    path: 'gov/news',
+    name: 'gov-news',
+    component: () => import('@/views/gov/GovNewsPlaceholder.vue'),
+    meta: { title: '考公资讯与公告' },
+  },
+  {
+    path: 'gov/knowledge',
+    name: 'gov-knowledge',
+    component: () => import('@/views/gov/GovKnowledgePlaceholder.vue'),
+    meta: { title: '知识点学习' },
+  },
+  {
+    path: 'gov/practice',
+    name: 'gov-practice',
+    component: () => import('@/views/gov/GovPracticePlaceholder.vue'),
+    meta: { title: '智能题库与每日练习' },
+  },
+  {
+    path: 'gov/assessment',
+    name: 'gov-assessment',
+    component: () => import('@/views/gov/GovAssessmentPlaceholder.vue'),
+    meta: { title: '模拟考试与测评' },
+  },
+  {
+    path: 'gov/materials',
+    name: 'gov-materials',
+    component: () => import('@/views/gov/GovMaterialPlaceholder.vue'),
+    meta: { title: '考公资料下载' },
+  },
+]
+
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
@@ -439,6 +472,13 @@ const router = createRouter({
           },
         },
         {
+          path: 'gov',
+          name: 'gov-topic',
+          component: () => import('@/views/gov/GovHomePlaceholder.vue'),
+          meta: { title: '考公专题' },
+        },
+        ...govRoutes,
+        {
           path: 'gewu',
           name: 'gewu',
           component: () => import('@/views/gewu/GewuView.vue'),
@@ -591,4 +631,4 @@ router.beforeEach((to) => {
 })
 
 export default router
-export { personnelRoutes, studentRoutes, teacherRoutes, toolRoutes }
+export { personnelRoutes, studentRoutes, teacherRoutes, toolRoutes, govRoutes }

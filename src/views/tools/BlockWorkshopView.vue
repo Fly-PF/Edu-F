@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Back, Brush, Document, EditPen, FolderOpened, Headset, Hide, MagicStick, Picture, Plus, RefreshRight, Setting, Share, VideoPause, VideoPlay, View } from '@element-plus/icons-vue'
+import { Back, Brush, DArrowLeft, DArrowRight, Document, EditPen, FolderOpened, Headset, Hide, MagicStick, Picture, Plus, RefreshRight, Setting, Share, VideoPause, VideoPlay, View } from '@element-plus/icons-vue'
 import * as Blockly from 'blockly'
 import 'blockly/blocks'
 import * as ZhHans from 'blockly/msg/zh-hans'
@@ -35,13 +35,21 @@ const description = ref('')
 const projectId = ref(null)
 const saving = ref(false)
 const running = ref(false)
+const stepExecution = ref({ started: false, triggerIds: [], triggerIndex: 0, nextBlockId: null, frames: [] })
 const projectVisibility = ref('private')
 const isPublished = computed(() => projectVisibility.value === 'public')
 const workbenchTab = ref('code')
 const activeToolboxCategory = ref('运动')
+const toolboxCollapsed = ref(false)
 const showTemplatePicker = ref(false)
 const showExtensionPicker = ref(false)
 const showProjectInfo = ref(false)
+const showListCreator = ref(false)
+const listDraft = ref({ name: '', mode: 'normal', dataKind: 'value', fields: [], field: null })
+const listCreationError = ref('')
+const showArrayCreator = ref(false)
+const arrayDraft = ref({ name: '', rows: 2, cols: 2, field: null })
+const arrayCreationError = ref('')
 const projectTags = ref([])
 const projectTagInput = ref('')
 const projectInfoDraft = ref({ title: '', description: '', tags: [], visibility: 'private' })
@@ -85,15 +93,70 @@ const timerStartedAt = ref(Date.now())
 const variables = ref({})
 const variableVisibility = ref({})
 const variableMonitorPositions = ref({})
+const variableCanvasPositions = ref({})
+const variableDisplayLocations = ref({})
+const dataPersistence = ref({})
+const variableContextMenu = ref(null)
 const variableNames = computed(() => getVariableNames())
+const getVariableDisplayLocations = (name) => variableDisplayLocations.value[name] || { stage: true, canvas: false }
+
+function dataPersistenceKey(kind, name) {
+  return `${kind}:${name}`
+}
+
+function canPersistData(kind, name) {
+  return Boolean(name) && !(kind === 'array' && name === MAZE_ARRAY_NAME)
+}
+
+function shouldPersistData(kind, name) {
+  return canPersistData(kind, name) && dataPersistence.value[dataPersistenceKey(kind, name)] === true
+}
+
+function setDataPersistence(kind, name, enabled) {
+  if (!canPersistData(kind, name)) return
+  dataPersistence.value = {
+    ...dataPersistence.value,
+    [dataPersistenceKey(kind, name)]: Boolean(enabled),
+  }
+  syncVariableVisibilityControls()
+}
+
+function initialListValue(name, items) {
+  if (isArrayName(name) || isTwoDimensionalArray(items)) {
+    return items.map((row) => (Array.isArray(row) ? row.map(() => 0) : 0))
+  }
+  return []
+}
 const visibleVariables = computed(() => variableNames.value
-  .filter((name) => variableVisibility.value[name] === true)
+  .filter((name) => getVariableDisplayLocations(name).stage)
   .map((name) => [name, variables.value[name] ?? 0]))
 const lists = ref({})
 const listVisibility = ref({})
 const listMonitorPositions = ref({})
+const listCanvasPositions = ref({})
+const listDisplayLocations = ref({})
+const listConfigurations = ref({})
+const arrayCanvasPositions = ref({})
+const arrayStagePositions = ref({})
+const arrayDisplayLocations = ref({})
+const getListDisplayLocations = (name) => listDisplayLocations.value[name] || { stage: true, canvas: false }
 const visibleLists = computed(() => getListNames()
-  .filter((name) => listVisibility.value[name] === true)
+  .filter((name) => !isArrayName(name))
+  .filter((name) => getListDisplayLocations(name).stage)
+  .map((name) => [name, Array.isArray(lists.value[name]) ? lists.value[name] : []]))
+const visibleCanvasVariables = computed(() => variableNames.value
+  .filter((name) => getVariableDisplayLocations(name).canvas)
+  .map((name) => [name, variables.value[name] ?? 0]))
+const visibleCanvasLists = computed(() => getListNames()
+  .filter((name) => !isArrayName(name))
+  .filter((name) => getListDisplayLocations(name).canvas)
+  .map((name) => [name, Array.isArray(lists.value[name]) ? lists.value[name] : []]))
+const getArrayDisplayLocations = (name) => arrayDisplayLocations.value[name] || { stage: false, canvas: true }
+const visibleCanvasArrays = computed(() => getArrayNames()
+  .filter((name) => getArrayDisplayLocations(name).canvas)
+  .map((name) => [name, Array.isArray(lists.value[name]) ? lists.value[name] : []]))
+const visibleStageArrays = computed(() => getArrayNames()
+  .filter((name) => getArrayDisplayLocations(name).stage)
   .map((name) => [name, Array.isArray(lists.value[name]) ? lists.value[name] : []]))
 const createDefaultBroadcastMessages = () => [{ label: '消息1', value: 'message1' }]
 const broadcastMessages = ref(createDefaultBroadcastMessages())
@@ -138,6 +201,63 @@ const colorOptions = [
   ['橙黄', '#f2a54a'],
   ['白色', '#ffffff'],
 ]
+const MAZE_ARRAY_NAME = '迷宫数组'
+const LIST_MODES = ['normal', 'stack', 'queue']
+const RECORD_FIELD_TYPES = ['number', 'text', 'boolean']
+const RESERVED_LIST_NAMES = new Set(['__new__', '__new_array__'])
+
+function isReservedListName(name) {
+  return RESERVED_LIST_NAMES.has(String(name || '').trim())
+}
+
+function normalizeListMode(mode) {
+  return LIST_MODES.includes(mode) ? mode : 'normal'
+}
+
+function normalizeRecordFields(fields) {
+  const seen = new Set()
+  return (Array.isArray(fields) ? fields : []).map((field) => ({
+    name: String(field?.name || '').trim().slice(0, 24),
+    type: RECORD_FIELD_TYPES.includes(field?.type) ? field.type : 'text',
+  })).filter((field) => {
+    if (!field.name || seen.has(field.name)) return false
+    seen.add(field.name)
+    return true
+  }).slice(0, 12)
+}
+
+function getRecordSchemaOptions() {
+  const options = getListNames()
+    .filter((name) => listConfigurations.value[name]?.dataKind === 'record')
+    .map((name) => [name, name])
+  return options.length ? options : [['请先新建自定义结构列表', '__none__']]
+}
+
+function getRecordListOptions() {
+  const options = getListNames()
+    .filter((name) => listConfigurations.value[name]?.dataKind === 'record')
+    .map((name) => [name, name])
+  return options.length ? options : [['请先新建自定义结构列表', '__none__']]
+}
+
+function getRecordListFieldOptions(block) {
+  const listName = block?.getFieldValue('NAME')
+  const fields = normalizeRecordFields(listConfigurations.value[listName]?.fields)
+  return fields.length ? fields.map((field) => [field.name, field.name]) : [['未设置字段', '__none__']]
+}
+
+function getListMode(name) {
+  return normalizeListMode(listConfigurations.value[name]?.mode)
+}
+
+function isListEndpointOperationAllowed(name, operation, index, length) {
+  const mode = getListMode(name)
+  if (mode === 'normal') return true
+  if (operation === 'remove') return mode === 'stack' ? index === length - 1 : index === 0
+  if (operation === 'insert') return false
+  return true
+}
+
 function createTaskState() {
   return {
     label: '我的迷宫',
@@ -145,13 +265,14 @@ function createTaskState() {
     rows: 6,
     cols: 8,
     walls: [],
+    cellColors: {},
     start: { row: 5, col: 0, direction: 1 },
     target: { row: 0, col: 7 },
     row: 5,
     col: 0,
     direction: 1,
     limit: 12,
-    blockLimit: 20,
+    blockLimit: 99,
     moves: 0,
     completed: false,
     failed: false,
@@ -168,11 +289,41 @@ const taskToolboxCategories = [{
   kind: 'category', name: '迷宫指令', colour: '#8176bc', contents: [
     { kind: 'block', type: 'event_when_run' },
     { kind: 'block', type: 'task_forward' },
+    { kind: 'block', type: 'task_move_to_coordinate', inputs: { COORDINATE: { shadow: { type: 'coordinate_create', inputs: {
+      ROW: { shadow: { type: 'math_number', fields: { NUM: 1 } } },
+      COL: { shadow: { type: 'math_number', fields: { NUM: 1 } } },
+    } } } } },
+    { kind: 'block', type: 'task_color_coordinate', inputs: { COORDINATE: { shadow: { type: 'coordinate_create', inputs: {
+      ROW: { shadow: { type: 'math_number', fields: { NUM: 1 } } },
+      COL: { shadow: { type: 'math_number', fields: { NUM: 1 } } },
+    } } } } },
     { kind: 'block', type: 'task_turn' },
     { kind: 'block', type: 'task_repeat_target' },
     { kind: 'block', type: 'task_if_path' },
     { kind: 'block', type: 'task_if_else_path' },
+    { kind: 'block', type: 'task_coordinate_current' },
+    { kind: 'block', type: 'task_coordinate_forward' },
+    { kind: 'block', type: 'task_coordinate_left' },
+    { kind: 'block', type: 'task_coordinate_right' },
   ],
+}, {
+  kind: 'category', name: '控制', colour: '#e9b640', contents: [
+    { kind: 'block', type: 'control_if' },
+    { kind: 'block', type: 'control_if_else' },
+    { kind: 'block', type: 'control_repeat', inputs: { TIMES: { shadow: { type: 'math_number', fields: { NUM: 10 } } } } },
+    { kind: 'block', type: 'control_repeat_until' },
+    { kind: 'block', type: 'control_subroutine_define' },
+    { kind: 'block', type: 'control_subroutine_call' },
+  ],
+}, {
+  kind: 'category', name: '运算', colour: '#58bf70', contents: [
+    { kind: 'block', type: 'operator_add', inputs: { A: { shadow: { type: 'math_number', fields: { NUM: 0 } } }, B: { shadow: { type: 'math_number', fields: { NUM: 1 } } } } },
+    { kind: 'block', type: 'operator_gt', inputs: { A: { shadow: { type: 'math_number', fields: { NUM: 1 } } }, B: { shadow: { type: 'math_number', fields: { NUM: 1 } } } } },
+    { kind: 'block', type: 'operator_lt', inputs: { A: { shadow: { type: 'math_number', fields: { NUM: 1 } } }, B: { shadow: { type: 'math_number', fields: { NUM: 1 } } } } },
+    { kind: 'block', type: 'operator_equals', inputs: { A: { shadow: { type: 'math_number', fields: { NUM: 1 } } }, B: { shadow: { type: 'math_number', fields: { NUM: 1 } } } } },
+  ],
+}, {
+  kind: 'category', name: '变量', colour: '#cb7593', contents: [],
 }]
 
 const baseCatalog = [
@@ -196,6 +347,10 @@ function createProjectBase(kind = 'free') {
 projectBase.value = createProjectBase()
 
 let workspace = null
+let loadingWorkspace = false
+// Blockly restores blocks in an unspecified order.  Keep the saved routine
+// names available while loading so call dropdowns do not coerce to option 1.
+let restoringSubroutineNames = []
 let resizeObserver = null
 let sketchingPointerId = null
 let costumeDrawingPointerId = null
@@ -211,11 +366,14 @@ let loudnessAnalyser = null
 let loudnessFrame = null
 const pendingCloneIds = []
 const activeSoundContexts = new Set()
+const activeSubroutineCalls = []
 const variableVisibilityControls = new Map()
 const listItemInputRefs = new Map()
 let toolboxInteractionHandler = null
+let variableContextMenuHandler = null
 let toolboxSyncFrame = null
 let workspaceChangeHandler = null
+let stepExecuting = false
 let broadcastSequence = 0
 
 const FLYOUT_SCALE = 0.84
@@ -308,6 +466,8 @@ const toolboxCategories = ref([
         { kind: 'block', type: 'control_if_else' },
         { kind: 'block', type: 'control_wait_until' },
         { kind: 'block', type: 'control_repeat_until' },
+        { kind: 'block', type: 'control_subroutine_define' },
+        { kind: 'block', type: 'control_subroutine_call' },
         { kind: 'block', type: 'control_stop_all' },
         { kind: 'block', type: 'control_when_clone_start' },
         { kind: 'block', type: 'control_create_clone' },
@@ -339,24 +499,24 @@ const toolboxCategories = ref([
     {
       kind: 'category', name: '运算', colour: blockColourPalette.operator, contents: [
         { kind: 'block', type: 'operator_add', inputs: { A: { shadow: { type: 'math_number', fields: { NUM: 1 } } }, B: { shadow: { type: 'math_number', fields: { NUM: 1 } } } } },
-        { kind: 'block', type: 'operator_subtract' },
-        { kind: 'block', type: 'operator_multiply' },
-        { kind: 'block', type: 'operator_divide' },
+        { kind: 'block', type: 'operator_subtract', inputs: { A: { shadow: { type: 'math_number', fields: { NUM: 1 } } }, B: { shadow: { type: 'math_number', fields: { NUM: 1 } } } } },
+        { kind: 'block', type: 'operator_multiply', inputs: { A: { shadow: { type: 'math_number', fields: { NUM: 1 } } }, B: { shadow: { type: 'math_number', fields: { NUM: 1 } } } } },
+        { kind: 'block', type: 'operator_divide', inputs: { A: { shadow: { type: 'math_number', fields: { NUM: 1 } } }, B: { shadow: { type: 'math_number', fields: { NUM: 1 } } } } },
         { kind: 'block', type: 'operator_random', inputs: { FROM: { shadow: { type: 'math_number', fields: { NUM: 1 } } }, TO: { shadow: { type: 'math_number', fields: { NUM: 10 } } } } },
         { kind: 'block', type: 'operator_gt', inputs: { A: { shadow: { type: 'math_number', fields: { NUM: 1 } } }, B: { shadow: { type: 'math_number', fields: { NUM: 1 } } } } },
-        { kind: 'block', type: 'operator_lt' },
-        { kind: 'block', type: 'operator_equals', inputs: { A: { shadow: { type: 'text', fields: { TEXT: '你好' } } }, B: { shadow: { type: 'text', fields: { TEXT: '世界' } } } } },
-        { kind: 'block', type: 'operator_and' },
-        { kind: 'block', type: 'operator_or' },
-        { kind: 'block', type: 'operator_not' },
-        { kind: 'block', type: 'operator_join' },
-        { kind: 'block', type: 'operator_letter_of' },
-        { kind: 'block', type: 'operator_length' },
-        { kind: 'block', type: 'operator_contains' },
+        { kind: 'block', type: 'operator_lt', inputs: { A: { shadow: { type: 'math_number', fields: { NUM: 1 } } }, B: { shadow: { type: 'math_number', fields: { NUM: 1 } } } } },
+        { kind: 'block', type: 'operator_equals', inputs: { A: { shadow: { type: 'math_number', fields: { NUM: 1 } } }, B: { shadow: { type: 'math_number', fields: { NUM: 1 } } } } },
+        { kind: 'block', type: 'operator_and', inputs: { A: { shadow: { type: 'logic_boolean', fields: { BOOL: 'FALSE' } } }, B: { shadow: { type: 'logic_boolean', fields: { BOOL: 'FALSE' } } } } },
+        { kind: 'block', type: 'operator_or', inputs: { A: { shadow: { type: 'logic_boolean', fields: { BOOL: 'FALSE' } } }, B: { shadow: { type: 'logic_boolean', fields: { BOOL: 'FALSE' } } } } },
+        { kind: 'block', type: 'operator_not', inputs: { VALUE: { shadow: { type: 'logic_boolean', fields: { BOOL: 'FALSE' } } } } },
+        { kind: 'block', type: 'operator_join', inputs: { A: { shadow: { type: 'text', fields: { TEXT: '你好' } } }, B: { shadow: { type: 'text', fields: { TEXT: '世界' } } } } },
+        { kind: 'block', type: 'operator_letter_of', inputs: { TEXT: { shadow: { type: 'text', fields: { TEXT: '世界' } } }, INDEX: { shadow: { type: 'math_number', fields: { NUM: 1 } } } } },
+        { kind: 'block', type: 'operator_length', inputs: { TEXT: { shadow: { type: 'text', fields: { TEXT: '你好' } } } } },
+        { kind: 'block', type: 'operator_contains', inputs: { TEXT: { shadow: { type: 'text', fields: { TEXT: '你好' } } }, PART: { shadow: { type: 'text', fields: { TEXT: '你' } } } } },
         { kind: 'block', type: 'operator_list_contains', inputs: { ITEM: { shadow: { type: 'text', fields: { TEXT: '项目' } } } } },
-        { kind: 'block', type: 'operator_mod' },
-        { kind: 'block', type: 'operator_round' },
-        { kind: 'block', type: 'operator_math' },
+        { kind: 'block', type: 'operator_mod', inputs: { A: { shadow: { type: 'math_number', fields: { NUM: 10 } } }, B: { shadow: { type: 'math_number', fields: { NUM: 3 } } } } },
+        { kind: 'block', type: 'operator_round', inputs: { VALUE: { shadow: { type: 'math_number', fields: { NUM: 3.14 } } } } },
+        { kind: 'block', type: 'operator_math', inputs: { VALUE: { shadow: { type: 'math_number', fields: { NUM: 9 } } } } },
       ],
     },
     {
@@ -424,9 +584,11 @@ function buildToolbox() {
         : category)
     : sourceCategories
   const names = getVariableNames()
-  const currentListNames = getListNames()
+  const currentListNames = getEditableListNames()
+  const currentArrayNames = getArrayNames()
   const variableContents = [
     { kind: 'button', text: '建立一个变量', callbackKey: 'CREATE_VARIABLE' },
+    { kind: 'button', text: '删除变量/列表/数组', callbackKey: 'DELETE_VARIABLE' },
     { kind: 'sep', gap: Math.max(120, Object.keys(variables.value).length * 42 + 30) },
     { kind: 'block', type: 'variable_set', inputs: { VALUE: { shadow: { type: 'math_number', fields: { NUM: 0 } } } } },
     { kind: 'block', type: 'variable_change', inputs: { VALUE: { shadow: { type: 'math_number', fields: { NUM: 1 } } } } },
@@ -436,7 +598,11 @@ function buildToolbox() {
     { kind: 'sep', gap: 18 },
     { kind: 'button', text: '新建列表', callbackKey: 'CREATE_LIST' },
     ...currentListNames.map((name) => ({ kind: 'block', type: 'list_get', fields: { NAME: name } })),
-    ...(currentListNames.length ? [
+    ...([
+      { kind: 'sep', gap: 12 },
+      { kind: 'block', type: 'list_fill', inputs: { VALUE: { shadow: { type: 'math_number', fields: { NUM: 0 } } } } },
+    ]),
+    ...([
       { kind: 'sep', gap: 12 },
       { kind: 'block', type: 'list_add', inputs: { ITEM: { shadow: { type: 'text', fields: { TEXT: '东西' } } } } },
       { kind: 'block', type: 'list_delete', inputs: { INDEX: { shadow: { type: 'math_number', fields: { NUM: 1 } } } } },
@@ -449,7 +615,45 @@ function buildToolbox() {
       { kind: 'block', type: 'list_contains', inputs: { ITEM: { shadow: { type: 'text', fields: { TEXT: '东西' } } } } },
       { kind: 'block', type: 'list_show' },
       { kind: 'block', type: 'list_hide' },
-    ] : []),
+    ]),
+    ...([
+      { kind: 'sep', gap: 12 },
+      { kind: 'block', type: 'coordinate_create', inputs: {
+        ROW: { shadow: { type: 'math_number', fields: { NUM: 1 } } },
+        COL: { shadow: { type: 'math_number', fields: { NUM: 1 } } },
+      } },
+      { kind: 'block', type: 'coordinate_row', inputs: { VALUE: { shadow: { type: 'coordinate_create', inputs: {
+        ROW: { shadow: { type: 'math_number', fields: { NUM: 1 } } },
+        COL: { shadow: { type: 'math_number', fields: { NUM: 1 } } },
+      } } } } },
+      { kind: 'block', type: 'coordinate_col', inputs: { VALUE: { shadow: { type: 'coordinate_create', inputs: {
+        ROW: { shadow: { type: 'math_number', fields: { NUM: 1 } } },
+        COL: { shadow: { type: 'math_number', fields: { NUM: 1 } } },
+      } } } } },
+      { kind: 'block', type: 'record_create', inputs: { JSON: { shadow: { type: 'text', fields: { TEXT: '{"x":0,"y":0}' } } } } },
+      { kind: 'block', type: 'record_get_field', inputs: { VALUE: { shadow: { type: 'record_create', inputs: { JSON: { shadow: { type: 'text', fields: { TEXT: '{"x":0,"y":0}' } } } } } } } },
+      { kind: 'block', type: 'record_list_item_field', inputs: { INDEX: { shadow: { type: 'math_number', fields: { NUM: 1 } } } } },
+    ]),
+    { kind: 'sep', gap: 18 },
+    { kind: 'button', text: '新建数组', callbackKey: 'CREATE_ARRAY' },
+    ...currentArrayNames.map((name) => ({ kind: 'block', type: 'list_get', fields: { NAME: name } })),
+    { kind: 'block', type: 'array_fill', inputs: { VALUE: { shadow: { type: 'math_number', fields: { NUM: 0 } } } } },
+    { kind: 'block', type: 'array_set_cell', inputs: {
+      ROW: { shadow: { type: 'math_number', fields: { NUM: 1 } } },
+      COL: { shadow: { type: 'math_number', fields: { NUM: 1 } } },
+      VALUE: { shadow: { type: 'math_number', fields: { NUM: 0 } } },
+    } },
+    { kind: 'block', type: 'array_set_coordinate_value', inputs: {
+      COORDINATE: { shadow: { type: 'coordinate_create', inputs: {
+        ROW: { shadow: { type: 'math_number', fields: { NUM: 1 } } },
+        COL: { shadow: { type: 'math_number', fields: { NUM: 1 } } },
+      } } },
+      VALUE: { shadow: { type: 'math_number', fields: { NUM: 0 } } },
+    } },
+    { kind: 'block', type: 'array_get_coordinate_value', inputs: { COORDINATE: { shadow: { type: 'coordinate_create', inputs: {
+      ROW: { shadow: { type: 'math_number', fields: { NUM: 1 } } },
+      COL: { shadow: { type: 'math_number', fields: { NUM: 1 } } },
+    } } } } },
   ]
   return {
     kind: 'flyoutToolbox',
@@ -473,9 +677,11 @@ function refreshToolbox() {
     installCostumeFields()
     installVariableFields()
     installListFields()
+    installSubroutineCallFields()
     refreshCostumeFields()
     refreshVariableFields()
     refreshListFields()
+    refreshSubroutineCallFields()
     pinFlyoutScale()
     syncVariableVisibilityControls()
     resizeWorkspace()
@@ -569,7 +775,7 @@ const inputDefaults = {
   operator_random: { FROM: 1, TO: 10 },
   operator_gt: { A: 1, B: 1 },
   operator_lt: { A: 1, B: 1 },
-  operator_equals: { A: '你好', B: '世界', text: true },
+  operator_equals: { A: 1, B: 1 },
   operator_and: { A: false, B: false, types: { A: 'boolean', B: 'boolean' } },
   operator_or: { A: false, B: false, types: { A: 'boolean', B: 'boolean' } },
   operator_not: { VALUE: false, types: { VALUE: 'boolean' } },
@@ -585,11 +791,15 @@ const inputDefaults = {
   variable_change: { VALUE: 1 },
   list_add: { ITEM: '东西', text: true },
   list_delete: { INDEX: 1 },
+  list_fill: { VALUE: 0 },
   list_insert: { ITEM: '东西', INDEX: 1, types: { ITEM: 'text' } },
   list_replace: { INDEX: 1, ITEM: '东西', types: { ITEM: 'text' } },
   list_item: { INDEX: 1 },
   list_index_of: { ITEM: '东西', text: true },
   list_contains: { ITEM: '东西', text: true },
+  coordinate_create: { ROW: 1, COL: 1 },
+  record_create: { JSON: '{"x":0,"y":0}', text: true },
+  record_list_item_field: { INDEX: 1 },
 }
 
 function ensureDefaultInputs() {
@@ -709,15 +919,49 @@ function getVariableNames() {
   return [...new Set(['分数', '计时', ...Object.keys(variables.value)])]
 }
 
-function getListOptions() {
-  const names = getListNames()
+function getCustomVariableNames() {
+  return Object.keys(variables.value).filter((name) => !['分数', '计时'].includes(name))
+}
+
+function getListOptions({ includeArrays = false } = {}) {
+  const names = includeArrays ? getListNames() : getEditableListNames()
   const options = names.map((name) => [name, name])
   options.push(['新建列表', '__new__'])
   return options
 }
 
 function getListNames() {
-  return Object.keys(lists.value)
+  return Object.keys(lists.value).filter((name) => !isReservedListName(name))
+}
+
+function isTwoDimensionalArray(value) {
+  return Array.isArray(value) && value.some((row) => Array.isArray(row))
+}
+
+function isArrayName(name) {
+  return (projectTemplate.value === 'interactive' && name === MAZE_ARRAY_NAME)
+    || isTwoDimensionalArray(lists.value[name])
+    || Object.prototype.hasOwnProperty.call(arrayDisplayLocations.value, name)
+    || Object.prototype.hasOwnProperty.call(arrayCanvasPositions.value, name)
+    || Object.prototype.hasOwnProperty.call(arrayStagePositions.value, name)
+}
+
+function getArrayNames() {
+  return getListNames().filter((name) => isArrayName(name))
+}
+
+function getArrayOptions() {
+  const names = [...new Set([
+    ...getArrayNames(),
+    ...(projectTemplate.value === 'interactive' ? [MAZE_ARRAY_NAME] : []),
+  ])]
+  const options = names.map((name) => [name, name])
+  options.push(['新建数组', '__new_array__'])
+  return options
+}
+
+function getEditableListNames() {
+  return getListNames().filter((name) => !isArrayName(name))
 }
 
 function ensureVariableVisible(name) {
@@ -729,18 +973,60 @@ function setVariableVisibility(name, visible) {
   if (!name) return
   const nextVisible = Boolean(visible)
   variableVisibility.value = { ...variableVisibility.value, [name]: nextVisible }
+  setDataDisplayLocation('variable', name, 'stage', nextVisible)
   syncVariableVisibilityControls()
 }
 
 function setListVisibility(name, visible) {
   if (!name) return
   listVisibility.value = { ...listVisibility.value, [name]: Boolean(visible) }
+  setDataDisplayLocation(isArrayName(name) ? 'array' : 'list', name, 'stage', Boolean(visible))
+  syncVariableVisibilityControls()
+}
+
+function setDataDisplayLocation(kind, name, location, visible) {
+  if (!name || !['variable', 'list', 'array'].includes(kind) || !['stage', 'canvas'].includes(location)) return
+  const defaults = kind === 'array' ? { stage: false, canvas: true } : { stage: true, canvas: false }
+  const current = kind === 'variable'
+    ? (variableDisplayLocations.value[name] || defaults)
+    : kind === 'list'
+      ? (listDisplayLocations.value[name] || defaults)
+      : getArrayDisplayLocations(name)
+  const next = { ...current, [location]: Boolean(visible) }
+  if (kind === 'variable') variableDisplayLocations.value = { ...variableDisplayLocations.value, [name]: next }
+  else if (kind === 'list') listDisplayLocations.value = { ...listDisplayLocations.value, [name]: next }
+  else arrayDisplayLocations.value = { ...arrayDisplayLocations.value, [name]: next }
   syncVariableVisibilityControls()
 }
 
 function setListItems(name, items) {
-  if (!name) return
+  if (!name || isReservedListName(name)) return
+  if (projectTemplate.value === 'interactive' && name === MAZE_ARRAY_NAME) return
   lists.value = { ...lists.value, [name]: Array.isArray(items) ? items : [] }
+}
+
+function buildMazeArray() {
+  const rows = Math.max(0, Number(task.value.rows) || 0)
+  const cols = Math.max(0, Number(task.value.cols) || 0)
+  const walls = new Set(Array.isArray(task.value.walls) ? task.value.walls : [])
+  return Array.from({ length: rows }, (_, row) => (
+    Array.from({ length: cols }, (_, col) => (walls.has(`${row}:${col}`) ? 1 : 0))
+  ))
+}
+
+function syncMazeArray() {
+  if (projectTemplate.value !== 'interactive') return
+  const next = buildMazeArray()
+  lists.value = { ...lists.value, [MAZE_ARRAY_NAME]: next }
+  if (!Object.prototype.hasOwnProperty.call(listVisibility.value, MAZE_ARRAY_NAME)) {
+    listVisibility.value = { ...listVisibility.value, [MAZE_ARRAY_NAME]: true }
+  }
+  if (!Object.prototype.hasOwnProperty.call(arrayDisplayLocations.value, MAZE_ARRAY_NAME)) {
+    arrayDisplayLocations.value = {
+      ...arrayDisplayLocations.value,
+      [MAZE_ARRAY_NAME]: { stage: false, canvas: true },
+    }
+  }
 }
 
 function listItemInputKey(name, index) {
@@ -754,6 +1040,7 @@ function setListItemInputRef(element, name, index) {
 }
 
 function appendListItem(name) {
+  if (isArrayName(name) || (projectTemplate.value === 'interactive' && name === MAZE_ARRAY_NAME)) return
   const items = [...getListItems(name), '']
   setListItems(name, items)
   nextTick(() => listItemInputRefs.get(listItemInputKey(name, items.length - 1))?.focus())
@@ -769,8 +1056,17 @@ function updateListItem(name, index, value) {
 function removeListItem(name, index) {
   const items = [...getListItems(name)]
   if (index < 0 || index >= items.length) return
+  if (!isListEndpointOperationAllowed(name, 'remove', index, items.length)) {
+    ElMessage.warning(getListMode(name) === 'stack' ? '栈只能从末端移除元素' : '队列只能从首端移除元素')
+    return
+  }
   items.splice(index, 1)
   setListItems(name, items)
+}
+
+function canRemoveListItem(name, index) {
+  const items = getListItems(name)
+  return !isArrayName(name) && isListEndpointOperationAllowed(name, 'remove', index, items.length)
 }
 
 function commitVariable(enteredName, field = null) {
@@ -783,8 +1079,12 @@ function commitVariable(enteredName, field = null) {
   }
   variables.value = { ...variables.value, [name]: 0 }
   variableVisibility.value = { ...variableVisibility.value, [name]: true }
+  variableDisplayLocations.value = { ...variableDisplayLocations.value, [name]: { stage: true, canvas: false } }
   refreshVariableFields()
   refreshToolbox()
+  // A dropdown may still be open from the "新建变量" action. Close that
+  // stale menu so the next open reads the refreshed dynamic options.
+  Blockly.DropDownDiv?.hide?.()
   nextTick(() => scrollToolboxTo('变量'))
   window.requestAnimationFrame(() => selectVariableInFlyout(name))
   ElMessage.success(`\u5df2\u521b\u5efa\u53d8\u91cf\u201c${name}\u201d`)
@@ -810,9 +1110,13 @@ function createVariable({ field = null } = {}) {
   return null
 }
 
-function commitList(enteredName, field = null) {
+function commitList(enteredName, mode = 'normal', field = null, dataKind = 'value', fields = []) {
   const name = String(enteredName || '').trim().slice(0, 40)
   if (!name) return null
+  if (isReservedListName(name)) {
+    ElMessage.warning('该名称为系统保留名称，请换一个列表名称')
+    return null
+  }
   if (getListNames().includes(name)) {
     ElMessage.warning('该列表已存在')
     field?.setValue(name)
@@ -820,6 +1124,11 @@ function commitList(enteredName, field = null) {
   }
   lists.value = { ...lists.value, [name]: [] }
   listVisibility.value = { ...listVisibility.value, [name]: true }
+  listDisplayLocations.value = { ...listDisplayLocations.value, [name]: { stage: true, canvas: false } }
+  listConfigurations.value = {
+    ...listConfigurations.value,
+    [name]: { mode: normalizeListMode(mode), dataKind: dataKind === 'record' ? 'record' : 'value', fields: normalizeRecordFields(fields) },
+  }
   refreshListFields()
   refreshToolbox()
   nextTick(() => scrollToolboxTo('变量'))
@@ -829,31 +1138,339 @@ function commitList(enteredName, field = null) {
   return name
 }
 
-function createList({ field = null } = {}) {
-  const previousValue = field?.getValue()
-  ElMessageBox.prompt('请输入新列表的名称', '新建列表', {
-    confirmButtonText: '创建',
-    cancelButtonText: '取消',
-    inputPlaceholder: '例如：词库',
-    inputValue: '',
-    customClass: 'variable-create-message-box',
-    inputValidator: (value) => {
-      const name = String(value || '').trim()
-      return name && name.length <= 40 ? true : '列表名称不能为空且不超过40个字符'
-    },
-  }).then(({ value }) => commitList(value, field)).catch(() => {
-    if (field && previousValue) field.setValue(previousValue)
-  })
+function createList({ field = null, dataKind = 'value' } = {}) {
+  listDraft.value = { name: '', mode: 'normal', dataKind, fields: dataKind === 'record' ? [{ name: 'x', type: 'number' }, { name: 'y', type: 'number' }] : [], field }
+  listCreationError.value = ''
+  showListCreator.value = true
   return null
+}
+
+function removeVariableBlocksFromSerialized(serialized, name, blockTypes = variableBlockTypes) {
+  const removeFromBlock = (block) => {
+    if (!block || typeof block !== 'object') return null
+    if (block.next?.block) {
+      const nextBlock = removeFromBlock(block.next.block)
+      if (nextBlock) block.next.block = nextBlock
+      else delete block.next
+    }
+    Object.values(block.inputs || {}).forEach((input) => {
+      if (input?.block) {
+        const inputBlock = removeFromBlock(input.block)
+        if (inputBlock) input.block = inputBlock
+        else delete input.block
+      }
+      if (input?.shadow) {
+        const shadowBlock = removeFromBlock(input.shadow)
+        if (shadowBlock) input.shadow = shadowBlock
+        else delete input.shadow
+      }
+    })
+    return blockTypes.includes(block.type) && block.fields?.NAME === name
+      ? block.next?.block || null
+      : block
+  }
+  if (Array.isArray(serialized?.blocks?.blocks)) {
+    serialized.blocks.blocks = serialized.blocks.blocks.map(removeFromBlock).filter(Boolean)
+  }
+  return serialized
+}
+
+function removeVariableFromWorkspaceJson(workspaceJson, name, blockTypes = variableBlockTypes) {
+  try {
+    const serialized = JSON.parse(workspaceJson || JSON.stringify(starterWorkspace))
+    return JSON.stringify(removeVariableBlocksFromSerialized(serialized, name, blockTypes))
+  } catch {
+    return workspaceJson
+  }
+}
+
+function getDeletableDataEntries() {
+  const entries = getCustomVariableNames().map((name) => ({ kind: 'variable', name, label: `变量：${name}` }))
+  getEditableListNames().forEach((name) => entries.push({ kind: 'list', name, label: `列表：${name}` }))
+  getArrayNames()
+    .filter((name) => name !== MAZE_ARRAY_NAME)
+    .forEach((name) => entries.push({ kind: 'array', name, label: `数组：${name}` }))
+  return entries
+}
+
+function deleteVariableFromProject(kind, name) {
+  const blockTypes = kind === 'variable'
+    ? variableBlockTypes
+    : [...new Set(['list_get', ...listBlockTypes])]
+  workspace?.getAllBlocks(false)
+    .filter((block) => blockTypes.includes(block.type) && block.getFieldValue('NAME') === name)
+    .forEach((block) => block.dispose(true))
+  persistSelectedActor()
+  stageWorkspaceJson.value = removeVariableFromWorkspaceJson(stageWorkspaceJson.value, name, blockTypes)
+  actors.value = actors.value.map((actor) => ({
+    ...actor,
+    workspaceJson: removeVariableFromWorkspaceJson(actor.workspaceJson, name, blockTypes),
+  }))
+  if (kind === 'variable') {
+    const nextVariables = { ...variables.value }
+    const nextVisibility = { ...variableVisibility.value }
+    const nextMonitorPositions = { ...variableMonitorPositions.value }
+    const nextCanvasPositions = { ...variableCanvasPositions.value }
+    const nextDisplayLocations = { ...variableDisplayLocations.value }
+    const nextDataPersistence = { ...dataPersistence.value }
+    delete nextVariables[name]
+    delete nextVisibility[name]
+    delete nextMonitorPositions[name]
+    delete nextCanvasPositions[name]
+    delete nextDisplayLocations[name]
+    delete nextDataPersistence[dataPersistenceKey('variable', name)]
+    variables.value = nextVariables
+    variableVisibility.value = nextVisibility
+    variableMonitorPositions.value = nextMonitorPositions
+    variableCanvasPositions.value = nextCanvasPositions
+    variableDisplayLocations.value = nextDisplayLocations
+    dataPersistence.value = nextDataPersistence
+  } else {
+    const nextLists = { ...lists.value }
+    const nextListVisibility = { ...listVisibility.value }
+    const nextListMonitorPositions = { ...listMonitorPositions.value }
+    const nextListCanvasPositions = { ...listCanvasPositions.value }
+    const nextListDisplayLocations = { ...listDisplayLocations.value }
+    const nextListConfigurations = { ...listConfigurations.value }
+    const nextDataPersistence = { ...dataPersistence.value }
+    delete nextLists[name]
+    delete nextListVisibility[name]
+    delete nextListMonitorPositions[name]
+    delete nextListCanvasPositions[name]
+    delete nextListDisplayLocations[name]
+    delete nextListConfigurations[name]
+    delete nextDataPersistence[dataPersistenceKey(kind, name)]
+    lists.value = nextLists
+    listVisibility.value = nextListVisibility
+    listMonitorPositions.value = nextListMonitorPositions
+    listCanvasPositions.value = nextListCanvasPositions
+    listDisplayLocations.value = nextListDisplayLocations
+    listConfigurations.value = nextListConfigurations
+    dataPersistence.value = nextDataPersistence
+    if (kind === 'array') {
+      const nextArrayCanvasPositions = { ...arrayCanvasPositions.value }
+      const nextArrayStagePositions = { ...arrayStagePositions.value }
+      const nextArrayDisplayLocations = { ...arrayDisplayLocations.value }
+      delete nextArrayCanvasPositions[name]
+      delete nextArrayStagePositions[name]
+      delete nextArrayDisplayLocations[name]
+      arrayCanvasPositions.value = nextArrayCanvasPositions
+      arrayStagePositions.value = nextArrayStagePositions
+      arrayDisplayLocations.value = nextArrayDisplayLocations
+    }
+  }
+  refreshVariableFields()
+  refreshListFields()
+  refreshToolbox()
+  ElMessage.success(`已删除${kind === 'variable' ? '变量' : kind === 'list' ? '列表' : '数组'}“${name}”及其脚本引用`)
+}
+
+function serializedWorkspaceReferencesVariable(workspaceJson, name) {
+  try {
+    const serialized = JSON.parse(workspaceJson || '{}')
+    const containsReference = (block) => {
+      if (!block || typeof block !== 'object') return false
+      if (variableBlockTypes.includes(block.type) && block.fields?.NAME === name) return true
+      if (containsReference(block.next?.block)) return true
+      return Object.values(block.inputs || {}).some((input) => (
+        containsReference(input?.block) || containsReference(input?.shadow)
+      ))
+    }
+    return Array.isArray(serialized?.blocks?.blocks) && serialized.blocks.blocks.some(containsReference)
+  } catch {
+    return false
+  }
+}
+
+function variableHasWorkspaceReferences(name) {
+  const currentWorkspaceHasReference = workspace?.getAllBlocks(false)
+    .some((block) => variableBlockTypes.includes(block.type) && block.getFieldValue('NAME') === name)
+  if (currentWorkspaceHasReference) return true
+  return [stageWorkspaceJson.value, ...actors.value.map((actor) => actor.workspaceJson)]
+    .some((workspaceJson) => serializedWorkspaceReferencesVariable(workspaceJson, name))
+}
+
+function closeVariableContextMenu() {
+  variableContextMenu.value = null
+}
+
+function deleteVariableFromContextMenu() {
+  const name = variableContextMenu.value?.name
+  closeVariableContextMenu()
+  if (!name || !getCustomVariableNames().includes(name)) {
+    ElMessage.warning('系统变量不能在这里删除。')
+    return
+  }
+  if (variableHasWorkspaceReferences(name)) {
+    ElMessageBox.alert(`变量“${name}”仍被积木引用。请先清除画布中的所有引用，再删除该变量。`, '无法删除变量', {
+      confirmButtonText: '知道了',
+      type: 'warning',
+    }).catch(() => {})
+    return
+  }
+  deleteVariableFromProject('variable', name)
+}
+
+function deleteVariable() {
+  const entries = getDeletableDataEntries()
+  if (!entries.length) {
+    ElMessage.info('暂时没有可删除的自定义变量、列表或数组')
+    return
+  }
+  ElMessageBox.prompt(`可删除的数据：${entries.map((entry) => entry.label).join('、')}`, '删除变量/列表/数组', {
+    confirmButtonText: '下一步',
+    cancelButtonText: '取消',
+    inputPlaceholder: '输入名称，例如：数组：地图数据',
+    inputValidator: (value) => {
+      const input = String(value || '').trim()
+      const matches = entries.filter((entry) => entry.label === input || entry.name === input)
+      if (!matches.length) return '请输入上方列出的变量、列表或数组名称'
+      if (matches.length > 1) return '名称重复，请输入带类型前缀的名称'
+      return true
+    },
+  }).then(({ value }) => {
+    const input = String(value || '').trim()
+    const entry = entries.find((item) => item.label === input || item.name === input)
+    if (!entry) return null
+    return ElMessageBox.confirm(`删除“${entry.label}”后，所有引用它的积木也会被删除。`, '确认删除', {
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning',
+    }).then(() => deleteVariableFromProject(entry.kind, entry.name))
+  }).catch(() => {})
+}
+
+function addListDraftField() {
+  if (listDraft.value.fields.length >= 12) return
+  listDraft.value.fields.push({ name: `field${listDraft.value.fields.length + 1}`, type: 'text' })
+}
+
+function removeListDraftField(index) {
+  listDraft.value.fields.splice(index, 1)
+}
+
+function closeListCreator() {
+  const field = listDraft.value.field
+  if (field?.getValue() === '__new__') field.setValue(getListOptions()[0]?.[1] || '')
+  showListCreator.value = false
+  listCreationError.value = ''
+}
+
+function confirmListCreation() {
+  const name = String(listDraft.value.name || '').trim()
+  if (!name || name.length > 40) {
+    listCreationError.value = '列表名称不能为空且不超过40个字符'
+    return
+  }
+  const fields = normalizeRecordFields(listDraft.value.fields)
+  if (listDraft.value.dataKind === 'record' && !fields.length) {
+    listCreationError.value = '自定义结构至少需要一个字段'
+    return
+  }
+  if (!commitList(name, listDraft.value.mode, listDraft.value.field, listDraft.value.dataKind, fields)) {
+    listCreationError.value = '该列表或数组已存在'
+    return
+  }
+  showListCreator.value = false
+  listCreationError.value = ''
+}
+
+function commitArray(enteredName, rows, cols, field = null) {
+  const name = String(enteredName || '').trim().slice(0, 40)
+  if (!name) return null
+  if (isReservedListName(name)) {
+    ElMessage.warning('该名称为系统保留名称，请换一个数组名称')
+    return null
+  }
+  if (getListNames().includes(name)) {
+    ElMessage.warning('该列表或数组已存在')
+    return null
+  }
+  lists.value = {
+    ...lists.value,
+    [name]: Array.from({ length: rows }, () => Array(cols).fill(0)),
+  }
+  listVisibility.value = { ...listVisibility.value, [name]: true }
+  arrayDisplayLocations.value = { ...arrayDisplayLocations.value, [name]: { stage: false, canvas: true } }
+  refreshListFields()
+  refreshToolbox()
+  nextTick(() => scrollToolboxTo('变量'))
+  window.requestAnimationFrame(() => {
+    refreshListFields()
+    selectArrayInFlyout(name)
+  })
+  ElMessage.success(`已创建数组“${name}”（${rows}×${cols}）`)
+  field?.setValue(name)
+  return name
+}
+
+function createArray({ field = null } = {}) {
+  arrayDraft.value = { name: '', rows: 2, cols: 2, field }
+  arrayCreationError.value = ''
+  showArrayCreator.value = true
+  return null
+}
+
+function closeArrayCreator() {
+  const field = arrayDraft.value.field
+  if (field?.getValue() === '__new_array__') field.setValue(getArrayOptions()[0]?.[1] || '')
+  showArrayCreator.value = false
+  arrayCreationError.value = ''
+}
+
+function confirmArrayCreation() {
+  const name = String(arrayDraft.value.name || '').trim()
+  const rows = Number(arrayDraft.value.rows)
+  const cols = Number(arrayDraft.value.cols)
+  if (!name || name.length > 40) {
+    arrayCreationError.value = '数组名称不能为空且不超过40个字符'
+    return
+  }
+  if (!Number.isInteger(rows) || !Number.isInteger(cols) || rows < 1 || rows > 100 || cols < 1 || cols > 100) {
+    arrayCreationError.value = '行和列都必须是 1 到 100 的整数'
+    return
+  }
+  if (!commitArray(name, rows, cols, arrayDraft.value.field)) {
+    arrayCreationError.value = '该列表或数组已存在'
+    return
+  }
+  showArrayCreator.value = false
+  arrayCreationError.value = ''
 }
 
 const variableBlockTypes = ['variable_set', 'variable_change', 'variable_show', 'variable_hide', 'variable_get']
 
 function installDynamicDropdownOptions(field, optionGenerator) {
+  field.__dynamicOptionGenerator = optionGenerator
   const currentValue = field.getValue()
-  field.setOptions(optionGenerator)
-  const options = field.getOptions(false)
-  if (options.some((option) => Array.isArray(option) && option[1] === currentValue)) field.setValue(currentValue)
+  // Keep the generator on FieldDropdown instead of freezing one snapshot.
+  // Blockly can otherwise keep showing the options that existed before a
+  // newly-created variable/list was added.
+  field.setOptions(typeof optionGenerator === 'function' ? optionGenerator : () => optionGenerator)
+  const installedOptions = field.getOptions(false)
+  const createSentinels = new Set(['__new__', '__new_array__', '__new_record__'])
+  const currentOption = !createSentinels.has(currentValue)
+    && installedOptions.find((option) => Array.isArray(option) && option[1] === currentValue)
+  const fallbackOption = installedOptions.find((option) => Array.isArray(option) && !createSentinels.has(option[1]))
+  field.setValue(currentOption ? currentValue : (fallbackOption?.[1] || ''))
+  if (!field.__dynamicShowEditorReady && typeof field.showEditor_ === 'function') {
+    const originalShowEditor = field.showEditor_
+    field.showEditor_ = function showDynamicDropdownEditor(...args) {
+      refreshDynamicDropdownOptions(this, this.__dynamicOptionGenerator)
+      return originalShowEditor.apply(this, args)
+    }
+    field.__dynamicShowEditorReady = true
+  }
+}
+
+function refreshDynamicDropdownOptions(field, optionGenerator) {
+  const validator = field.getValidator?.()
+  field.setValidator(null)
+  try {
+    installDynamicDropdownOptions(field, optionGenerator)
+  } finally {
+    field.setValidator(validator || null)
+  }
 }
 
 function installVariableField(block) {
@@ -864,6 +1481,7 @@ function installVariableField(block) {
   field.__variableReady = true
   installDynamicDropdownOptions(field, getVariableOptions)
   field.setValidator((nextValue) => {
+    if (loadingWorkspace && nextValue === '__new__') return getVariableOptions().find((option) => option[1] !== '__new__')?.[1] || ''
     if (nextValue !== '__new__') return nextValue
     const previousValue = field.getValue() || getVariableOptions()[0][1]
     const createdName = createVariable({ field })
@@ -872,19 +1490,48 @@ function installVariableField(block) {
 }
 
 const listBlockTypes = [
-  'list_add', 'list_delete', 'list_delete_all', 'list_insert', 'list_replace',
-  'list_item', 'list_index_of', 'list_length', 'list_contains', 'list_show', 'list_hide', 'list_get',
+  'list_add', 'list_delete', 'list_delete_all', 'list_fill', 'list_insert', 'list_replace',
+  'list_item', 'list_index_of', 'list_length', 'list_contains', 'list_show', 'list_hide', 'list_get', 'array_fill', 'array_set_cell', 'array_get_coordinate_value', 'array_set_coordinate_value', 'record_create', 'record_list_item_field',
 ]
+
+function getListOptionGenerator(block) {
+  if (['array_fill', 'array_set_cell', 'array_get_coordinate_value', 'array_set_coordinate_value'].includes(block.type)) return getArrayOptions
+  if (block.type === 'record_create') return getRecordSchemaOptions
+  if (block.type === 'record_list_item_field') return getRecordListOptions
+  if (block.type === 'list_fill') return () => getListOptions({ includeArrays: true })
+  return getListOptions
+}
+
+function installRecordListItemField(block) {
+  if (!block || block.type !== 'record_list_item_field') return
+  const field = block.getField('FIELD')
+  if (!field || typeof field.setOptions !== 'function') return
+  if (!field.__recordListFieldReady) {
+    field.__recordListFieldReady = true
+    installDynamicDropdownOptions(field, () => getRecordListFieldOptions(block))
+    return
+  }
+  refreshDynamicDropdownOptions(field, () => getRecordListFieldOptions(block))
+}
 
 function installListField(block) {
   if (!block || !listBlockTypes.includes(block.type) || block.type === 'list_get') return
   const field = block.getField('NAME')
   if (!field || field.__listReady || typeof field.setValidator !== 'function' || typeof field.setOptions !== 'function') return
   field.__listReady = true
-  installDynamicDropdownOptions(field, getListOptions)
+  const optionGenerator = getListOptionGenerator(block)
+  installDynamicDropdownOptions(field, optionGenerator)
   field.setValidator((nextValue) => {
+    if (loadingWorkspace && ['__new__', '__new_array__', '__new_record__'].includes(nextValue)) {
+      return optionGenerator().find((option) => Array.isArray(option) && !['__new__', '__new_array__', '__new_record__'].includes(option[1]))?.[1] || ''
+    }
+    if (nextValue === '__new_array__') {
+      const previousValue = field.getValue() || getArrayOptions()[0]?.[1]
+      createArray({ field })
+      return previousValue
+    }
     if (nextValue !== '__new__') return nextValue
-    const previousValue = field.getValue() || getListOptions()[0][1]
+    const previousValue = field.getValue() || optionGenerator()[0][1]
     const createdName = createList({ field })
     return createdName || previousValue
   })
@@ -896,6 +1543,7 @@ function installVariableFields() {
 
 function installListFields() {
   getVariableBlocks().forEach(installListField)
+  getVariableBlocks().forEach(installRecordListItemField)
 }
 
 function refreshVariableFields() {
@@ -904,18 +1552,94 @@ function refreshVariableFields() {
     const field = block.getField('NAME')
     if (!field) return
     if (!field.__variableReady) installVariableField(block)
-    else field.getOptions(false)
+    else refreshDynamicDropdownOptions(field, getVariableOptions)
   })
 }
 
 function refreshListFields() {
   getVariableBlocks().forEach((block) => {
+    if (block.type === 'record_list_item_field') installRecordListItemField(block)
     if (!listBlockTypes.includes(block.type) || block.type === 'list_get') return
     const field = block.getField('NAME')
     if (!field) return
     if (!field.__listReady) installListField(block)
-    else field.getOptions(false)
+    else refreshDynamicDropdownOptions(field, getListOptionGenerator(block))
   })
+}
+
+function getSubroutineDefinitions() {
+  return (workspace?.getTopBlocks(false) || []).filter((block) => (
+    block.type === 'control_subroutine_define'
+    && String(block.getFieldValue('NAME') || '').trim()
+  ))
+}
+
+function getSubroutineOptions() {
+  const names = [...new Set([
+    ...restoringSubroutineNames,
+    ...getSubroutineDefinitions().map((block) => String(block.getFieldValue('NAME')).trim()),
+  ].filter(Boolean))]
+  return names.length ? names.map((name) => [name, name]) : [['未创建收纳块', '__none__']]
+}
+
+function findSubroutineDefinition(name) {
+  const targetName = String(name || '').trim()
+  if (!targetName) return null
+  return getSubroutineDefinitions().find((block) => String(block.getFieldValue('NAME')).trim() === targetName) || null
+}
+
+function installSubroutineCallField(block) {
+  if (!block || block.type !== 'control_subroutine_call') return
+  const field = block.getField('NAME')
+  if (!field || field.__subroutineReady || typeof field.setOptions !== 'function') return
+  // Definitions and calls are restored in an unspecified order. Defer the
+  // dropdown setup until all saved definition blocks have been loaded.
+  if (loadingWorkspace) return
+  field.__subroutineReady = true
+  installDynamicDropdownOptions(field, getSubroutineOptions)
+}
+
+function installSubroutineCallFields() {
+  getVariableBlocks().forEach(installSubroutineCallField)
+}
+
+function refreshSubroutineCallFields() {
+  if (loadingWorkspace) return
+  getVariableBlocks().forEach((block) => {
+    if (block.type !== 'control_subroutine_call') return
+    const field = block.getField('NAME')
+    if (!field) return
+    if (!field.__subroutineReady) installSubroutineCallField(block)
+    else refreshDynamicDropdownOptions(field, getSubroutineOptions)
+  })
+}
+
+function restoreSubroutineCallFieldValues(serialized) {
+  const values = collectSerializedFieldValues(serialized, 'NAME')
+  refreshSubroutineCallFields()
+  values.forEach((value, id) => {
+    const block = workspace?.getBlockById(id)
+    if (block?.type !== 'control_subroutine_call') return
+    const field = block.getField('NAME')
+    if (!field || value === undefined || value === '__none__') return
+    const options = field.getOptions?.(false) || []
+    if (!options.some((option) => Array.isArray(option) && option[1] === value)) {
+      field.setOptions([[String(value), String(value)], ...options])
+    }
+    field.setValue(value)
+  })
+}
+
+function shouldRefreshSubroutineCallFields(event) {
+  if (loadingWorkspace) return false
+  if (event.type === Blockly.Events.BLOCK_DELETE) return true
+  if (event.type === Blockly.Events.BLOCK_CREATE) {
+    return (event.ids || []).some((id) => workspace?.getBlockById(id)?.type === 'control_subroutine_define')
+  }
+  return event.type === Blockly.Events.BLOCK_CHANGE
+    && event.element === 'field'
+    && event.name === 'NAME'
+    && workspace?.getBlockById(event.blockId)?.type === 'control_subroutine_define'
 }
 
 function getVariableBlocks() {
@@ -953,14 +1677,17 @@ function scheduleNumberFieldHitTargetSync() {
   window.requestAnimationFrame(expandNumberFieldHitTargets)
 }
 
-function createVariableVisibilityControl(block, canvas) {
+function createVisibilityCheckbox(block, location) {
   const svgNamespace = 'http://www.w3.org/2000/svg'
   const group = document.createElementNS(svgNamespace, 'g')
   const box = document.createElementNS(svgNamespace, 'rect')
   const check = document.createElementNS(svgNamespace, 'path')
+  const title = document.createElementNS(svgNamespace, 'title')
   group.setAttribute('class', 'variable-visibility-control')
   group.setAttribute('role', 'checkbox')
   group.setAttribute('tabindex', '0')
+  group.dataset.location = location
+  title.textContent = location === 'stage' ? '在舞台显示' : '在画布显示'
   box.setAttribute('width', '16')
   box.setAttribute('height', '16')
   box.setAttribute('rx', '3')
@@ -970,19 +1697,86 @@ function createVariableVisibilityControl(block, canvas) {
   check.setAttribute('stroke-linecap', 'round')
   check.setAttribute('stroke-linejoin', 'round')
   check.setAttribute('stroke-width', '2')
-  group.append(box, check)
+  group.append(title, box, check)
   const toggle = (event) => {
     event.preventDefault()
     event.stopPropagation()
     const name = block.getFieldValue('NAME')
-    if (block.type === 'list_get') setListVisibility(name, listVisibility.value[name] !== true)
-    else setVariableVisibility(name, variableVisibility.value[name] !== true)
+    const kind = block.type === 'variable_get'
+      ? 'variable'
+      : (isArrayName(name) ? 'array' : 'list')
+    const locations = kind === 'variable'
+      ? getVariableDisplayLocations(name)
+      : kind === 'list'
+        ? getListDisplayLocations(name)
+        : getArrayDisplayLocations(name)
+    setDataDisplayLocation(kind, name, location, !locations[location])
   }
   group.addEventListener('pointerdown', (event) => event.stopPropagation())
   group.addEventListener('click', toggle)
   group.addEventListener('keydown', (event) => {
     if (event.key === 'Enter' || event.key === ' ') toggle(event)
   })
+  return group
+}
+
+function getDataKindForBlock(block, name = block?.getFieldValue('NAME')) {
+  return block?.type === 'variable_get' ? 'variable' : (isArrayName(name) ? 'array' : 'list')
+}
+
+function createPersistenceCheckbox(block) {
+  const svgNamespace = 'http://www.w3.org/2000/svg'
+  const group = document.createElementNS(svgNamespace, 'g')
+  const box = document.createElementNS(svgNamespace, 'rect')
+  const check = document.createElementNS(svgNamespace, 'path')
+  const title = document.createElementNS(svgNamespace, 'title')
+  group.setAttribute('class', 'variable-persistence-control')
+  group.setAttribute('role', 'checkbox')
+  group.setAttribute('tabindex', '0')
+  title.textContent = '保存数据（重新打开项目时保留当前值）'
+  box.setAttribute('width', '16')
+  box.setAttribute('height', '16')
+  box.setAttribute('rx', '3')
+  check.setAttribute('d', 'M3.5 8.5 6.5 11.5 12.5 4.5')
+  check.setAttribute('fill', 'none')
+  check.setAttribute('stroke', '#fff')
+  check.setAttribute('stroke-linecap', 'round')
+  check.setAttribute('stroke-linejoin', 'round')
+  check.setAttribute('stroke-width', '2')
+  group.append(title, box, check)
+  const toggle = (event) => {
+    event.preventDefault()
+    event.stopPropagation()
+    const name = block.getFieldValue('NAME')
+    const kind = getDataKindForBlock(block, name)
+    setDataPersistence(kind, name, !shouldPersistData(kind, name))
+  }
+  group.addEventListener('pointerdown', (event) => event.stopPropagation())
+  group.addEventListener('click', toggle)
+  group.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') toggle(event)
+  })
+  return group
+}
+
+function createVariableVisibilityControl(block, canvas) {
+  const group = document.createElementNS('http://www.w3.org/2000/svg', 'g')
+  const locations = ['stage', 'canvas']
+  const name = block.getFieldValue('NAME')
+  const kind = getDataKindForBlock(block, name)
+  group.setAttribute('class', 'variable-visibility-control-group')
+  group.__visibilityLocations = locations
+  group.__hasPersistenceControl = canPersistData(kind, name)
+  locations.forEach((location, index) => {
+    const control = createVisibilityCheckbox(block, location)
+    control.setAttribute('transform', 'translate(' + index * 22 + ', 0)')
+    group.appendChild(control)
+  })
+  if (group.__hasPersistenceControl) {
+    const control = createPersistenceCheckbox(block)
+    control.setAttribute('transform', 'translate(44, 0)')
+    group.appendChild(control)
+  }
   canvas.appendChild(group)
   return group
 }
@@ -1000,27 +1794,50 @@ function syncVariableVisibilityControls() {
   })
   reporterBlocks.forEach((block) => {
     const name = block.getFieldValue('NAME')
+    const kind = getDataKindForBlock(block, name)
+    const hasPersistenceControl = canPersistData(kind, name)
     let position = block.getRelativeToSurfaceXY?.()
     const size = block.getHeightWidth?.()
     if (!name || !position || !size) return
-    const minimumBlockX = 26
+    const controlOffset = hasPersistenceControl ? 70 : 48
+    const minimumBlockX = controlOffset + 4
     if (position.x < minimumBlockX) {
       block.moveBy(minimumBlockX - position.x, 0)
       position = block.getRelativeToSurfaceXY?.()
     }
+    const isArray = block.type === 'list_get' && isArrayName(name)
+    const locations = ['stage', 'canvas']
     let control = variableVisibilityControls.get(block.id)
-    if (!control || !control.isConnected) {
+    if (!control || !control.isConnected || control.__visibilityLocations?.join('|') !== locations.join('|') || control.__hasPersistenceControl !== hasPersistenceControl) {
+      control?.remove()
       control = createVariableVisibilityControl(block, canvas)
       variableVisibilityControls.set(block.id, control)
     }
-    const x = position.x - 24
+    const x = position.x - controlOffset
     const y = position.y + Math.max(0, (size.height - 16) / 2)
-    const isList = block.type === 'list_get'
-    const visible = isList ? listVisibility.value[name] === true : variableVisibility.value[name] === true
-    control.setAttribute('transform', `translate(${x}, ${y})`)
-    control.setAttribute('aria-label', isList ? `在画布显示列表 ${name}` : `在画布显示 ${name}`)
-    control.setAttribute('aria-checked', String(visible))
-    control.classList.toggle('checked', visible)
+    control.setAttribute('transform', 'translate(' + x + ', ' + y + ')')
+    control.setAttribute('aria-label', `设置 ${name} 的显示位置`)
+    control.querySelectorAll('.variable-visibility-control').forEach((checkbox) => {
+      const location = checkbox.dataset.location
+      const kind = block.type === 'variable_get'
+        ? 'variable'
+        : isArray ? 'array' : 'list'
+      const visible = kind === 'variable'
+        ? getVariableDisplayLocations(name)[location] === true
+        : kind === 'list'
+          ? getListDisplayLocations(name)[location] === true
+          : getArrayDisplayLocations(name)[location] === true
+      checkbox.setAttribute('aria-label', `${location === 'stage' ? '在舞台' : '在画布'}显示 ${name}`)
+      checkbox.setAttribute('aria-checked', String(visible))
+      checkbox.classList.toggle('checked', visible)
+    })
+    const persistenceControl = control.querySelector('.variable-persistence-control')
+    if (persistenceControl) {
+      const persists = shouldPersistData(kind, name)
+      persistenceControl.setAttribute('aria-label', `保存 ${name} 的数据`)
+      persistenceControl.setAttribute('aria-checked', String(persists))
+      persistenceControl.classList.toggle('checked', persists)
+    }
   })
 }
 
@@ -1040,10 +1857,20 @@ function selectVariableInFlyout(name) {
 }
 
 function selectListInFlyout(name) {
-  const options = getListOptions()
   getVariableBlocks().forEach((block) => {
     if (!block.isInFlyout && !block.workspace?.isFlyout) return
-    if (!listBlockTypes.includes(block.type) || block.type === 'list_get') return
+    if (!listBlockTypes.includes(block.type) || block.type === 'list_get' || block.type === 'array_fill') return
+    const field = block.getField('NAME')
+    const options = getListOptionGenerator(block)()
+    if (field && options.some(([, value]) => value === name)) field.setValue(name)
+  })
+}
+
+function selectArrayInFlyout(name) {
+  const options = getArrayOptions()
+  getVariableBlocks().forEach((block) => {
+    if (!block.isInFlyout && !block.workspace?.isFlyout) return
+    if (!['array_fill', 'array_set_cell', 'array_get_coordinate_value', 'array_set_coordinate_value'].includes(block.type)) return
     const field = block.getField('NAME')
     if (field && options.some(([, value]) => value === name)) field.setValue(name)
   })
@@ -1188,6 +2015,22 @@ function collectSerializedFieldValues(serialized, fieldName) {
   return values
 }
 
+function collectSerializedBlockFieldValues(serialized, blockType, fieldName) {
+  const values = []
+  const visit = (block) => {
+    if (!block || typeof block !== 'object') return
+    const value = block.type === blockType ? block.fields?.[fieldName] : undefined
+    if (value !== undefined && String(value).trim()) values.push(String(value).trim())
+    if (block.next?.block) visit(block.next.block)
+    Object.values(block.inputs || {}).forEach((input) => {
+      if (input?.block) visit(input.block)
+      if (input?.shadow) visit(input.shadow)
+    })
+  }
+  ;(serialized?.blocks?.blocks || []).forEach(visit)
+  return [...new Set(values)]
+}
+
 function restoreBroadcastFieldValues(serialized) {
   const values = collectSerializedFieldValues(serialized, 'MESSAGE')
   values.forEach((value) => {
@@ -1242,14 +2085,27 @@ function persistSelectedActor() {
 function loadActorWorkspace(actor) {
   if (!workspace || !actor) return
   const serialized = JSON.parse(actor.workspaceJson || JSON.stringify(starterWorkspace))
-  workspace.clear()
-  Blockly.serialization.workspaces.load(serialized, workspace)
+  restoringSubroutineNames = [
+    ...collectSerializedBlockFieldValues(serialized, 'control_subroutine_define', 'NAME'),
+    ...collectSerializedBlockFieldValues(serialized, 'control_subroutine_call', 'NAME'),
+  ].filter((name) => name !== '__none__')
+  loadingWorkspace = true
+  try {
+    workspace.clear()
+    Blockly.serialization.workspaces.load(serialized, workspace)
+  } finally {
+    loadingWorkspace = false
+  }
   ensureDefaultInputs()
   installBroadcastFields()
   installCostumeFields()
   installVariableFields()
   installListFields()
+  installSubroutineCallFields()
   refreshListFields()
+  refreshSubroutineCallFields()
+  restoreSubroutineCallFieldValues(serialized)
+  restoringSubroutineNames = []
   refreshBackdropFields()
   restoreBroadcastFieldValues(serialized)
   restoreBackdropFieldValues(serialized)
@@ -1403,6 +2259,8 @@ function defineBlocks() {
     { type: 'control_if_else', message0: '如果 %1 那么 %2 否则 %3', args0: [{ type: 'input_value', name: 'CONDITION', check: 'Boolean' }, { type: 'input_statement', name: 'DO' }, { type: 'input_statement', name: 'ELSE' }], previousStatement: null, nextStatement: null, colour: '#e9b640' },
     { type: 'control_wait_until', message0: '等待直到 %1', args0: [{ type: 'input_value', name: 'CONDITION', check: 'Boolean' }], previousStatement: null, nextStatement: null, colour: '#e9b640' },
     { type: 'control_repeat_until', message0: '重复执行直到 %1 %2', args0: [{ type: 'input_value', name: 'CONDITION', check: 'Boolean' }, { type: 'input_statement', name: 'DO' }], previousStatement: null, nextStatement: null, colour: '#e9b640' },
+    { type: 'control_subroutine_define', message0: '收纳块 %1 %2', args0: [{ type: 'field_input', name: 'NAME', text: '步骤1' }, { type: 'input_statement', name: 'DO' }], colour: '#e9b640', tooltip: '定义一段可重复执行的积木；将积木挂到下方，再用“执行收纳块”调用。' },
+    { type: 'control_subroutine_call', message0: '执行收纳块 %1', args0: [{ type: 'field_dropdown', name: 'NAME', options: getSubroutineOptions }], previousStatement: null, nextStatement: null, colour: '#e9b640', tooltip: '跳转并执行所选收纳块下方的积木，执行完后返回主分支。' },
     { type: 'control_stop_all', message0: '停止 全部脚本', previousStatement: null, nextStatement: null, colour: '#e9b640' },
     { type: 'control_when_clone_start', message0: '当作为克隆体启动时', nextStatement: null, colour: '#e9b640' },
     { type: 'control_create_clone', message0: '克隆 自己', previousStatement: null, nextStatement: null, colour: '#e9b640' },
@@ -1452,6 +2310,11 @@ function defineBlocks() {
     { type: 'list_add', message0: '将 %1 加入 %2', args0: [{ type: 'input_value', name: 'ITEM' }, { type: 'field_dropdown', name: 'NAME', options: getListOptions }], previousStatement: null, nextStatement: null, colour: '#ef6687' },
     { type: 'list_delete', message0: '删除 %1 的第 %2 项', args0: [{ type: 'field_dropdown', name: 'NAME', options: getListOptions }, { type: 'input_value', name: 'INDEX', check: 'Number' }], previousStatement: null, nextStatement: null, colour: '#ef6687' },
     { type: 'list_delete_all', message0: '删除 %1 的全部项目', args0: [{ type: 'field_dropdown', name: 'NAME', options: getListOptions }], previousStatement: null, nextStatement: null, colour: '#ef6687' },
+    { type: 'list_fill', message0: '将 %1 数据全部赋值为 %2', args0: [{ type: 'field_dropdown', name: 'NAME', options: () => getListOptions({ includeArrays: true }) }, { type: 'input_value', name: 'VALUE' }], previousStatement: null, nextStatement: null, colour: '#ef6687', tooltip: '把数组中的每一项都设置为同一个值；迷宫数组填 0 或 1 会同步更新地图。' },
+    { type: 'array_fill', message0: '将数组 %1 全部赋值为 %2', args0: [{ type: 'field_dropdown', name: 'NAME', options: getArrayOptions }, { type: 'input_value', name: 'VALUE' }], previousStatement: null, nextStatement: null, colour: '#ef6687', tooltip: '把二维数组中的每个元素都设置为同一个值。' },
+    { type: 'array_set_cell', message0: '将 %1 的第 %2 行第 %3 列赋值为 %4', args0: [{ type: 'field_dropdown', name: 'NAME', options: getArrayOptions }, { type: 'input_value', name: 'ROW', check: 'Number' }, { type: 'input_value', name: 'COL', check: 'Number' }, { type: 'input_value', name: 'VALUE' }], previousStatement: null, nextStatement: null, colour: '#ef6687', tooltip: '给二维数组指定行列的单元格赋值，行列从 1 开始。' },
+    { type: 'array_set_coordinate_value', message0: '将数组 %1 的坐标 %2 赋值为 %3', args0: [{ type: 'field_dropdown', name: 'NAME', options: getArrayOptions }, { type: 'input_value', name: 'COORDINATE', check: 'Coordinate' }, { type: 'input_value', name: 'VALUE' }], previousStatement: null, nextStatement: null, colour: '#ef6687', tooltip: '按节点坐标给二维数组单元格赋值。节点坐标行列从 1 开始；越界坐标不会写入。' },
+    { type: 'array_get_coordinate_value', message0: '取数组 %1 的坐标 %2 的值', args0: [{ type: 'field_dropdown', name: 'NAME', options: getArrayOptions }, { type: 'input_value', name: 'COORDINATE', check: 'Coordinate' }], output: null, colour: '#ef6687', tooltip: '按节点坐标读取二维数组元素。节点坐标行列从 1 开始；越界时返回 0。' },
     { type: 'list_insert', message0: '在 %1 的第 %2 项前插入 %3', args0: [{ type: 'field_dropdown', name: 'NAME', options: getListOptions }, { type: 'input_value', name: 'INDEX', check: 'Number' }, { type: 'input_value', name: 'ITEM' }], previousStatement: null, nextStatement: null, colour: '#ef6687' },
     { type: 'list_replace', message0: '将 %1 的第 %2 项替换为 %3', args0: [{ type: 'field_dropdown', name: 'NAME', options: getListOptions }, { type: 'input_value', name: 'INDEX', check: 'Number' }, { type: 'input_value', name: 'ITEM' }], previousStatement: null, nextStatement: null, colour: '#ef6687' },
     { type: 'list_item', message0: '%1 的第 %2 项', args0: [{ type: 'field_dropdown', name: 'NAME', options: getListOptions }, { type: 'input_value', name: 'INDEX', check: 'Number' }], output: null, colour: '#ef6687' },
@@ -1461,11 +2324,23 @@ function defineBlocks() {
     { type: 'list_show', message0: '显示列表 %1', args0: [{ type: 'field_dropdown', name: 'NAME', options: getListOptions }], previousStatement: null, nextStatement: null, colour: '#ef6687' },
     { type: 'list_hide', message0: '隐藏列表 %1', args0: [{ type: 'field_dropdown', name: 'NAME', options: getListOptions }], previousStatement: null, nextStatement: null, colour: '#ef6687' },
     { type: 'list_get', message0: '%1', args0: [{ type: 'field_label_serializable', name: 'NAME', text: '列表' }], output: null, colour: '#ef6687' },
+    { type: 'coordinate_create', message0: '节点坐标 行 %1 列 %2', args0: [{ type: 'input_value', name: 'ROW', check: 'Number' }, { type: 'input_value', name: 'COL', check: 'Number' }], output: 'Coordinate', colour: '#ef6687' },
+    { type: 'coordinate_row', message0: '%1 的行', args0: [{ type: 'input_value', name: 'VALUE', check: 'Coordinate' }], output: 'Number', colour: '#ef6687' },
+    { type: 'coordinate_col', message0: '%1 的列', args0: [{ type: 'input_value', name: 'VALUE', check: 'Coordinate' }], output: 'Number', colour: '#ef6687' },
+    { type: 'record_create', message0: '按 %1 创建数据对象 %2', args0: [{ type: 'field_dropdown', name: 'NAME', options: getRecordSchemaOptions }, { type: 'input_value', name: 'JSON' }], output: 'Record', colour: '#ef6687', tooltip: '按已创建的自定义结构生成一条数据对象，可再用“加入列表”保存到对应列表；不会新建列表。' },
+    { type: 'record_get_field', message0: '%1 的字段 %2', args0: [{ type: 'input_value', name: 'VALUE', check: 'Record' }, { type: 'field_input', name: 'FIELD', text: 'x' }], output: null, colour: '#ef6687', tooltip: '读取一条数据对象的指定字段。读取自定义结构列表中的项目时，优先使用“取列表第几项的字段”积木。' },
+    { type: 'record_list_item_field', message0: '取 %1 第 %2 项的字段 %3', args0: [{ type: 'field_dropdown', name: 'NAME', options: getRecordListOptions }, { type: 'input_value', name: 'INDEX', check: 'Number' }, { type: 'field_dropdown', name: 'FIELD', options: [['未设置字段', '__none__']] }], output: null, colour: '#ef6687', tooltip: '读取自定义结构列表指定项目的字段值。' },
     { type: 'task_forward', message0: '向前走 1 格', previousStatement: null, nextStatement: null, colour: '#8178cf' },
+    { type: 'task_move_to_coordinate', message0: '移动到坐标 %1', args0: [{ type: 'input_value', name: 'COORDINATE', check: 'Coordinate' }], previousStatement: null, nextStatement: null, colour: '#8178cf', tooltip: '移动到指定的节点坐标。坐标从 1 开始；目标越界或为墙体时任务失败。' },
+    { type: 'task_color_coordinate', message0: '对坐标 %1 染 %2', args0: [{ type: 'input_value', name: 'COORDINATE', check: 'Coordinate' }, { type: 'field_dropdown', name: 'COLOR', options: colorOptions }], previousStatement: null, nextStatement: null, colour: '#8178cf', tooltip: '给迷宫中指定的可通行格子染色；坐标从 1 开始，越界或墙体不会染色。' },
     { type: 'task_turn', message0: '向 %1 转', args0: [{ type: 'field_dropdown', name: 'SIDE', options: [['左', 'left'], ['右', 'right']] }], previousStatement: null, nextStatement: null, colour: '#8178cf' },
     { type: 'task_repeat_target', message0: '重复直到到达目标 %1', args0: [{ type: 'input_statement', name: 'DO' }], previousStatement: null, nextStatement: null, colour: '#8178cf' },
     { type: 'task_if_path', message0: '如果 %1 可以通行 执行 %2', args0: [{ type: 'field_dropdown', name: 'DIRECTION', options: [['正前方', 'forward'], ['左侧', 'left'], ['右侧', 'right']] }, { type: 'input_statement', name: 'DO' }], previousStatement: null, nextStatement: null, colour: '#8178cf' },
     { type: 'task_if_else_path', message0: '如果 %1 可以通行 执行 %2 否则 %3', args0: [{ type: 'field_dropdown', name: 'DIRECTION', options: [['正前方', 'forward'], ['左侧', 'left'], ['右侧', 'right']] }, { type: 'input_statement', name: 'DO' }, { type: 'input_statement', name: 'ELSE' }], previousStatement: null, nextStatement: null, colour: '#8178cf' },
+    { type: 'task_coordinate_current', message0: '获取当前位置坐标', output: 'Coordinate', colour: '#8178cf', tooltip: '返回角色当前位置的行列坐标，坐标从 1 开始。' },
+    { type: 'task_coordinate_forward', message0: '获取正前方坐标', output: 'Coordinate', colour: '#8178cf', tooltip: '返回角色正前方格子的行列坐标，坐标从 1 开始；边缘外的坐标不会被截断。' },
+    { type: 'task_coordinate_left', message0: '获取左侧坐标', output: 'Coordinate', colour: '#8178cf', tooltip: '返回角色左侧格子的行列坐标，坐标从 1 开始；边缘外的坐标不会被截断。' },
+    { type: 'task_coordinate_right', message0: '获取右侧坐标', output: 'Coordinate', colour: '#8178cf', tooltip: '返回角色右侧格子的行列坐标，坐标从 1 开始；边缘外的坐标不会被截断。' },
     { type: 'ai_face_check', message0: 'AI 识别人脸', previousStatement: null, nextStatement: null, colour: '#52bbc4', tooltip: '打开摄像头拍照后，调用平台人脸识别能力。' },
     { type: 'extension_open_draw_board', message0: '打开涂鸦画板', previousStatement: null, nextStatement: null, colour: '#8d63dc', tooltip: '打开“你画我猜”插件中的 AI 涂鸦画板。' },
     { type: 'extension_clear_draw_board', message0: '清除涂鸦画板', previousStatement: null, nextStatement: null, colour: '#8d63dc', tooltip: '清除“你画我猜”插件画板中的全部内容。' },
@@ -1518,6 +2393,15 @@ function defineBlocks() {
     }
     definition.__listDynamicInit = true
   })
+  const subroutineCallDefinition = Blockly.Blocks.control_subroutine_call
+  if (subroutineCallDefinition && !subroutineCallDefinition.__subroutineDynamicInit) {
+    const originalInit = subroutineCallDefinition.init
+    subroutineCallDefinition.init = function initSubroutineCallBlock() {
+      originalInit.call(this)
+      installSubroutineCallField(this)
+    }
+    subroutineCallDefinition.__subroutineDynamicInit = true
+  }
 }
 
 function initWorkspace() {
@@ -1538,18 +2422,27 @@ function initWorkspace() {
     }),
   })
   workspace.registerButtonCallback('CREATE_VARIABLE', createVariable)
+  workspace.registerButtonCallback('DELETE_VARIABLE', deleteVariable)
   workspace.registerButtonCallback('CREATE_LIST', createList)
+  workspace.registerButtonCallback('CREATE_ARRAY', createArray)
   pinFlyoutScale()
-  Blockly.serialization.workspaces.load(starterWorkspace, workspace)
+  loadingWorkspace = true
+  try {
+    Blockly.serialization.workspaces.load(starterWorkspace, workspace)
+  } finally {
+    loadingWorkspace = false
+  }
   ensureDefaultInputs()
   installBroadcastFields()
   installCostumeFields()
   installVariableFields()
   installListFields()
+  installSubroutineCallFields()
   refreshBroadcastFields()
   refreshCostumeFields()
   refreshVariableFields()
   refreshListFields()
+  refreshSubroutineCallFields()
   refreshBackdropFields()
   syncVariableVisibilityControls()
   scheduleNumberFieldHitTargetSync()
@@ -1559,8 +2452,15 @@ function initWorkspace() {
       installCostumeFields()
       installVariableFields()
       installListFields()
+      installSubroutineCallFields()
+    }
+    if (shouldRefreshSubroutineCallFields(event)) refreshSubroutineCallFields()
+    if (event.type === Blockly.Events.BLOCK_CHANGE && event.element === 'field' && event.name === 'NAME') {
+      const changedBlock = workspace?.getBlockById(event.blockId)
+      if (changedBlock?.type === 'record_list_item_field') installRecordListItemField(changedBlock)
     }
     if ([Blockly.Events.BLOCK_CREATE, Blockly.Events.BLOCK_CHANGE].includes(event.type)) scheduleNumberFieldHitTargetSync()
+    if (!stepExecuting && [Blockly.Events.BLOCK_CREATE, Blockly.Events.BLOCK_CHANGE, Blockly.Events.BLOCK_DELETE].includes(event.type)) resetStepExecution()
     syncTaskBlockCount()
   }
   workspace.addChangeListener(workspaceChangeHandler)
@@ -1631,6 +2531,34 @@ function pinFlyoutScale() {
   if (!flyout) return
   flyout.getFlyoutScale = () => FLYOUT_SCALE
   flyout.reflow()
+  if (!variableContextMenuHandler) {
+    variableContextMenuHandler = (event) => {
+      const flyoutWorkspace = workspace?.getFlyout()?.getWorkspace?.()
+      if (!flyoutWorkspace) return
+      const target = event.target
+      const block = flyoutWorkspace.getAllBlocks(false)
+        .filter((candidate) => candidate.type === 'variable_get')
+        .find((candidate) => {
+          const svgRoot = candidate.getSvgRoot?.()
+          const control = variableVisibilityControls.get(candidate.id)
+          return Boolean(svgRoot?.contains(target) || control?.contains(target))
+        })
+      if (!block) return
+      const name = block.getFieldValue('NAME')
+      if (!name || name === '__new__') return
+      event.preventDefault()
+      event.stopPropagation()
+      const editor = blocklyRef.value?.closest('.block-editor') || blocklyRef.value
+      const rect = editor?.getBoundingClientRect()
+      if (!rect) return
+      variableContextMenu.value = {
+        name,
+        x: Math.max(8, Math.min(event.clientX - rect.left, rect.width - 164)),
+        y: Math.max(8, Math.min(event.clientY - rect.top, rect.height - 52)),
+      }
+    }
+    blocklyRef.value?.addEventListener('contextmenu', variableContextMenuHandler, true)
+  }
   toolboxInteractionHandler = scheduleToolboxCategorySync
   blocklyRef.value?.addEventListener('wheel', toolboxInteractionHandler, { capture: true, passive: true })
   blocklyRef.value?.addEventListener('pointermove', toolboxInteractionHandler, true)
@@ -1653,6 +2581,13 @@ function resizeWorkspace() {
     svg.style.height = `${height}px`
   }
   Blockly.svgResize(workspace)
+}
+
+function toggleToolboxCollapsed() {
+  toolboxCollapsed.value = !toolboxCollapsed.value
+  nextTick(() => {
+    resizeWorkspace()
+  })
 }
 
 function normalizeSpriteSize(value, fallback = 100) {
@@ -1720,6 +2655,24 @@ function getListItems(name) {
   return Array.isArray(items) ? items : []
 }
 
+function isStructuredListItem(value) {
+  return value !== null && typeof value === 'object'
+}
+
+function formatListItem(value) {
+  if (value && value.kind === 'coordinate') return `(${value.row}, ${value.col})`
+  if (value && value.kind === 'record') return `{ ${Object.entries(value.fields || {}).map(([key, item]) => `${key}: ${formatListItem(item)}`).join(', ')} }`
+  if (Array.isArray(value)) return `[${value.map((item) => formatListItem(item)).join(', ')}]`
+  if (isStructuredListItem(value)) {
+    try {
+      return JSON.stringify(value)
+    } catch {
+      return String(value)
+    }
+  }
+  return String(value ?? '')
+}
+
 function getListIndex(value, length, allowEnd = false) {
   const index = Math.floor(Number(value)) - 1
   const maximum = allowEnd ? length : length - 1
@@ -1727,7 +2680,26 @@ function getListIndex(value, length, allowEnd = false) {
 }
 
 function listValuesEqual(left, right) {
+  if (isStructuredListItem(left) || isStructuredListItem(right)) return formatListItem(left) === formatListItem(right)
   return String(left).toLocaleLowerCase() === String(right).toLocaleLowerCase()
+}
+
+function coerceRecordFieldValue(value, type) {
+  if (type === 'number') return Number(value) || 0
+  if (type === 'boolean') {
+    if (typeof value === 'string') return ['true', '1', 'yes', 'on', '是'].includes(value.trim().toLowerCase())
+    return Boolean(value)
+  }
+  return String(value ?? '')
+}
+
+function createRecordValue(schemaName, value) {
+  const configuration = listConfigurations.value[schemaName]
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {}
+  const fields = Object.fromEntries(
+    normalizeRecordFields(configuration?.fields).map((field) => [field.name, coerceRecordFieldValue(source[field.name], field.type)]),
+  )
+  return { kind: 'record', schema: schemaName, fields }
 }
 
 function readListValue(block) {
@@ -1743,6 +2715,61 @@ function readValue(block, fallback = 0) {
   if (block.type === 'math_number') return Number(block.getFieldValue('NUM')) || 0
   if (block.type === 'text') return block.getFieldValue('TEXT') || ''
   if (block.type === 'logic_boolean') return block.getFieldValue('BOOL') === 'TRUE'
+  if (block.type === 'coordinate_create') return {
+    kind: 'coordinate',
+    row: Number(valueOf(block, 'ROW', 1)),
+    col: Number(valueOf(block, 'COL', 1)),
+  }
+  if (block.type === 'coordinate_row' || block.type === 'coordinate_col') {
+    const coordinate = valueOf(block, 'VALUE', null)
+    if (!coordinate || coordinate.kind !== 'coordinate') return 0
+    return block.type === 'coordinate_row' ? coordinate.row : coordinate.col
+  }
+  if (block.type === 'task_coordinate_current') return {
+    kind: 'coordinate',
+    row: task.value.row + 1,
+    col: task.value.col + 1,
+  }
+  if (['task_coordinate_forward', 'task_coordinate_left', 'task_coordinate_right'].includes(block.type)) {
+    const relativeDirection = {
+      task_coordinate_forward: 'forward',
+      task_coordinate_left: 'left',
+      task_coordinate_right: 'right',
+    }[block.type]
+    return getMazeRelativeCoordinate(relativeDirection)
+  }
+  if (block.type === 'array_get_coordinate_value') {
+    const coordinate = valueOf(block, 'COORDINATE', null)
+    const row = Math.trunc(Number(coordinate?.row)) - 1
+    const col = Math.trunc(Number(coordinate?.col)) - 1
+    const items = getListItems(block.getFieldValue('NAME'))
+    return Number.isInteger(row) && Number.isInteger(col) && row >= 0 && col >= 0 && Array.isArray(items[row])
+      ? items[row][col] ?? 0
+      : 0
+  }
+  if (block.type === 'record_create') {
+    let source = {}
+    try {
+      const raw = String(valueOf(block, 'JSON', '{}'))
+      const parsed = JSON.parse(raw)
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) source = parsed
+    } catch {
+      source = {}
+    }
+    return createRecordValue(block.getFieldValue('NAME'), source)
+  }
+  if (block.type === 'record_get_field') {
+    const record = valueOf(block, 'VALUE', null)
+    const field = String(block.getFieldValue('FIELD') || '').trim()
+    return record?.kind === 'record' ? record.fields?.[field] ?? '' : ''
+  }
+  if (block.type === 'record_list_item_field') {
+    const items = getListItems(block.getFieldValue('NAME'))
+    const index = getListIndex(valueOf(block, 'INDEX', 1), items.length)
+    const record = index >= 0 ? items[index] : null
+    const field = String(block.getFieldValue('FIELD') || '').trim()
+    return record?.kind === 'record' ? record.fields?.[field] ?? '' : ''
+  }
   if (block.type === 'sensing_mouse_x') return Math.round(inputState.value.mouseX)
   if (block.type === 'sensing_mouse_y') return Math.round(inputState.value.mouseY)
   if (block.type === 'sensing_sprite_x') return Math.round(stage.value.x)
@@ -1815,7 +2842,7 @@ function readValue(block, fallback = 0) {
   }
   if (block.type === 'variable_get') return variables.value[block.getFieldValue('NAME')] ?? 0
   if (block.type === 'ai_draw_results') return drawGuessResults.value.join(' ')
-  if (block.type === 'list_get') return getListItems(block.getFieldValue('NAME')).join(' ')
+  if (block.type === 'list_get') return getListItems(block.getFieldValue('NAME')).map((item) => formatListItem(item)).join(' ')
   if (block.type === 'list_item') {
     const items = getListItems(block.getFieldValue('NAME'))
     const index = getListIndex(readValue(block.getInputTargetBlock('INDEX'), 1), items.length)
@@ -1840,7 +2867,19 @@ function valueOf(block, name, fallback = 0) {
 }
 
 function pause(ms) {
-  return new Promise((resolve) => window.setTimeout(resolve, Math.max(0, ms)))
+  const duration = Math.max(0, Number(ms) || 0)
+  if (!duration || stopRequested) return Promise.resolve()
+  return new Promise((resolve) => {
+    const startedAt = window.performance.now()
+    const check = () => {
+      if (stopRequested || window.performance.now() - startedAt >= duration) {
+        resolve()
+        return
+      }
+      window.setTimeout(check, Math.min(50, duration))
+    }
+    check()
+  })
 }
 
 async function showMessage(text, mode, seconds = null) {
@@ -1951,12 +2990,29 @@ function syncTaskBlockLimit(value = task.value.blockLimit) {
   syncTaskBlockCount()
 }
 
-function canMazeDirectionPass(direction) {
+function getMazeRelativeCoordinate(direction) {
   const turnOffset = { forward: 0, left: 3, right: 1 }[direction] ?? 0
   const absoluteDirection = (task.value.direction + turnOffset) % 4
   const offsets = [[-1, 0], [0, 1], [1, 0], [0, -1]]
   const [rowOffset, colOffset] = offsets[absoluteDirection]
-  return !isMazeWall(task.value.row + rowOffset, task.value.col + colOffset)
+  return {
+    kind: 'coordinate',
+    row: task.value.row + rowOffset + 1,
+    col: task.value.col + colOffset + 1,
+  }
+}
+
+function mazeCellStyle(cell) {
+  const key = `${cell.row}:${cell.col}`
+  const color = task.value.cellColors?.[key]
+  return color && !isMazeWall(cell.row, cell.col) && !(cell.row === task.value.target.row && cell.col === task.value.target.col)
+    ? { backgroundColor: color }
+    : undefined
+}
+
+function canMazeDirectionPass(direction) {
+  const coordinate = getMazeRelativeCoordinate(direction)
+  return !isMazeWall(coordinate.row - 1, coordinate.col - 1)
 }
 
 function setMazeDimension(key, value) {
@@ -1970,7 +3026,18 @@ function setMazeDimension(key, value) {
     const [row, col] = cell.split(':').map(Number)
     return row < task.value.rows && col < task.value.cols
   })
+  task.value.cellColors = Object.fromEntries(
+    Object.entries(task.value.cellColors || {}).filter(([cell]) => {
+      const [row, col] = cell.split(':').map(Number)
+      return Number.isInteger(row) && Number.isInteger(col) && row >= 0 && col >= 0 && row < task.value.rows && col < task.value.cols
+    }),
+  )
+  syncMazeArray()
   resetMazeRun()
+}
+
+function interactiveTaskEnded() {
+  return projectTemplate.value === 'interactive' && (task.value.completed || task.value.failed)
 }
 
 function editMazeCell(row, col) {
@@ -1988,6 +3055,7 @@ function editMazeCell(row, col) {
       ? task.value.walls.filter((cell) => cell !== key)
       : [...task.value.walls, key]
   }
+  syncMazeArray()
   resetMazeRun()
 }
 
@@ -2001,8 +3069,41 @@ function resetMazeRun() {
   task.value.status = task.value.hint
 }
 
+// Restore runtime data that is intentionally excluded from project saves.
+// Persistent values remain untouched; array dimensions are preserved while
+// their cells return to the initial zero value.
+function resetNonPersistentData() {
+  variables.value = Object.fromEntries(
+    Object.entries(variables.value).map(([name, value]) => [
+      name,
+      shouldPersistData('variable', name) ? value : 0,
+    ]),
+  )
+  lists.value = Object.fromEntries(
+    Object.entries(lists.value).map(([name, items]) => {
+      const kind = isArrayName(name) ? 'array' : 'list'
+      return [name, shouldPersistData(kind, name) ? items : initialListValue(name, items)]
+    }),
+  )
+  refreshVariableFields()
+  refreshListFields()
+  syncVariableVisibilityControls()
+  ElMessage.success('未保存的数据已恢复初始值')
+}
+
 function resetMazeBoard() {
   task.value = createTaskState()
+  syncMazeArray()
+}
+
+function colorMazeCoordinate(coordinate, color) {
+  const row = Math.trunc(Number(coordinate?.row)) - 1
+  const col = Math.trunc(Number(coordinate?.col)) - 1
+  if (!Number.isInteger(row) || !Number.isInteger(col) || row < 0 || col < 0 || row >= task.value.rows || col >= task.value.cols) return false
+  if (isMazeWall(row, col)) return false
+  const key = `${row}:${col}`
+  task.value.cellColors = { ...(task.value.cellColors || {}), [key]: color }
+  return true
 }
 
 async function runMazeForward() {
@@ -2020,6 +3121,23 @@ async function runMazeForward() {
   task.value.row = nextRow
   task.value.col = nextCol
   task.value.status = '继续前进。'
+  checkTaskProgress()
+  await pause(220)
+}
+
+async function runMazeMoveToCoordinate(coordinate) {
+  if (task.value.completed || task.value.failed) return
+  const row = Math.trunc(Number(coordinate?.row)) - 1
+  const col = Math.trunc(Number(coordinate?.col)) - 1
+  task.value.moves += 1
+  if (!Number.isInteger(row) || !Number.isInteger(col) || isMazeWall(row, col)) {
+    task.value.failed = true
+    task.value.status = '目标坐标越界或是墙体，无法移动。'
+    return
+  }
+  task.value.row = row
+  task.value.col = col
+  task.value.status = '已移动到指定坐标。'
   checkTaskProgress()
   await pause(220)
 }
@@ -2043,9 +3161,28 @@ async function executeWorkspaceEvent(type, matches = () => true) {
   }
 }
 
+async function executeSubroutineCall(block) {
+  const definition = findSubroutineDefinition(block.getFieldValue('NAME'))
+  if (!definition) {
+    ElMessage.warning('请先定义要执行的收纳块')
+    return
+  }
+  if (activeSubroutineCalls.includes(definition.id)) {
+    ElMessage.warning(`收纳块“${definition.getFieldValue('NAME')}”不能递归调用自身`)
+    return
+  }
+  activeSubroutineCalls.push(definition.id)
+  try {
+    await executeSequence(definition.getInputTargetBlock('DO'))
+  } finally {
+    activeSubroutineCalls.pop()
+  }
+}
+
 async function runActorEvent(actorId, type, matches) {
   if (!workspace || running.value) return
   persistSelectedActor()
+  activeSubroutineCalls.length = 0
   const originalActorId = selectedActorId.value
   running.value = true
   stopRequested = false
@@ -2082,6 +3219,25 @@ async function runPendingCloneEvents() {
     await executeWorkspaceEvent('control_when_clone_start')
     persistSelectedActor()
   }
+}
+
+function setArrayCellValue(name, row, col, value) {
+  const items = getListItems(name)
+  if (row < 0 || col < 0 || row >= items.length || !Array.isArray(items[row]) || col >= items[row].length) return
+  if (projectTemplate.value === 'interactive' && name === MAZE_ARRAY_NAME) {
+    const key = `${row}:${col}`
+    const isStartOrTarget = (row === task.value.start.row && col === task.value.start.col)
+      || (row === task.value.target.row && col === task.value.target.col)
+    task.value.walls = Number(value) !== 0 && !isStartOrTarget
+      ? [...new Set([...task.value.walls, key])]
+      : task.value.walls.filter((cell) => cell !== key)
+    syncMazeArray()
+    resetMazeRun()
+    return
+  }
+  const next = items.map((line) => (Array.isArray(line) ? [...line] : line))
+  next[row][col] = value
+  setListItems(name, next)
 }
 
 async function executeBlock(block) {
@@ -2252,15 +3408,20 @@ async function executeBlock(block) {
     case 'control_wait':
       await pause(valueOf(block, 'SECONDS', 1) * 1000)
       break
+    case 'control_subroutine_define':
+      break
+    case 'control_subroutine_call':
+      await executeSubroutineCall(block)
+      break
     case 'control_repeat': {
       const loop = block.getInputTargetBlock('DO')
       const times = Math.min(50, Math.max(0, Math.floor(valueOf(block, 'TIMES', 2))))
-      for (let index = 0; index < times && !stopRequested; index += 1) await executeSequence(loop)
+      for (let index = 0; index < times && !stopRequested && !interactiveTaskEnded(); index += 1) await executeSequence(loop)
       break
     }
     case 'control_forever': {
       const loop = block.getInputTargetBlock('DO')
-      while (!stopRequested) {
+      while (!stopRequested && !interactiveTaskEnded()) {
         await executeSequence(loop)
         await new Promise((resolve) => window.requestAnimationFrame(resolve))
       }
@@ -2274,11 +3435,37 @@ async function executeBlock(block) {
       await executeSequence(block.getInputTargetBlock(Boolean(valueOf(block, 'CONDITION', false)) ? 'DO' : 'ELSE'))
       break
     case 'control_wait_until':
-      while (!stopRequested && !Boolean(valueOf(block, 'CONDITION', false))) await new Promise((resolve) => window.requestAnimationFrame(resolve))
+      while (!stopRequested && !interactiveTaskEnded() && !Boolean(valueOf(block, 'CONDITION', false))) await new Promise((resolve) => window.requestAnimationFrame(resolve))
       break
     case 'control_repeat_until': {
       const loop = block.getInputTargetBlock('DO')
-      while (!stopRequested && !Boolean(valueOf(block, 'CONDITION', false))) await executeSequence(loop)
+      const maxIterations = projectTemplate.value === 'interactive' ? 100 : 1000
+      let iterations = 0
+      while (
+        !stopRequested
+        && !Boolean(valueOf(block, 'CONDITION', false))
+        && !(projectTemplate.value === 'interactive' && (task.value.completed || task.value.failed))
+        && iterations < maxIterations
+      ) {
+        iterations += 1
+        await executeSequence(loop)
+      }
+      if (
+        iterations >= maxIterations
+        && !stopRequested
+        && !Boolean(valueOf(block, 'CONDITION', false))
+        && !(projectTemplate.value === 'interactive' && (task.value.completed || task.value.failed))
+      ) {
+        if (projectTemplate.value === 'interactive') {
+          task.value.failed = true
+          task.value.status = '重复执行次数过多，循环条件没有发生变化。'
+        } else {
+          stopRequested = true
+          stage.value.message = '重复执行次数过多，循环条件没有发生变化。'
+          stage.value.messageMode = 'say'
+          stage.value.messageOrigin = 'block'
+        }
+      }
       break
     }
     case 'control_stop_all':
@@ -2333,7 +3520,7 @@ async function executeBlock(block) {
       const name = block.getFieldValue('NAME')
       const items = [...getListItems(name)]
       const index = getListIndex(valueOf(block, 'INDEX', 1), items.length)
-      if (index >= 0) {
+      if (index >= 0 && isListEndpointOperationAllowed(name, 'remove', index, items.length)) {
         items.splice(index, 1)
         setListItems(name, items)
       }
@@ -2342,11 +3529,44 @@ async function executeBlock(block) {
     case 'list_delete_all':
       setListItems(block.getFieldValue('NAME'), [])
       break
+    case 'array_set_cell': {
+      const name = block.getFieldValue('NAME')
+      const row = Math.floor(Number(valueOf(block, 'ROW', 1))) - 1
+      const col = Math.floor(Number(valueOf(block, 'COL', 1))) - 1
+      setArrayCellValue(name, row, col, valueOf(block, 'VALUE', 0))
+      break
+    }
+    case 'array_set_coordinate_value': {
+      const coordinate = valueOf(block, 'COORDINATE', null)
+      const row = Math.trunc(Number(coordinate?.row)) - 1
+      const col = Math.trunc(Number(coordinate?.col)) - 1
+      if (Number.isInteger(row) && Number.isInteger(col)) setArrayCellValue(block.getFieldValue('NAME'), row, col, valueOf(block, 'VALUE', 0))
+      break
+    }
+    case 'array_fill':
+    case 'list_fill': {
+      const name = block.getFieldValue('NAME')
+      const value = valueOf(block, 'VALUE', 0)
+      if (projectTemplate.value === 'interactive' && name === MAZE_ARRAY_NAME) {
+        const isWall = Number(value) !== 0
+        task.value.walls = isWall
+          ? mazeCells.value.map(({ row, col }) => `${row}:${col}`)
+          : []
+        syncMazeArray()
+        resetMazeRun()
+        break
+      }
+      const items = getListItems(name)
+      setListItems(name, isTwoDimensionalArray(items)
+        ? items.map((row) => row.map(() => value))
+        : items.map(() => value))
+      break
+    }
     case 'list_insert': {
       const name = block.getFieldValue('NAME')
       const items = [...getListItems(name)]
       const index = getListIndex(valueOf(block, 'INDEX', 1), items.length, true)
-      if (index >= 0) {
+      if (index >= 0 && isListEndpointOperationAllowed(name, 'insert', index, items.length)) {
         items.splice(index, 0, valueOf(block, 'ITEM', ''))
         setListItems(name, items)
       }
@@ -2376,6 +3596,22 @@ async function executeBlock(block) {
       await runMazeForward()
       break
     }
+    case 'task_move_to_coordinate':
+      if (projectTemplate.value !== 'interactive') {
+        ElMessage.warning('请先用“互动任务基座”创建项目。')
+        break
+      }
+      await runMazeMoveToCoordinate(valueOf(block, 'COORDINATE', null))
+      break
+    case 'task_color_coordinate':
+      if (projectTemplate.value !== 'interactive') {
+        ElMessage.warning('请先用“互动任务基座”创建项目。')
+        break
+      }
+      if (!colorMazeCoordinate(valueOf(block, 'COORDINATE', null), block.getFieldValue('COLOR') || '#ee91bb')) {
+        task.value.status = '染色坐标越界或为墙体，未执行染色。'
+      }
+      break
     case 'task_turn':
       if (projectTemplate.value !== 'interactive') {
         ElMessage.warning('请先用“互动任务基座”创建项目。')
@@ -2424,12 +3660,14 @@ async function executeBlock(block) {
 }
 
 async function runProject() {
+  resetStepExecution()
   if (!workspace || running.value) return
   if (projectTemplate.value === 'interactive') {
     await runMazeProject()
     return
   }
   persistSelectedActor()
+  activeSubroutineCalls.length = 0
   running.value = true
   stopRequested = false
   if (projectTemplate.value === 'interactive') {
@@ -2461,17 +3699,159 @@ async function runProject() {
   }
 }
 
+function resetStepExecution() {
+  stepExecution.value = { started: false, triggerIds: [], triggerIndex: 0, nextBlockId: null, frames: [] }
+  workspace?.highlightBlock?.(null)
+}
+
+function stepFrameForControl(block, nextBlockId) {
+  const type = block.type
+  const body = block.getInputTargetBlock('DO')
+  if (type === 'control_repeat' || type === 'task_repeat_target') {
+    const limit = type === 'task_repeat_target' ? 50 : 50
+    const times = type === 'task_repeat_target'
+      ? limit
+      : Math.min(limit, Math.max(0, Math.floor(valueOf(block, 'TIMES', 2))))
+    return times > 0 && body
+      ? { kind: 'repeat', remaining: times, bodyId: body.id, returnId: nextBlockId }
+      : null
+  }
+  if (type === 'control_forever') {
+    return body ? { kind: 'forever', bodyId: body.id, returnId: nextBlockId } : null
+  }
+  if (type === 'control_repeat_until') {
+    return body && !Boolean(valueOf(block, 'CONDITION', false))
+      ? { kind: 'repeat_until', blockId: block.id, bodyId: body.id, returnId: nextBlockId }
+      : null
+  }
+  if (type === 'control_if' || type === 'control_if_else' || type === 'task_if_path' || type === 'task_if_else_path') {
+    let branch = null
+    if (type === 'control_if') branch = Boolean(valueOf(block, 'CONDITION', false)) ? block.getInputTargetBlock('DO') : null
+    if (type === 'control_if_else') branch = block.getInputTargetBlock(Boolean(valueOf(block, 'CONDITION', false)) ? 'DO' : 'ELSE')
+    if (type === 'task_if_path') branch = canMazeDirectionPass(block.getFieldValue('DIRECTION')) ? block.getInputTargetBlock('DO') : null
+    if (type === 'task_if_else_path') {
+      branch = block.getInputTargetBlock(canMazeDirectionPass(block.getFieldValue('DIRECTION')) ? 'DO' : 'ELSE')
+    }
+    return branch ? { kind: 'branch', bodyId: branch.id, returnId: nextBlockId } : null
+  }
+  return undefined
+}
+
+function stepResolveContinuation() {
+  const state = stepExecution.value
+  let block = state.nextBlockId ? workspace?.getBlockById(state.nextBlockId) : null
+  while (!block) {
+    const frame = state.frames[state.frames.length - 1]
+    if (frame) {
+      if (frame.kind === 'repeat' || frame.kind === 'forever' || frame.kind === 'repeat_until') {
+        if (frame.kind === 'repeat_until' && Boolean(valueOf(workspace?.getBlockById(frame.blockId), 'CONDITION', false))) {
+          state.frames.pop()
+          state.nextBlockId = frame.returnId
+          block = state.nextBlockId ? workspace?.getBlockById(state.nextBlockId) : null
+          continue
+        }
+        if (frame.kind === 'repeat' && frame.remaining <= 1) {
+          state.frames.pop()
+          state.nextBlockId = frame.returnId
+          block = state.nextBlockId ? workspace?.getBlockById(state.nextBlockId) : null
+          continue
+        }
+        if (frame.kind === 'repeat') frame.remaining -= 1
+        state.nextBlockId = frame.bodyId
+        block = workspace?.getBlockById(state.nextBlockId)
+        continue
+      }
+      state.frames.pop()
+      state.nextBlockId = frame.returnId
+      block = state.nextBlockId ? workspace?.getBlockById(state.nextBlockId) : null
+      continue
+    }
+    state.triggerIndex += 1
+    if (state.triggerIndex >= state.triggerIds.length) return null
+    const trigger = workspace?.getBlockById(state.triggerIds[state.triggerIndex])
+    state.nextBlockId = trigger?.getNextBlock()?.id || null
+    block = state.nextBlockId ? workspace?.getBlockById(state.nextBlockId) : null
+  }
+  return block
+}
+
+async function stepProject() {
+  if (!workspace || running.value) return
+  const state = stepExecution.value
+  if (!state.started) {
+    const triggers = workspace.getTopBlocks(true).filter((block) => block.type === 'event_when_run')
+    if (!triggers.length) {
+      ElMessage.warning('请先放入“当点击开始运行”积木，再使用步进。')
+      return
+    }
+    persistSelectedActor()
+    stopRequested = false
+    activeSubroutineCalls.length = 0
+    if (projectTemplate.value === 'interactive') {
+      task.value.cellColors = {}
+      resetMazeRun()
+    }
+    stepExecution.value = {
+      started: true,
+      triggerIds: triggers.map((block) => block.id),
+      triggerIndex: 0,
+      nextBlockId: triggers[0]?.getNextBlock()?.id || null,
+      frames: [],
+    }
+  }
+
+  while (stepExecution.value.triggerIndex < stepExecution.value.triggerIds.length) {
+    const current = stepExecution.value
+    const block = stepResolveContinuation()
+    if (!block) break
+    const nextBlockId = block.getNextBlock()?.id || null
+    running.value = true
+    stepExecuting = true
+    try {
+      workspace.highlightBlock?.(block.id)
+      const frame = stepFrameForControl(block, nextBlockId)
+      if (frame === undefined) {
+        await executeBlock(block)
+        current.nextBlockId = nextBlockId
+      } else if (frame) {
+        current.frames.push(frame)
+        current.nextBlockId = frame.bodyId
+      } else {
+        current.nextBlockId = nextBlockId
+      }
+      persistSelectedActor()
+    } catch (error) {
+      ElMessage.error(error?.message || '步进执行时出现了问题')
+      resetStepExecution()
+    } finally {
+      stepExecuting = false
+      running.value = false
+    }
+
+    if (stopRequested || (projectTemplate.value === 'interactive' && (task.value.completed || task.value.failed))) {
+      resetStepExecution()
+    }
+    return
+  }
+
+  resetStepExecution()
+  ElMessage.info('步进执行完成。')
+}
+
 function stopProject() {
   stopRequested = true
   stopAllSounds()
-  running.value = false
+  resetStepExecution()
   stage.value.message = '已停止，继续搭建你的作品吧。'
 }
 
 async function runMazeProject() {
+  resetStepExecution()
   if (!workspace || running.value) return
   running.value = true
   stopRequested = false
+  activeSubroutineCalls.length = 0
+  task.value.cellColors = {}
   resetMazeRun()
   try {
     const triggers = workspace.getTopBlocks(true).filter((block) => block.type === 'event_when_run')
@@ -2564,6 +3944,12 @@ function variableMonitorStyle(name, index) {
   return { left: `${position.x}px`, top: `${position.y}px` }
 }
 
+function variableCanvasStyle(name, index) {
+  const position = variableCanvasPositions.value[name]
+  if (position) return { left: `${position.x}px`, top: `${position.y}px` }
+  return { right: '14px', top: `${12 + index * 42}px` }
+}
+
 function listMonitorStyle(name, index) {
   const position = listMonitorPositions.value[name]
   if (position) return { left: `${position.x}px`, top: `${position.y}px` }
@@ -2573,11 +3959,29 @@ function listMonitorStyle(name, index) {
   }
 }
 
+function listCanvasStyle(name, index) {
+  const position = listCanvasPositions.value[name]
+  if (position) return { left: `${position.x}px`, top: `${position.y}px` }
+  return { right: '14px', top: `${12 + index * 110}px` }
+}
+
+function arrayCanvasStyle(name, index) {
+  const position = arrayCanvasPositions.value[name]
+  if (position) return { left: `${position.x}px`, top: `${position.y}px` }
+  return { right: '14px', top: `${14 + index * 220}px` }
+}
+
+function arrayStageStyle(name, index) {
+  const position = arrayStagePositions.value[name]
+  if (position) return { left: `${position.x}px`, top: `${position.y}px` }
+  return { right: `${10 + (index % 2) * 150}px`, top: `${50 + Math.floor(index / 2) * 180}px` }
+}
+
 function startDataMonitorDrag(event, kind, name) {
   event.preventDefault()
   event.stopPropagation()
   const monitor = event.currentTarget
-  const scene = monitor.closest('.stage-scene')
+  const scene = monitor.closest(kind.endsWith('-canvas') ? '.block-editor' : '.stage-scene')
   if (!scene) return
   const sceneRect = scene.getBoundingClientRect()
   const monitorRect = monitor.getBoundingClientRect()
@@ -2605,7 +4009,17 @@ function moveDataMonitor(event) {
   const { kind, name, originX, originY, maxX, maxY, offsetX, offsetY } = dataMonitorDragState
   const x = Math.max(0, Math.min(maxX, event.clientX - originX - offsetX))
   const y = Math.max(0, Math.min(maxY, event.clientY - originY - offsetY))
-  const positions = kind === 'list' ? listMonitorPositions : variableMonitorPositions
+  const positions = kind === 'list'
+    ? listMonitorPositions
+    : kind === 'variable-canvas'
+      ? variableCanvasPositions
+      : kind === 'list-canvas'
+        ? listCanvasPositions
+        : kind === 'array-canvas'
+      ? arrayCanvasPositions
+      : kind === 'array-stage'
+        ? arrayStagePositions
+        : variableMonitorPositions
   positions.value = { ...positions.value, [name]: { x: Math.round(x), y: Math.round(y) } }
 }
 
@@ -2814,8 +4228,21 @@ function saveProjectInfo() {
 }
 
 function projectPayload() {
-  const stageCanvas = document.querySelector('.stage-scene')
+  // Capture the live Blockly workspace before reading the payload fields.
+  // Otherwise the latest dropdown/input edits can be one save behind.
   persistSelectedActor()
+  const stageCanvas = document.querySelector('.stage-scene')
+  const savedVariables = Object.fromEntries(
+    getVariableNames().map((name) => [name, shouldPersistData('variable', name) ? (variables.value[name] ?? 0) : 0]),
+  )
+  const savedLists = Object.fromEntries(
+    Object.entries(lists.value)
+      .filter(([name]) => !isReservedListName(name))
+      .map(([name, items]) => {
+        const kind = isArrayName(name) ? 'array' : 'list'
+        return [name, shouldPersistData(kind, name) ? items : initialListValue(name, items)]
+      }),
+  )
   projectBase.value.scene = {
     actors: actors.value.map((actor) => actor.id),
     props: [],
@@ -2824,11 +4251,14 @@ function projectPayload() {
   if (projectTemplate.value === 'interactive') {
     projectBase.value.rules = { completion: 'reach-target', moveLimit: task.value.limit }
   }
+  const savedTask = { ...task.value }
+  // Maze cell colours are runtime-only annotations and must not be persisted.
+  delete savedTask.cellColors
   return {
     title: title.value.trim() || '未命名积木作品',
     description: description.value.trim(),
     workspaceJson: isStageSelected.value ? (stageWorkspaceJson.value || JSON.stringify(starterWorkspace)) : (getSelectedActor()?.workspaceJson || JSON.stringify(starterWorkspace)),
-    stageJson: JSON.stringify({ variables: variables.value, variableVisibility: variableVisibility.value, variableMonitorPositions: variableMonitorPositions.value, lists: lists.value, listVisibility: listVisibility.value, listMonitorPositions: listMonitorPositions.value, projectBase: projectBase.value, task: task.value, actors: actors.value, selectedActorId: selectedActorId.value, stageState: stageState.value, stageWorkspaceJson: stageWorkspaceJson.value, stageBackdrops: stageBackdrops.value, extensions: enabledExtensions.value, projectTags: projectTags.value, broadcastMessages: broadcastMessages.value }),
+    stageJson: JSON.stringify({ variables: savedVariables, dataPersistence: dataPersistence.value, variableVisibility: variableVisibility.value, variableMonitorPositions: variableMonitorPositions.value, variableCanvasPositions: variableCanvasPositions.value, variableDisplayLocations: variableDisplayLocations.value, lists: savedLists, listVisibility: listVisibility.value, listMonitorPositions: listMonitorPositions.value, listCanvasPositions: listCanvasPositions.value, listDisplayLocations: listDisplayLocations.value, listConfigurations: listConfigurations.value, arrayCanvasPositions: arrayCanvasPositions.value, arrayStagePositions: arrayStagePositions.value, arrayDisplayLocations: arrayDisplayLocations.value, projectBase: projectBase.value, task: savedTask, actors: actors.value, selectedActorId: selectedActorId.value, stageState: stageState.value, stageWorkspaceJson: stageWorkspaceJson.value, stageBackdrops: stageBackdrops.value, extensions: enabledExtensions.value, projectTags: projectTags.value, broadcastMessages: broadcastMessages.value }),
     thumbnailData: stageCanvas ? null : null,
     published: isPublished.value,
   }
@@ -2878,13 +4308,29 @@ function loadProjectData(project) {
   projectVisibility.value = project.published ? 'public' : 'private'
   const workspaceData = JSON.parse(project.workspaceJson || JSON.stringify(starterWorkspace))
   const stageData = JSON.parse(project.stageJson || '{}')
+  // Set the project kind before classifying saved list/array data. Older projects
+  // may store array metadata separately from the nested value itself.
+  projectBase.value = stageData.projectBase || createProjectBase('free')
+  projectTemplate.value = projectBase.value.kind || 'free'
+  dataPersistence.value = stageData.dataPersistence && typeof stageData.dataPersistence === 'object'
+    ? { ...stageData.dataPersistence }
+    : {}
   const legacyState = { ...stageData }
   delete legacyState.variables
+  delete legacyState.dataPersistence
   delete legacyState.variableVisibility
   delete legacyState.variableMonitorPositions
+  delete legacyState.variableCanvasPositions
+  delete legacyState.variableDisplayLocations
   delete legacyState.lists
   delete legacyState.listVisibility
   delete legacyState.listMonitorPositions
+  delete legacyState.listCanvasPositions
+  delete legacyState.listDisplayLocations
+  delete legacyState.listConfigurations
+  delete legacyState.arrayCanvasPositions
+  delete legacyState.arrayStagePositions
+  delete legacyState.arrayDisplayLocations
   delete legacyState.projectBase
   delete legacyState.task
   delete legacyState.actors
@@ -2896,7 +4342,44 @@ function loadProjectData(project) {
   delete legacyState.projectTags
   delete legacyState.broadcastMessages
   lists.value = Object.fromEntries(
-    Object.entries(stageData.lists || {}).map(([name, items]) => [name, Array.isArray(items) ? items : []]),
+    Object.entries(stageData.lists || {})
+      .filter(([name]) => !isReservedListName(name))
+      .map(([name, items]) => [name, Array.isArray(items) ? items : []]),
+  )
+  const savedArrayLocations = stageData.arrayDisplayLocations || {}
+  const savedArrayCanvasPositions = stageData.arrayCanvasPositions || {}
+  const savedArrayStagePositions = stageData.arrayStagePositions || {}
+  const loadedArrayNames = Array.from(new Set([
+    ...Object.keys(lists.value).filter((name) => isTwoDimensionalArray(lists.value[name])),
+    ...Object.keys(savedArrayLocations),
+    ...Object.keys(savedArrayCanvasPositions),
+    ...Object.keys(savedArrayStagePositions),
+    ...(projectTemplate.value === 'interactive' ? [MAZE_ARRAY_NAME] : []),
+  ])).filter((name) => Object.prototype.hasOwnProperty.call(lists.value, name))
+  arrayDisplayLocations.value = Object.fromEntries(
+    loadedArrayNames.map((name) => {
+      const saved = savedArrayLocations[name]
+      return [name, { stage: saved?.stage === true, canvas: saved?.canvas !== false }]
+    }),
+  )
+  lists.value = Object.fromEntries(
+    Object.entries(lists.value).map(([name, items]) => {
+      const kind = isArrayName(name) ? 'array' : 'list'
+      return [name, shouldPersistData(kind, name) ? items : initialListValue(name, items)]
+    }),
+  )
+  const savedListConfigurations = stageData.listConfigurations || {}
+  listConfigurations.value = Object.fromEntries(
+    Object.keys(lists.value)
+      .filter((name) => !isArrayName(name))
+      .map((name) => {
+        const saved = savedListConfigurations[name]
+        return [name, {
+          mode: normalizeListMode(saved?.mode),
+          dataKind: saved?.dataKind === 'record' ? 'record' : 'value',
+          fields: normalizeRecordFields(saved?.fields),
+        }]
+      }),
   )
   const savedListVisibility = stageData.listVisibility || {}
   listVisibility.value = Object.fromEntries(
@@ -2907,15 +4390,55 @@ function loadProjectData(project) {
       .filter(([, position]) => Number.isFinite(position?.x) && Number.isFinite(position?.y))
       .map(([name, position]) => [name, { x: Number(position.x), y: Number(position.y) }]),
   )
-  variables.value = { ...(stageData.variables || {}) }
+  arrayCanvasPositions.value = Object.fromEntries(
+    Object.entries(stageData.arrayCanvasPositions || {})
+      .filter(([, position]) => Number.isFinite(position?.x) && Number.isFinite(position?.y))
+      .map(([name, position]) => [name, { x: Number(position.x), y: Number(position.y) }]),
+  )
+  listCanvasPositions.value = Object.fromEntries(
+    Object.entries(stageData.listCanvasPositions || {})
+      .filter(([, position]) => Number.isFinite(position?.x) && Number.isFinite(position?.y))
+      .map(([name, position]) => [name, { x: Number(position.x), y: Number(position.y) }]),
+  )
+  listDisplayLocations.value = Object.fromEntries(
+    getEditableListNames().map((name) => {
+      const saved = stageData.listDisplayLocations?.[name]
+      const legacyVisible = stageData.listVisibility?.[name] !== false
+      return [name, { stage: saved?.stage ?? legacyVisible, canvas: saved?.canvas === true }]
+    }),
+  )
+  arrayStagePositions.value = Object.fromEntries(
+    Object.entries(stageData.arrayStagePositions || {})
+      .filter(([, position]) => Number.isFinite(position?.x) && Number.isFinite(position?.y))
+      .map(([name, position]) => [name, { x: Number(position.x), y: Number(position.y) }]),
+  )
+  variables.value = Object.fromEntries(
+    Object.entries(stageData.variables || {}).map(([name, value]) => [
+      name,
+      shouldPersistData('variable', name) ? value : 0,
+    ]),
+  )
   const savedVariableVisibility = stageData.variableVisibility || {}
+  const loadedVariableNames = getVariableNames()
   variableVisibility.value = Object.fromEntries(
-    Object.keys(variables.value).map((name) => [name, savedVariableVisibility[name] !== false]),
+    loadedVariableNames.map((name) => [name, savedVariableVisibility[name] !== false]),
   )
   variableMonitorPositions.value = Object.fromEntries(
     Object.entries(stageData.variableMonitorPositions || {})
       .filter(([, position]) => Number.isFinite(position?.x) && Number.isFinite(position?.y))
       .map(([name, position]) => [name, { x: Number(position.x), y: Number(position.y) }]),
+  )
+  variableCanvasPositions.value = Object.fromEntries(
+    Object.entries(stageData.variableCanvasPositions || {})
+      .filter(([, position]) => Number.isFinite(position?.x) && Number.isFinite(position?.y))
+      .map(([name, position]) => [name, { x: Number(position.x), y: Number(position.y) }]),
+  )
+  variableDisplayLocations.value = Object.fromEntries(
+    loadedVariableNames.map((name) => {
+      const saved = stageData.variableDisplayLocations?.[name]
+      const legacyVisible = stageData.variableVisibility?.[name] !== false
+      return [name, { stage: saved?.stage ?? legacyVisible, canvas: saved?.canvas === true }]
+    }),
   )
   broadcastMessages.value = normalizeBroadcastMessages(stageData.broadcastMessages)
   actors.value = Array.isArray(stageData.actors) && stageData.actors.length
@@ -2940,19 +4463,25 @@ function loadProjectData(project) {
   loadActorWorkspace(isStageSelected.value ? { workspaceJson: stageWorkspaceJson.value || JSON.stringify(workspaceData) } : getSelectedActor())
   refreshVariableFields()
   refreshListFields()
-  projectBase.value = stageData.projectBase || createProjectBase('free')
-  projectTemplate.value = projectBase.value.kind || 'free'
   const savedTask = stageData.task || {}
-  task.value = { ...createTaskState(), ...savedTask }
+  task.value = { ...createTaskState(), ...savedTask, cellColors: {} }
   task.value.rows = Math.max(4, Math.min(12, Number(task.value.rows) || 6))
   task.value.cols = Math.max(4, Math.min(12, Number(task.value.cols) || 8))
   task.value.walls = Array.isArray(task.value.walls) ? task.value.walls : []
+  task.value.cellColors = task.value.cellColors && typeof task.value.cellColors === 'object' && !Array.isArray(task.value.cellColors)
+    ? task.value.cellColors
+    : {}
   task.value.start = { ...createTaskState().start, ...(task.value.start || {}) }
   task.value.target = { ...createTaskState().target, ...(task.value.target || {}) }
+  syncMazeArray()
+  refreshListFields()
   syncTaskBlockLimit()
   resetMazeRun()
   activeToolboxCategory.value = projectTemplate.value === 'interactive' ? '迷宫指令' : '运动'
   refreshToolbox()
+  // refreshToolbox rebuilds the flyout asynchronously; refresh dynamic array
+  // dropdowns once more after the current workspace and flyout are up to date.
+  window.requestAnimationFrame(() => refreshListFields())
   projectTags.value = Array.isArray(stageData.projectTags) ? stageData.projectTags.slice(0, 10) : []
   syncExtensions(stageData.extensions || [])
 }
@@ -2992,16 +4521,31 @@ function startNewProject(baseKind) {
   stageBackdrops.value = backdropOptions.map((item) => ({ id: item.id, name: item.label, preset: item.id, color: item.color, data: null }))
   refreshBackdropFields()
   variables.value = {}
+  dataPersistence.value = {}
   variableVisibility.value = {}
   variableMonitorPositions.value = {}
+  variableCanvasPositions.value = {}
+  variableDisplayLocations.value = {}
   lists.value = {}
   listVisibility.value = {}
   listMonitorPositions.value = {}
+  listCanvasPositions.value = {}
+  listDisplayLocations.value = {}
+  listConfigurations.value = {}
+  arrayCanvasPositions.value = {}
+  arrayStagePositions.value = {}
+  arrayDisplayLocations.value = {}
   timerStartedAt.value = Date.now()
   task.value = createTaskState()
+  syncMazeArray()
   syncTaskBlockLimit()
   workspace.clear()
-  Blockly.serialization.workspaces.load(baseKind === 'interactive' ? taskStarterWorkspace : starterWorkspace, workspace)
+  loadingWorkspace = true
+  try {
+    Blockly.serialization.workspaces.load(baseKind === 'interactive' ? taskStarterWorkspace : starterWorkspace, workspace)
+  } finally {
+    loadingWorkspace = false
+  }
   syncTaskBlockLimit()
   activeToolboxCategory.value = baseKind === 'interactive' ? '迷宫指令' : '运动'
   refreshToolbox()
@@ -3010,10 +4554,12 @@ function startNewProject(baseKind) {
   installCostumeFields()
   installVariableFields()
   installListFields()
+  installSubroutineCallFields()
   refreshBroadcastFields()
   refreshCostumeFields()
   refreshVariableFields()
   refreshListFields()
+  refreshSubroutineCallFields()
   resetActors()
   actors.value[0].workspaceJson = JSON.stringify(Blockly.serialization.workspaces.save(workspace))
   clearSketch()
@@ -3524,6 +5070,7 @@ onBeforeUnmount(() => {
   blocklyRef.value?.removeEventListener('wheel', toolboxInteractionHandler, true)
   blocklyRef.value?.removeEventListener('pointermove', toolboxInteractionHandler, true)
   blocklyRef.value?.removeEventListener('pointerup', toolboxInteractionHandler, true)
+  blocklyRef.value?.removeEventListener('contextmenu', variableContextMenuHandler, true)
   if (workspace && workspaceChangeHandler) workspace.removeChangeListener(workspaceChangeHandler)
   clearVariableVisibilityControls()
   workspace?.dispose()
@@ -3557,7 +5104,7 @@ onBeforeUnmount(() => {
           <button v-if="projectTemplate !== 'interactive'" :class="{ active: workbenchTab === 'sound' }" type="button" role="tab" :aria-selected="workbenchTab === 'sound'" @click="selectWorkbenchTab('sound')">声音</button>
           <button v-if="projectTemplate !== 'interactive' && hasPluginControls" :class="{ active: workbenchTab === 'plugins' }" type="button" role="tab" :aria-selected="workbenchTab === 'plugins'" @click="selectWorkbenchTab('plugins')">插件</button>
         </div>
-        <div v-show="workbenchTab === 'code'" class="block-editor">
+        <div v-show="workbenchTab === 'code'" :class="['block-editor', { 'toolbox-collapsed': toolboxCollapsed }]" @pointerdown="closeVariableContextMenu" @pointermove="moveDataMonitor" @pointerup="endDataMonitorDrag" @pointercancel="endDataMonitorDrag">
           <nav class="block-category-rail" aria-label="积木分类">
             <button
               v-for="category in getActiveToolboxCategories()"
@@ -3572,7 +5119,30 @@ onBeforeUnmount(() => {
             </button>
             <button v-if="projectTemplate !== 'interactive'" class="extension-rail-button" type="button" title="添加扩展" aria-label="添加扩展" @click="showExtensionPicker = true"><el-icon><Plus /></el-icon><span>扩展</span></button>
           </nav>
+          <button class="toolbox-collapse-button" type="button" :aria-label="toolboxCollapsed ? '展开积木栏' : '收起积木栏'" :title="toolboxCollapsed ? '展开积木栏' : '收起积木栏'" @click="toggleToolboxCollapsed">
+            <el-icon><DArrowRight v-if="toolboxCollapsed" /><DArrowLeft v-else /></el-icon>
+          </button>
+          <div v-if="visibleCanvasVariables.length || visibleCanvasLists.length || visibleCanvasArrays.length" class="canvas-data-monitors" aria-label="画布数据">
+            <div v-for="([name, value], index) in visibleCanvasVariables" :key="name" class="canvas-variable-monitor" :style="variableCanvasStyle(name, index)" :aria-label="`拖动画布变量 ${name}`" :title="`拖动画布变量 ${name}`" @pointerdown="startDataMonitorDrag($event, 'variable-canvas', name)">{{ name }} <b>{{ value }}</b></div>
+            <section v-for="([name, items], index) in visibleCanvasLists" :key="name" class="canvas-list-monitor" :style="listCanvasStyle(name, index)" :aria-label="`拖动画布列表 ${name}`" :title="`拖动画布列表 ${name}`" @pointerdown="startDataMonitorDrag($event, 'list-canvas', name)">
+              <header>{{ name }}</header>
+              <ol v-if="items.length"><li v-for="(item, itemIndex) in items" :key="`${name}-canvas-${itemIndex}`"><span>{{ itemIndex + 1 }}</span>{{ formatListItem(item) }}</li></ol>
+              <p v-else>空列表</p>
+            </section>
+            <section v-for="([name, items], index) in visibleCanvasArrays" :key="name" :class="['array-canvas-monitor', { maze: name === MAZE_ARRAY_NAME }]" :style="arrayCanvasStyle(name, index)" :aria-label="`拖动数组 ${name}`" :title="`拖动数组 ${name}`" @pointerdown="startDataMonitorDrag($event, 'array-canvas', name)">
+              <header><strong>{{ name }}<template v-if="name === MAZE_ARRAY_NAME"> g</template></strong><span>{{ items.length }} × {{ items[0]?.length || 0 }}</span></header>
+              <div class="array-canvas-grid" :style="{ gridTemplateColumns: `repeat(${Math.max(1, items[0]?.length || 0)}, minmax(18px, 1fr))` }">
+                <template v-for="(row, rowIndex) in items" :key="`${name}-row-${rowIndex}`">
+                  <span v-for="(cell, colIndex) in row" :key="`${name}-cell-${rowIndex}-${colIndex}`" :class="['array-canvas-value', { wall: name === MAZE_ARRAY_NAME && Number(cell) === 1 }]">{{ cell }}</span>
+                </template>
+              </div>
+              <small v-if="name === MAZE_ARRAY_NAME">0 可通行 · 1 墙体</small>
+            </section>
+          </div>
           <div ref="blocklyRef" class="blockly-host"></div>
+          <div v-if="variableContextMenu" class="variable-context-menu" :style="{ left: `${variableContextMenu.x}px`, top: `${variableContextMenu.y}px` }" role="menu" @pointerdown.stop>
+            <button type="button" role="menuitem" @click="deleteVariableFromContextMenu">删除变量“{{ variableContextMenu.name }}”</button>
+          </div>
         </div>
         <div v-show="workbenchTab === 'costume'" class="asset-editor costume-editor">
           <div class="costume-editor-heading"><div><span class="editor-sticker">{{ isStageSelected ? 'BACKDROP LAB' : 'COSTUME LAB' }}</span><h2>{{ isStageSelected ? '背景绘制' : '角色绘制' }}</h2></div><label>{{ isStageSelected ? '背景名称' : '造型名称' }} <input :value="(isStageSelected ? activeBackdrop : activeCostume)?.name || ''" maxlength="30" @input="renameActiveAsset($event.target.value)" @change="renameActiveAsset($event.target.value, true)" /></label></div>
@@ -3637,12 +5207,12 @@ onBeforeUnmount(() => {
           <div v-if="projectTemplate !== 'interactive'" class="stage-stars" aria-hidden="true">+ * +</div>
           <div v-if="projectTemplate !== 'interactive' && stage.message && stage.messageOrigin === 'block'" :class="['speech-bubble', { thought: stage.messageMode === 'think' }]">{{ stage.message }}</div>
           <div v-if="projectTemplate === 'interactive'" :class="['maze-board', { editing: !running }]" :style="mazeGridStyle" aria-label="迷宫地图">
-            <button v-for="cell in mazeCells" :key="`${cell.row}-${cell.col}`" type="button" :disabled="running" :class="['maze-cell', { wall: isMazeWall(cell.row, cell.col), goal: cell.row === task.target.row && cell.col === task.target.col, player: cell.row === task.row && cell.col === task.col }]" :aria-label="`第 ${cell.row + 1} 行第 ${cell.col + 1} 列`" @click.stop="editMazeCell(cell.row, cell.col)">
+            <button v-for="cell in mazeCells" :key="`${cell.row}-${cell.col}`" type="button" :disabled="running" :class="['maze-cell', { wall: isMazeWall(cell.row, cell.col), goal: cell.row === task.target.row && cell.col === task.target.col, player: cell.row === task.row && cell.col === task.col }]" :style="mazeCellStyle(cell)" :aria-label="`第 ${cell.row + 1} 行第 ${cell.col + 1} 列`" @click.stop="editMazeCell(cell.row, cell.col)">
               <span v-if="cell.row === task.target.row && cell.col === task.target.col && !(cell.row === task.row && cell.col === task.col)" aria-hidden="true">★</span>
               <span v-if="cell.row === task.row && cell.col === task.col" class="maze-player" :style="{ transform: `rotate(${(task.direction - 1) * 90}deg)` }" aria-label="当前角色">➤</span>
             </button>
           </div>
-          <div v-if="visibleVariables.length || visibleLists.length" class="data-monitors">
+          <div v-if="visibleVariables.length || visibleLists.length || visibleStageArrays.length" class="data-monitors">
             <div v-if="visibleVariables.length" class="variable-monitors" aria-label="画布变量">
               <div v-for="([name, value], index) in visibleVariables" :key="name" class="variable-monitor" :style="variableMonitorStyle(name, index)" :aria-label="`拖动变量 ${name}`" :title="`拖动变量 ${name}`" @pointerdown="startDataMonitorDrag($event, 'variable', name)">{{ name }} <b>{{ value }}</b></div>
             </div>
@@ -3653,22 +5223,34 @@ onBeforeUnmount(() => {
                   <li v-for="(item, index) in items" :key="`${name}-${index}`">
                     <span>{{ index + 1 }}</span>
                     <div class="list-monitor-entry">
-                      <input :ref="(element) => setListItemInputRef(element, name, index)" :value="item" :aria-label="`${name} 的第 ${index + 1} 项`" @pointerdown.stop @input="updateListItem(name, index, $event.target.value)" @keydown.enter.prevent="appendListItem(name)" @keydown.esc="$event.currentTarget.blur()" />
-                      <button type="button" :title="`删除第 ${index + 1} 项`" :aria-label="`删除 ${name} 的第 ${index + 1} 项`" @pointerdown.stop @click.stop="removeListItem(name, index)">×</button>
+                      <input :ref="(element) => setListItemInputRef(element, name, index)" :value="formatListItem(item)" :readonly="isStructuredListItem(item) || (projectTemplate === 'interactive' && name === MAZE_ARRAY_NAME)" :aria-label="`${name} 的第 ${index + 1} 项`" @pointerdown.stop @input="updateListItem(name, index, $event.target.value)" @keydown.enter.prevent="appendListItem(name)" @keydown.esc="$event.currentTarget.blur()" />
+                      <button type="button" :disabled="!canRemoveListItem(name, index)" :title="`删除第 ${index + 1} 项`" :aria-label="`删除 ${name} 的第 ${index + 1} 项`" @pointerdown.stop @click.stop="removeListItem(name, index)">×</button>
                     </div>
                   </li>
                 </ol>
                 <p v-else>空列表</p>
-                <footer><button type="button" title="快速添加列表项" :aria-label="`向列表 ${name} 快速添加一项`" @pointerdown.stop @click.stop="appendListItem(name)">+</button><span>长度 {{ items.length }}</span></footer>
+                <footer><button type="button" :disabled="projectTemplate === 'interactive' && name === MAZE_ARRAY_NAME" title="快速添加列表项" :aria-label="`向列表 ${name} 快速添加一项`" @pointerdown.stop @click.stop="appendListItem(name)">+</button><span>长度 {{ items.length }}</span></footer>
+              </section>
+            </div>
+            <div v-if="visibleStageArrays.length" class="array-stage-monitors" aria-label="舞台数组">
+              <section v-for="([name, items], index) in visibleStageArrays" :key="name" class="array-stage-monitor" :style="arrayStageStyle(name, index)" :aria-label="`拖动舞台数组 ${name}`" :title="`拖动舞台数组 ${name}`" @pointerdown="startDataMonitorDrag($event, 'array-stage', name)">
+                <header><strong>{{ name }}</strong><span>{{ items.length }} × {{ items[0]?.length || 0 }}</span></header>
+                <div class="array-stage-grid" :style="{ gridTemplateColumns: `repeat(${Math.max(1, items[0]?.length || 0)}, minmax(14px, 1fr))` }">
+                  <template v-for="(row, rowIndex) in items" :key="`${name}-stage-row-${rowIndex}`">
+                    <span v-for="(cell, colIndex) in row" :key="`${name}-stage-cell-${rowIndex}-${colIndex}`" :class="['array-stage-value', { wall: name === MAZE_ARRAY_NAME && Number(cell) === 1 }]">{{ cell }}</span>
+                  </template>
+                </div>
               </section>
             </div>
           </div>
-          <div v-if="projectTemplate === 'interactive'" :class="['task-status', { completed: task.completed, failed: task.failed }]">{{ task.label }} · 前进 {{ task.moves }} / {{ task.limit }} 次<br /><small>积木 {{ taskBlockCount }} / {{ task.blockLimit }} · {{ task.status }}</small></div>
           <div v-if="projectTemplate !== 'interactive'" v-for="actor in actors" :key="actor.id" :class="['default-sprite', actor.state.costume, { custom: actor.state.costumeData, selected: actor.id === selectedActorId, gliding: gliding && actor.id === selectedActorId }]" :style="{ left: `calc(50% + ${actor.state.x}px)`, top: `calc(58% + ${actor.state.y}px)`, transform: `translate(-50%, -50%) rotate(${actor.state.rotation - 90}deg)`, background: actor.state.costumeData ? 'transparent' : actor.state.color, filter: `hue-rotate(${actor.state.effectColor || 0}deg)`, width: `${spriteSizePixels(actor.state.size)}px`, height: `${spriteSizePixels(actor.state.size)}px`, visibility: actor.state.visible ? 'visible' : 'hidden' }" @pointerdown="startActorDrag($event, actor.id)" @click.stop="handleActorClick(actor.id)"><img v-if="actor.state.costumeData" :src="actor.state.costumeData" alt="" /><template v-else>✦</template></div>
         </div>
+        <div v-if="projectTemplate === 'interactive'" :class="['task-status', { completed: task.completed, failed: task.failed }]">{{ task.label }} · 前进 {{ task.moves }} / {{ task.limit }} 次<br /><small>积木 {{ taskBlockCount }} / {{ task.blockLimit }} · {{ task.status }}</small></div>
         <div class="runner-actions">
           <el-button class="run-button" :loading="running" @click="runProject"><el-icon><VideoPlay /></el-icon>开始运行</el-button>
+          <el-button class="step-button" :disabled="running" title="每次执行一个当前积木" @click="stepProject"><el-icon><VideoPlay /></el-icon>步进</el-button>
           <el-button class="stop-button" :disabled="!running" @click="stopProject"><el-icon><VideoPause /></el-icon>停止</el-button>
+          <el-button class="reset-data-button" :disabled="running" title="恢复未保存数据的初始值" @click="resetNonPersistentData"><el-icon><RefreshRight /></el-icon>重置数据</el-button>
         </div>
         <section v-if="projectTemplate === 'interactive'" class="task-config" aria-label="任务规则">
           <div><strong>关卡设计</strong><span>点击地图配置你的规则</span></div>
@@ -3708,6 +5290,49 @@ onBeforeUnmount(() => {
       </aside>
     </section>
 
+    <div v-if="showListCreator" class="base-dialog-backdrop" role="presentation" @click.self="closeListCreator">
+      <section class="array-create-dialog list-create-dialog" role="dialog" aria-modal="true" aria-label="新建列表">
+        <div class="base-dialog-heading"><div><span class="editor-sticker">LIST LAB</span><h2>新建列表</h2></div><button type="button" aria-label="关闭" @click="closeListCreator">×</button></div>
+        <form class="array-create-form" @submit.prevent="confirmListCreation">
+          <label>列表名称<input v-model.trim="listDraft.name" maxlength="40" autofocus placeholder="例如：待办事项" /></label>
+          <fieldset class="list-advanced-settings">
+            <legend>高级设置</legend>
+            <label><input v-model="listDraft.mode" type="radio" value="normal" />普通列表</label>
+            <label><input v-model="listDraft.mode" type="radio" value="stack" />栈：只允许从末端进出</label>
+            <label><input v-model="listDraft.mode" type="radio" value="queue" />队列：末端进入，首端出队</label>
+          </fieldset>
+          <fieldset class="list-advanced-settings">
+            <legend>数据结构</legend>
+            <label><input v-model="listDraft.dataKind" type="radio" value="value" />单个值</label>
+            <label><input v-model="listDraft.dataKind" type="radio" value="record" />自定义数据对象</label>
+            <div v-if="listDraft.dataKind === 'record'" class="record-field-editor">
+              <div v-for="(recordField, index) in listDraft.fields" :key="index" class="record-field-row">
+                <input v-model.trim="recordField.name" maxlength="24" :placeholder="`字段${index + 1}`" />
+                <select v-model="recordField.type"><option value="number">数字</option><option value="text">文本</option><option value="boolean">布尔值</option></select>
+                <button type="button" :disabled="listDraft.fields.length === 1" :aria-label="`删除字段 ${index + 1}`" @click="removeListDraftField(index)">×</button>
+              </div>
+              <button class="record-add-field" type="button" :disabled="listDraft.fields.length >= 12" @click="addListDraftField">+ 添加字段</button>
+            </div>
+          </fieldset>
+          <p v-if="listCreationError" class="array-create-error">{{ listCreationError }}</p>
+          <div class="project-info-actions"><button type="button" @click="closeListCreator">取消</button><button class="confirm" type="submit">创建列表</button></div>
+        </form>
+      </section>
+    </div>
+    <div v-if="showArrayCreator" class="base-dialog-backdrop" role="presentation" @click.self="closeArrayCreator">
+      <section class="array-create-dialog" role="dialog" aria-modal="true" aria-label="新建数组">
+        <div class="base-dialog-heading"><div><span class="editor-sticker">ARRAY LAB</span><h2>新建数组</h2></div><button type="button" aria-label="关闭" @click="closeArrayCreator">×</button></div>
+        <form class="array-create-form" @submit.prevent="confirmArrayCreation">
+          <label>数组名称<input v-model.trim="arrayDraft.name" maxlength="40" autofocus placeholder="例如：地图数据" /></label>
+          <div class="array-dimension-fields">
+            <label>行数<input v-model.number="arrayDraft.rows" type="number" min="1" max="100" step="1" /></label>
+            <label>列数<input v-model.number="arrayDraft.cols" type="number" min="1" max="100" step="1" /></label>
+          </div>
+          <p v-if="arrayCreationError" class="array-create-error">{{ arrayCreationError }}</p>
+          <div class="project-info-actions"><button type="button" @click="closeArrayCreator">取消</button><button class="confirm" type="submit">创建数组</button></div>
+        </form>
+      </section>
+    </div>
     <div v-if="showTemplatePicker" class="base-dialog-backdrop" role="presentation" @click.self="showTemplatePicker = false">
       <section class="base-dialog" role="dialog" aria-modal="true" aria-label="选择项目基座">
         <div class="base-dialog-heading"><div><span class="editor-sticker">PROJECT BASE</span><h2>选择你的项目基座</h2></div><button type="button" aria-label="关闭" @click="showTemplatePicker = false">×</button></div>
@@ -3742,33 +5367,35 @@ onBeforeUnmount(() => {
 .workshop-header { display:flex; height:66px; align-items:center; gap:14px; padding:0 clamp(14px,2.5vw,38px); border-bottom:2px solid var(--ink); background:#f0eff4; box-shadow:0 3px 0 rgb(64 57 96 / 14%); }
 .icon-button { display:grid; width:37px; height:37px; place-items:center; border:1px solid var(--ink); border-radius:5px; background:var(--yellow); color:var(--ink); cursor:pointer; box-shadow:2px 3px 0 rgb(61 53 100 / 24%); }.icon-button:hover { transform:translate(-1px,-1px); }
 .project-title { display:flex; min-width:0; align-items:center; gap:11px; }.header-sticker { flex:0 0 auto; padding:5px 7px; border:1px solid var(--ink); border-radius:4px; background:var(--yellow); box-shadow:2px 2px 0 rgb(61 53 100 / 25%); font-family:'Trebuchet MS',sans-serif; font-size:10px; font-weight:900; transform:rotate(-2deg); }.project-title strong { overflow:hidden; max-width:min(30vw,360px); font-family:'Trebuchet MS','Microsoft YaHei',sans-serif; font-size:20px; font-weight:900; text-overflow:ellipsis; white-space:nowrap; }.edit-project-button { display:grid; width:29px; height:29px; flex:0 0 auto; place-items:center; border:1px solid rgb(61 53 100 / 32%); border-radius:4px; background:#fff; color:var(--purple); cursor:pointer; }.edit-project-button:hover { border-color:var(--purple); background:#f0edff; }.header-actions { display:flex; align-items:center; gap:8px; margin-left:auto; }.header-actions :deep(.el-button),.runner-actions :deep(.el-button) { display:inline-flex; align-items:center; gap:6px; border-radius:5px; font-weight:800; white-space:nowrap; word-break:keep-all; }.secondary-action { border:1px solid var(--ink)!important; background:#fff!important; color:var(--ink)!important; box-shadow:2px 3px 0 rgb(61 53 100 / 18%); }.primary-action,.run-button { border:1px solid #4e4473!important; background:var(--purple)!important; box-shadow:3px 4px 0 rgb(61 53 100 / 28%); color:#fff!important; }.primary-action:hover:not(:disabled),.run-button:hover:not(:disabled) { transform:translate(-2px,-2px); box-shadow:5px 6px 0 rgb(61 53 100 / 28%); }
-.workshop-layout { display:grid; grid-template-columns:minmax(420px,1fr) minmax(500px,560px); min-height:calc(100vh - 130px); }
+.workshop-layout { display:grid; grid-template-columns:minmax(420px,1fr) minmax(390px,460px); min-height:calc(100vh - 130px); }
 .workspace-panel { display:grid; grid-template-rows:44px minmax(0,1fr); min-width:0; min-height:640px; padding:14px; background-image:radial-gradient(rgb(119 107 180 / 18%) 1px,transparent 1px); background-size:16px 16px; }.workbench-tabs { display:flex; align-items:end; gap:5px; padding-left:8px; }.workbench-tabs button { min-width:76px; padding:10px 16px; border:1px solid var(--ink); border-bottom:0; border-radius:7px 7px 0 0; background:#f9f8fc; color:#6f6685; font-family:'Trebuchet MS','Microsoft YaHei',sans-serif; font-size:14px; font-weight:900; cursor:pointer; white-space:nowrap; }.workbench-tabs button.active { position:relative; z-index:1; background:#e5e2f2; color:var(--ink); box-shadow:3px 0 0 rgb(64 57 96 / 16%); }.workbench-tabs button:focus-visible,.asset-button:focus-visible,.color-swatches button:focus-visible { outline:3px solid var(--pink); outline-offset:2px; }.blockly-host { width:100%; height:100%; min-height:610px; overflow:hidden; border:2px solid var(--ink); border-radius:7px; background:#f9f8fc; box-shadow:5px 6px 0 rgb(64 57 96 / 45%); }.blockly-host :deep(.blocklySvg) { width:100% !important; height:100% !important; }.asset-editor { display:grid; align-content:center; justify-items:start; min-height:610px; padding:clamp(28px,7vw,82px); border:2px solid var(--ink); border-radius:7px; background:linear-gradient(135deg,#fdfcff 0%,#e5e2f2 58%,#d9eeee 100%); box-shadow:5px 6px 0 rgb(64 57 96 / 45%); }.asset-editor h2 { margin:14px 0 0; font-family:'Trebuchet MS','Microsoft YaHei',sans-serif; font-size:clamp(23px,3vw,34px); font-weight:900; }.asset-editor p { max-width:420px; margin:12px 0 0; color:#625878; line-height:1.7; }.editor-sticker { padding:5px 8px; border:1px solid var(--ink); border-radius:4px; background:var(--yellow); box-shadow:2px 3px 0 rgb(64 57 96 / 20%); font-family:'Trebuchet MS',sans-serif; font-size:11px; font-weight:900; transform:rotate(-3deg); }.color-swatches { display:flex; flex-wrap:wrap; gap:13px; margin-top:27px; }.color-swatches button { width:46px; height:46px; border:2px solid var(--ink); border-radius:50%; box-shadow:3px 4px 0 rgb(64 57 96 / 22%); cursor:pointer; }.color-swatches button.selected { outline:3px solid #fdfcff; outline-offset:-7px; }.asset-button { margin-top:26px; padding:10px 14px; border:1px solid #4e4473; border-radius:5px; background:var(--purple); box-shadow:3px 4px 0 rgb(64 57 96 / 28%); color:#fff; font-weight:900; cursor:pointer; white-space:nowrap; }.asset-button:hover { transform:translate(-2px,-2px); box-shadow:5px 6px 0 rgb(64 57 96 / 28%); }
-.stage-panel { display:grid; align-content:start; gap:11px; min-width:0; padding:15px; border-left:1px solid rgb(61 53 100 / 30%); background:#fffdf7; }.stage-toolbar { display:flex; align-items:center; justify-content:space-between; font-family:'Trebuchet MS','Microsoft YaHei',sans-serif; font-weight:900; }.live-dot { padding:3px 6px; border:1px solid var(--ink); border-radius:3px; background:var(--mint); font-size:10px; transform:rotate(2deg); }.stage-scene { position:relative; aspect-ratio:4 / 3; overflow:hidden; border:2px solid var(--ink); border-radius:7px; background:#fff; box-shadow:4px 5px 0 rgb(61 53 100 / 34%); }.stage-scene::after { position:absolute; right:-20px; bottom:-45px; width:150px; height:150px; border:2px dashed rgb(61 53 100 / 32%); border-radius:50%; content:''; }.stage-stars { position:absolute; top:15px; left:17px; color:#d77ba5; font-size:23px; font-weight:900; letter-spacing:15px; }.speech-bubble { position:absolute; z-index:2; top:23px; right:16px; max-width:145px; padding:8px 10px; border:1px solid var(--ink); border-radius:5px; background:#fff; box-shadow:2px 3px 0 rgb(61 53 100 / 20%); font-size:12px; font-weight:700; line-height:1.45; }.default-sprite { position:absolute; z-index:2; display:grid; width:65px; height:65px; place-items:center; border:2px solid var(--ink); border-radius:47% 53% 44% 56%; box-shadow:4px 5px 0 rgb(61 53 100 / 25%); color:#fff; font-size:31px; transition:left .22s ease,top .22s ease,transform .22s ease,background .2s ease; }.runner-actions { display:flex; gap:8px; }.run-button { flex:1; }.stop-button { border:1px solid var(--ink)!important; background:#fff!important; color:var(--ink)!important; }.sketch-panel { padding:10px; border:1px solid rgb(61 53 100 / 32%); border-radius:6px; background:#f7f5ff; }.sketch-panel > div { display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:12px; }.sketch-panel button { border:0; background:transparent; color:var(--purple); font-size:12px; font-weight:800; cursor:pointer; }.sketch-panel canvas { width:100%; height:104px; margin-top:8px; border:1px dashed rgb(61 53 100 / 45%); border-radius:4px; background:#fff; touch-action:none; cursor:crosshair; }.sketch-panel small { display:flex; align-items:center; gap:4px; margin-top:5px; color:#71658f; font-size:11px; }.description-field { display:grid; gap:6px; color:#625878; font-size:12px; font-weight:800; }.description-field textarea { min-height:58px; resize:vertical; padding:8px; border:1px solid rgb(61 53 100 / 38%); border-radius:5px; color:var(--ink); font:inherit; line-height:1.45; }.description-field textarea:focus { outline:2px solid var(--pink); outline-offset:1px; }
+.stage-panel { display:grid; align-content:start; gap:11px; min-width:0; padding:15px; border-left:1px solid rgb(61 53 100 / 30%); background:#fffdf7; }.stage-toolbar { display:flex; align-items:center; justify-content:space-between; font-family:'Trebuchet MS','Microsoft YaHei',sans-serif; font-weight:900; }.live-dot { padding:3px 6px; border:1px solid var(--ink); border-radius:3px; background:var(--mint); font-size:10px; transform:rotate(2deg); }.stage-scene { position:relative; aspect-ratio:4 / 3; overflow:hidden; border:2px solid var(--ink); border-radius:7px; background:#fff; box-shadow:4px 5px 0 rgb(61 53 100 / 34%); }.stage-scene::after { position:absolute; right:-20px; bottom:-45px; width:150px; height:150px; border:2px dashed rgb(61 53 100 / 32%); border-radius:50%; content:''; }.stage-stars { position:absolute; top:15px; left:17px; color:#d77ba5; font-size:23px; font-weight:900; letter-spacing:15px; }.speech-bubble { position:absolute; z-index:2; top:23px; right:16px; max-width:145px; padding:8px 10px; border:1px solid var(--ink); border-radius:5px; background:#fff; box-shadow:2px 3px 0 rgb(61 53 100 / 20%); font-size:12px; font-weight:700; line-height:1.45; }.default-sprite { position:absolute; z-index:2; display:grid; width:65px; height:65px; place-items:center; border:2px solid var(--ink); border-radius:47% 53% 44% 56%; box-shadow:4px 5px 0 rgb(61 53 100 / 25%); color:#fff; font-size:31px; transition:left .22s ease,top .22s ease,transform .22s ease,background .2s ease; }.runner-actions { display:flex; gap:8px; }.run-button { flex:1; }.step-button { border:1px solid var(--ink)!important; background:#fff!important; color:var(--ink)!important; }.stop-button { border:1px solid var(--ink)!important; background:#fff!important; color:var(--ink)!important; }.sketch-panel { padding:10px; border:1px solid rgb(61 53 100 / 32%); border-radius:6px; background:#f7f5ff; }.sketch-panel > div { display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:12px; }.sketch-panel button { border:0; background:transparent; color:var(--purple); font-size:12px; font-weight:800; cursor:pointer; }.sketch-panel canvas { width:100%; height:104px; margin-top:8px; border:1px dashed rgb(61 53 100 / 45%); border-radius:4px; background:#fff; touch-action:none; cursor:crosshair; }.sketch-panel small { display:flex; align-items:center; gap:4px; margin-top:5px; color:#71658f; font-size:11px; }.description-field { display:grid; gap:6px; color:#625878; font-size:12px; font-weight:800; }.description-field textarea { min-height:58px; resize:vertical; padding:8px; border:1px solid rgb(61 53 100 / 38%); border-radius:5px; color:var(--ink); font:inherit; line-height:1.45; }.description-field textarea:focus { outline:2px solid var(--pink); outline-offset:1px; }
 .speech-bubble.thought { border-radius:18px; }.speech-bubble.thought::after,.speech-bubble.thought::before { position:absolute; right:22px; border:1px solid var(--ink); border-radius:50%; background:#fff; content:''; }.speech-bubble.thought::after { bottom:-10px; width:8px; height:8px; }.speech-bubble.thought::before { right:13px; bottom:-17px; width:5px; height:5px; }
 .variable-monitors { position:absolute; z-index:4; top:62px; left:12px; display:grid; max-width:calc(100% - 24px); gap:6px; }.variable-monitor { position:relative; min-width:72px; padding:4px 7px; border:1px solid var(--ink); border-radius:4px; background:var(--pink); box-shadow:2px 2px 0 rgb(64 57 96 / 22%); color:#fff; font-size:11px; font-weight:800; }.variable-monitor b { float:right; margin-left:8px; color:#fff8df; }
 .blockly-host :deep(.blocklyToolboxDiv) { border-right:1px solid rgb(61 53 100 / 22%); background:#fff; }.blockly-host :deep(.blocklyTreeRow) { height:43px; margin:3px 5px; border-radius:5px; }.blockly-host :deep(.blocklyTreeLabel) { color:var(--ink); font-family:'Microsoft YaHei',sans-serif; font-size:13px; font-weight:800; }.blockly-host :deep(.blocklyTreeSelected) { background:#ece9ff!important; box-shadow:2px 2px 0 rgb(61 53 100 / 15%); }.blockly-host :deep(.blocklyFlyoutBackground) { fill:#fff!important; fill-opacity:1!important; }.blockly-host :deep(.blocklyFlyout) { border-right:1px solid rgb(61 53 100 / 18%); }
 .asset-editor { display:block; min-height:610px; padding:clamp(28px,5vw,64px); background:linear-gradient(135deg,#fff 0%,#e8e4ff 58%,#d3f2f2 100%); }.asset-editor-heading h2 { margin:14px 0 0; }.asset-editor-heading p { margin:10px 0 0; }.costume-studio { display:grid; grid-template-columns:minmax(210px,.85fr) minmax(240px,1fr); gap:24px; width:min(700px,100%); margin-top:28px; }.costume-preview { display:grid; min-height:260px; place-items:center; border:2px solid var(--ink); border-radius:7px; box-shadow:4px 5px 0 rgb(61 53 100 / 28%); }.costume-sprite { display:grid; width:110px; height:110px; place-items:center; border:3px solid var(--ink); border-radius:47% 53% 44% 56%; box-shadow:6px 7px 0 rgb(61 53 100 / 23%); color:#fff; font-size:54px; }.costume-sprite.bot,.default-sprite.bot,.mini-sprite.bot { border-radius:15px; }.costume-sprite.dot,.default-sprite.dot,.mini-sprite.dot { border-radius:50%; }.costume-controls { display:grid; align-content:start; gap:12px; }.costume-controls strong { margin-top:2px; font-size:14px; }.costume-controls .color-swatches { margin:0 0 10px; }.costume-options,.sound-studio { display:flex; flex-wrap:wrap; gap:8px; }.costume-options button,.sound-studio button { display:inline-flex; align-items:center; gap:6px; padding:9px 11px; border:1px solid var(--ink); border-radius:5px; background:#fff; color:var(--ink); box-shadow:2px 3px 0 rgb(61 53 100 / 17%); font-weight:800; white-space:nowrap; cursor:pointer; }.costume-options button.selected,.sound-studio button.selected { background:#e8e4ff; box-shadow:3px 4px 0 rgb(61 53 100 / 28%); }.sound-studio { margin-top:30px; }.volume-control { display:flex; width:min(460px,100%); align-items:center; gap:12px; margin-top:25px; color:#625878; font-size:14px; font-weight:900; }.volume-control input { flex:1; accent-color:var(--purple); }.volume-control output { min-width:40px; color:var(--ink); }.asset-button { display:inline-flex; align-items:center; gap:6px; }
 .costume-editor { display:grid; grid-template-rows:auto auto minmax(0,1fr) auto; gap:12px; min-height:610px; padding:20px; background:#f7f9ff; }.costume-editor-heading,.costume-commandbar { display:flex; align-items:center; gap:12px; }.costume-editor-heading { justify-content:space-between; }.costume-editor-heading h2 { margin:9px 0 0; font-size:24px; }.costume-editor-heading label,.costume-commandbar label { display:flex; align-items:center; gap:7px; color:#625878; font-size:12px; font-weight:800; }.costume-editor-heading input { width:130px; padding:7px 9px; border:1px solid rgb(61 53 100 / 26%); border-radius:5px; color:var(--ink); font:inherit; }.costume-commandbar { min-height:46px; padding:7px 10px; border:1px solid rgb(61 53 100 / 22%); border-radius:6px; background:#fff; }.costume-commandbar input[type='color'] { width:30px; height:27px; padding:1px; border:1px solid rgb(61 53 100 / 25%); border-radius:4px; background:#fff; cursor:pointer; }.costume-commandbar input[type='range'] { width:104px; accent-color:var(--purple); }.costume-commandbar output { min-width:18px; color:var(--ink); text-align:right; }.costume-command-spacer { flex:1; }.costume-commandbar button,.costume-tools button,.use-sprite-colour { display:grid; width:31px; height:31px; place-items:center; border:1px solid rgb(61 53 100 / 26%); border-radius:4px; background:#fff; color:var(--ink); cursor:pointer; }.costume-commandbar button:hover:not(:disabled),.costume-tools button:hover,.use-sprite-colour:hover { border-color:var(--purple); background:#f0edff; }.costume-commandbar button:disabled { cursor:not-allowed; opacity:.38; }.redo-icon { transform:scaleX(-1); }.costume-workspace { display:grid; min-height:0; grid-template-columns:48px minmax(0,1fr) 44px; overflow:hidden; border:1px solid rgb(61 53 100 / 25%); border-radius:6px; background:#fff; }.costume-tools { display:flex; flex-direction:column; align-items:center; gap:8px; padding:9px 7px; border-right:1px solid rgb(61 53 100 / 18%); background:#fbfbff; }.costume-tools button { flex:0 0 32px; }.costume-tools button.active { border-color:#4d8df0; background:#e3efff; color:#357ce5; box-shadow:inset 0 0 0 1px #77aaf5; }.costume-tool-mark { position:relative; display:block; width:18px; height:18px; }.costume-tool-mark.eraser { width:14px; height:10px; border:2px solid currentColor; border-radius:2px; transform:rotate(-42deg); }.costume-tool-mark.line::before { position:absolute; top:8px; left:-1px; width:20px; border-top:2px solid currentColor; content:''; transform:rotate(-45deg); }.costume-tool-mark.circle { width:17px; height:17px; border:2px solid currentColor; border-radius:50%; }.costume-tool-mark.rectangle { width:17px; height:14px; border:2px solid currentColor; border-radius:1px; }.costume-canvas-shell { min-width:0; overflow:auto; padding:18px; background-color:#fff; background-image:linear-gradient(45deg,#edf1f7 25%,transparent 25%),linear-gradient(-45deg,#edf1f7 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#edf1f7 75%),linear-gradient(-45deg,transparent 75%,#edf1f7 75%); background-position:0 0,0 10px,10px -10px,-10px 0; background-size:20px 20px; }.costume-canvas { display:block; width:min(100%,560px); height:auto; margin:auto; box-shadow:0 0 0 1px rgb(61 53 100 / 10%); touch-action:none; cursor:crosshair; }.costume-palette { display:flex; align-content:start; flex-direction:column; align-items:center; gap:8px; padding:9px 6px; border-left:1px solid rgb(61 53 100 / 18%); background:#fbfbff; }.costume-palette strong { margin:1px 0 3px; color:#756a94; font-size:10px; }.costume-palette > button:not(.use-sprite-colour) { width:22px; height:22px; border:2px solid #fff; border-radius:50%; box-shadow:0 0 0 1px rgb(61 53 100 / 24%); cursor:pointer; }.costume-palette > button.selected { outline:2px solid var(--ink); outline-offset:2px; }.use-sprite-colour { margin-top:5px; color:var(--purple); }.costume-footer { display:flex; justify-content:space-between; color:#756a94; font-size:11px; font-weight:700; }.default-sprite.custom { overflow:hidden; border:0; border-radius:0; box-shadow:none; }.default-sprite.custom img,.mini-sprite.custom img { display:block; width:100%; height:100%; object-fit:contain; }.mini-sprite.custom { overflow:hidden; border:0; border-radius:0; }
 .sprite-inspector { padding:11px; border:1px solid rgb(61 53 100 / 30%); border-radius:6px; background:#fff; }.inspector-heading,.sprite-visibility { display:flex; align-items:center; }.inspector-heading { justify-content:space-between; gap:10px; font-weight:900; }.inspector-heading span { display:flex; align-items:center; gap:5px; }.inspector-heading button { display:grid; width:28px; height:28px; place-items:center; border:1px solid var(--ink); border-radius:4px; background:var(--yellow); color:var(--ink); cursor:pointer; }.sprite-name { display:flex; align-items:center; gap:8px; margin-top:10px; color:#625878; font-size:12px; font-weight:800; }.sprite-name input { min-width:0; flex:1; padding:6px 7px; border:1px solid rgb(61 53 100 / 28%); border-radius:4px; color:var(--ink); font:inherit; }.sprite-fields { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; margin-top:8px; }.sprite-fields label { display:grid; gap:4px; color:#756a94; font-size:11px; font-weight:800; }.sprite-fields input { width:100%; min-width:0; padding:5px; border:1px solid rgb(61 53 100 / 28%); border-radius:4px; color:var(--ink); font:inherit; }.sprite-visibility { gap:5px; margin-top:10px; color:#756a94; font-size:11px; font-weight:800; }.sprite-visibility button { display:grid; width:27px; height:27px; place-items:center; border:1px solid rgb(61 53 100 / 32%); border-radius:4px; background:#fff; color:#756a94; cursor:pointer; }.sprite-visibility button.active { background:var(--mint); color:var(--ink); }.score-label { margin-left:auto; color:var(--purple); white-space:nowrap; }.asset-tray { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; padding:11px; border:1px solid rgb(61 53 100 / 30%); border-radius:6px; background:#f7f5ff; }.asset-list,.backdrop-list { display:flex; align-items:center; gap:7px; min-width:0; }.asset-list { flex-wrap:wrap; }.asset-list strong,.backdrop-list strong { width:100%; font-size:11px; }.sprite-tile { display:flex; max-width:132px; align-items:center; gap:7px; overflow:hidden; padding:6px; border:2px solid var(--purple); border-radius:5px; background:#e8e4ff; color:var(--ink); font-size:11px; font-weight:800; text-overflow:ellipsis; white-space:nowrap; cursor:pointer; }.mini-sprite { display:grid; width:26px; height:26px; flex:0 0 26px; place-items:center; border:1px solid var(--ink); border-radius:47% 53% 44% 56%; color:#fff; font-size:15px; }.backdrop-list { align-content:start; flex-wrap:wrap; max-width:150px; }.backdrop-list button { display:grid; width:27px; height:27px; place-items:center; border:1px solid rgb(61 53 100 / 33%); border-radius:4px; color:var(--ink); cursor:pointer; }.backdrop-list button.selected { outline:2px solid var(--purple); outline-offset:2px; }
-.block-editor { position:relative; display:grid; grid-template-columns:54px minmax(0,1fr); grid-template-rows:minmax(0,1fr); min-height:610px; overflow:hidden; border:2px solid var(--ink); border-radius:7px; background:#fbfbff; box-shadow:5px 6px 0 rgb(61 53 100 / 45%); }.block-editor .blockly-host { grid-column:2; grid-row:1; min-width:0; min-height:0; border:0; border-radius:0; box-shadow:none; }.block-category-rail { display:flex; grid-column:1; grid-row:1; z-index:2; width:54px; min-width:0; box-sizing:border-box; flex-direction:column; gap:4px; overflow-y:auto; padding:7px 4px; border-right:1px solid rgb(61 53 100 / 22%); background:#fff; }.block-category-rail button { display:grid; min-height:52px; place-items:center; gap:3px; padding:4px 2px; border:0; border-radius:5px; background:transparent; color:#756a94; cursor:pointer; font:800 11px/1.1 'Microsoft YaHei',sans-serif; }.block-category-rail button:hover,.block-category-rail button.active { background:#f0edff; color:var(--ink); }.block-category-rail i { display:block; width:20px; height:20px; border:1px solid rgb(61 53 100 / 26%); border-radius:50%; background:var(--category-colour); box-shadow:1px 2px 0 rgb(61 53 100 / 20%); }.block-category-rail button.active i { outline:2px solid var(--ink); outline-offset:2px; }.block-category-rail span { display:block; text-align:center; word-break:break-all; }.block-category-rail .extension-rail-button { min-height:48px; margin-top:auto; border:1px dashed var(--purple); background:#f5f2ff; color:var(--purple); }.block-category-rail .extension-rail-button :deep(.el-icon) { font-size:18px; }.variable-manager { position:absolute; z-index:5; top:10px; left:64px; width:196px; box-sizing:border-box; padding:10px; border:1px solid var(--ink); border-radius:6px; background:#fff; box-shadow:3px 4px 0 rgb(61 53 100 / 24%); }.variable-manager-heading { display:grid; gap:8px; }.variable-manager-heading strong { color:var(--ink); font-size:16px; }.variable-manager-heading button { padding:7px 8px; border:1px solid rgb(61 53 100 / 30%); border-radius:4px; background:#fff; color:var(--ink); font:inherit; font-size:12px; cursor:pointer; }.variable-manager-heading button:hover { border-color:var(--purple); background:#f0edff; }.variable-manager-list { display:grid; gap:6px; margin-top:10px; }.variable-manager-row { display:grid; grid-template-columns:18px minmax(0,1fr) auto; align-items:center; gap:6px; min-height:28px; color:var(--ink); font-size:12px; cursor:pointer; }.variable-manager-row input { accent-color:#ef6687; }.variable-manager-row span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.variable-manager-row b { min-width:26px; padding:2px 5px; border-radius:10px; background:#ef6687; color:#fff; font-size:11px; text-align:center; }.variable-manager-empty { margin:10px 0 0; color:#756a94; font-size:11px; }
+.block-editor { position:relative; display:grid; grid-template-columns:54px minmax(0,1fr); grid-template-rows:minmax(0,1fr); min-height:610px; overflow:hidden; border:2px solid var(--ink); border-radius:7px; background:#fbfbff; box-shadow:5px 6px 0 rgb(61 53 100 / 45%); }.block-editor .blockly-host { grid-column:2; grid-row:1; min-width:0; min-height:0; border:0; border-radius:0; box-shadow:none; }.block-category-rail { display:flex; grid-column:1; grid-row:1; z-index:2; width:54px; min-width:0; box-sizing:border-box; flex-direction:column; gap:4px; overflow-y:auto; padding:7px 4px; border-right:1px solid rgb(61 53 100 / 22%); background:#fff; }.block-category-rail button { display:grid; min-height:52px; place-items:center; gap:3px; padding:4px 2px; border:0; border-radius:5px; background:transparent; color:#756a94; cursor:pointer; font:800 11px/1.1 'Microsoft YaHei',sans-serif; }.block-category-rail button:hover,.block-category-rail button.active { background:#f0edff; color:var(--ink); }.block-category-rail i { display:block; width:20px; height:20px; border:1px solid rgb(61 53 100 / 26%); border-radius:50%; background:var(--category-colour); box-shadow:1px 2px 0 rgb(61 53 100 / 20%); }.block-category-rail button.active i { outline:2px solid var(--ink); outline-offset:2px; }.block-category-rail span { display:block; text-align:center; word-break:break-all; }.block-category-rail .extension-rail-button { min-height:48px; margin-top:auto; border:1px dashed var(--purple); background:#f5f2ff; color:var(--purple); }.block-category-rail .extension-rail-button :deep(.el-icon) { font-size:18px; }.variable-manager { position:absolute; z-index:5; top:10px; left:64px; width:196px; box-sizing:border-box; padding:10px; border:1px solid var(--ink); border-radius:6px; background:#fff; box-shadow:3px 4px 0 rgb(61 53 100 / 24%); }.variable-manager-heading { display:grid; gap:8px; }.variable-manager-heading strong { color:var(--ink); font-size:16px; }.variable-manager-heading button { padding:7px 8px; border:1px solid rgb(61 53 100 / 30%); border-radius:4px; background:#fff; color:var(--ink); font:inherit; font-size:12px; cursor:pointer; }.variable-manager-heading button:hover { border-color:var(--purple); background:#f0edff; }.variable-manager-list { display:grid; gap:6px; margin-top:10px; }.variable-manager-row { display:grid; grid-template-columns:18px minmax(0,1fr) auto; align-items:center; gap:6px; min-height:28px; color:var(--ink); font-size:12px; cursor:pointer; }.variable-manager-row input { accent-color:#ef6687; }.variable-manager-row span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.variable-manager-row b { min-width:26px; padding:2px 5px; border-radius:10px; background:#ef6687; color:#fff; font-size:11px; text-align:center; }.variable-manager-empty { margin:10px 0 0; color:#756a94; font-size:11px; }.variable-context-menu { position:absolute; z-index:20; min-width:154px; padding:4px; border:1px solid var(--ink); border-radius:5px; background:#fff; box-shadow:3px 4px 0 rgb(61 53 100 / 24%); }.variable-context-menu button { display:block; width:100%; padding:7px 8px; border:0; border-radius:3px; background:transparent; color:#c34f63; font:800 12px/1.2 'Microsoft YaHei',sans-serif; text-align:left; cursor:pointer; }.variable-context-menu button:hover { background:#fff0f3; }
 .blockly-host :deep(.blocklyFlyoutBackground) { width:350px!important; }.blockly-host :deep(.blocklyFlyout .blocklyText) { font-size:14px!important; font-weight:700; }.blockly-host :deep(.block-workshop-toolbox-label) { fill:var(--ink); font-family:'Microsoft YaHei',sans-serif; font-size:17px!important; font-weight:900; }.blockly-host :deep(.blocklyToolboxDiv) { min-width:118px; }.blockly-host :deep(.blocklyTreeRow) { height:35px; margin:2px 4px; border-radius:5px; }.blockly-host :deep(.blocklyTreeLabel) { font-size:12px; }
 .blockly-host :deep(.block-workshop-toolbox-spacer) { fill:transparent; pointer-events:none; }
 .plugin-editor { background:linear-gradient(135deg,#fff 0%,#f0edff 62%,#e4faf9 100%); }.plugin-control-card { width:min(960px,100%); margin-top:28px; padding:15px; border:2px solid var(--ink); border-radius:7px; background:#fff; box-shadow:4px 5px 0 rgb(61 53 100 / 24%); }.plugin-control-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }.plugin-control-heading div { display:grid; gap:3px; }.plugin-control-heading span { font-size:17px; font-weight:900; }.plugin-control-heading small { color:#756a94; font-size:11px; font-weight:800; }.plugin-control-heading button { padding:6px 9px; border:1px solid var(--ink); border-radius:4px; background:#fff1a8; color:var(--ink); font:inherit; font-size:12px; font-weight:800; cursor:pointer; }.draw-board-shell { margin-top:13px; }.draw-board-shell canvas { display:block; width:100%; height:auto; border:1px dashed rgb(61 53 100 / 45%); border-radius:4px; background:#fff; touch-action:none; cursor:crosshair; }.draw-board-shell small { display:flex; align-items:center; gap:5px; margin-top:8px; color:#71658f; font-size:12px; }.plugin-closed-state { margin-top:13px; padding:22px 16px; border:1px dashed rgb(61 53 100 / 38%); border-radius:5px; background:#fbfbff; color:#756a94; font-size:13px; font-weight:800; text-align:center; }
+.array-create-dialog { width:min(520px,100%); padding:25px; border:2px solid var(--ink); border-radius:9px; background:#fbfbff; box-shadow:8px 9px 0 rgb(61 53 100 / 50%); }.array-create-form { display:grid; gap:15px; margin-top:22px; }.array-create-form label { display:grid; gap:7px; color:#625878; font-size:13px; font-weight:900; }.array-create-form input { width:100%; box-sizing:border-box; padding:9px 10px; border:1px solid rgb(61 53 100 / 35%); border-radius:5px; background:#fff; color:var(--ink); font:inherit; font-weight:500; }.array-create-form input:focus { outline:2px solid var(--pink); outline-offset:1px; }.array-dimension-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }.array-create-error { margin:0; color:#c34f63; font-size:12px; font-weight:800; }
 .extension-dialog,.project-info-dialog { width:min(620px,100%); padding:25px; border:2px solid var(--ink); border-radius:9px; background:#fbfbff; box-shadow:8px 9px 0 rgb(61 53 100 / 50%); }.extension-option { display:grid; grid-template-columns:52px minmax(0,1fr) auto; align-items:center; gap:14px; margin-top:23px; padding:16px; border:1px solid var(--ink); border-radius:7px; background:#fff; }.extension-option-icon { display:grid; width:48px; height:48px; place-items:center; border:1px solid var(--ink); border-radius:7px; background:#e8e4ff; color:var(--purple); font-size:26px; }.extension-option h3 { margin:0; font-size:17px; }.extension-option p { margin:6px 0 0; color:#625878; font-size:13px; line-height:1.55; }.extension-option button,.project-info-actions button { padding:8px 12px; border:1px solid var(--ink); border-radius:4px; background:#fff; color:var(--ink); font:inherit; font-weight:800; cursor:pointer; }.extension-option button:not(:disabled),.project-info-actions .confirm { border-color:#4e4473; background:var(--purple); color:#fff; }.extension-option button:disabled { cursor:default; opacity:.58; }
 .project-info-dialog { display:grid; gap:15px; }.project-info-dialog > label { display:grid; gap:7px; color:#625878; font-size:13px; font-weight:900; }.project-info-dialog label em { margin-left:5px; color:#d45d7d; font-size:11px; font-style:normal; }.project-info-dialog label > small { color:#756a94; font-size:11px; font-weight:700; }.project-info-dialog > label > input,.project-info-dialog > label > textarea { width:100%; box-sizing:border-box; padding:9px 10px; border:1px solid rgb(61 53 100 / 35%); border-radius:5px; background:#fff; color:var(--ink); font:inherit; font-weight:500; }.project-info-dialog > label > textarea { min-height:82px; resize:vertical; line-height:1.5; }.project-info-dialog input:focus,.project-info-dialog textarea:focus { outline:2px solid var(--pink); outline-offset:1px; }.project-tags { display:flex; min-height:42px; flex-wrap:wrap; align-items:center; gap:6px; padding:6px; border:1px solid rgb(61 53 100 / 35%); border-radius:5px; background:#fff; }.project-tags span { display:inline-flex; align-items:center; gap:4px; padding:4px 6px; border-radius:3px; background:#e8e4ff; color:var(--ink); font-size:12px; font-weight:800; }.project-tags button { width:16px; height:16px; padding:0; border:0; border-radius:50%; background:transparent; color:#625878; font-size:15px; line-height:1; cursor:pointer; }.project-tags input { min-width:110px; flex:1; padding:4px; border:0; outline:0; font:inherit; font-size:12px; }.visibility-choice { display:grid; gap:9px; margin:0; padding:12px; border:1px solid rgb(61 53 100 / 28%); border-radius:6px; background:#fff; }.visibility-choice legend { padding:0 4px; color:#625878; font-size:13px; font-weight:900; }.visibility-choice label { display:flex; align-items:center; flex-wrap:wrap; gap:6px; color:var(--ink); font-size:13px; font-weight:900; cursor:pointer; }.visibility-choice input { accent-color:var(--purple); }.visibility-choice small { flex-basis:100%; margin-left:24px; color:#756a94; font-size:11px; font-weight:700; }.project-info-actions { display:flex; justify-content:flex-end; gap:9px; margin-top:3px; }
 .stage-scene { touch-action:none; }.default-sprite { cursor:grab; touch-action:none; }.default-sprite:active { cursor:grabbing; }.default-sprite.selected { outline:3px solid var(--yellow); outline-offset:4px; }.sprite-cards { display:flex; width:100%; align-items:center; gap:6px; overflow-x:auto; padding:2px 0; }.sprite-tile { position:relative; flex:0 0 auto; }.sprite-tile:not(.active) { border-color:rgb(61 53 100 / 28%); background:#fff; }.sprite-tile i { position:absolute; top:-7px; right:-7px; display:grid; width:17px; height:17px; place-items:center; border:1px solid var(--ink); border-radius:50%; background:var(--pink); color:#fff; font-size:14px; font-style:normal; line-height:1; }.add-sprite { display:grid; width:34px; height:34px; flex:0 0 34px; place-items:center; border:1px dashed var(--ink); border-radius:5px; background:#fff; color:var(--purple); cursor:pointer; }
 .default-sprite.gliding { transition:none; }
 .direction-setting { position:relative; display:flex; align-items:center; margin-top:9px; color:#625878; font-size:12px; font-weight:800; }.direction-setting > label { display:flex; align-items:center; gap:8px; }.direction-setting input { width:62px; padding:5px 7px; border:1px solid rgb(61 53 100 / 28%); border-radius:4px; color:var(--ink); font:inherit; text-align:center; }.direction-setting input:focus { outline:2px solid var(--purple); outline-offset:1px; }.direction-picker { position:absolute; z-index:8; bottom:calc(100% + 9px); left:0; width:172px; padding:13px; border:1px solid var(--ink); border-radius:6px; background:#fff; box-shadow:4px 5px 0 rgb(61 53 100 / 25%); }.direction-dial { position:relative; width:138px; height:138px; margin:auto; overflow:hidden; border:1px solid #7eaaf2; border-radius:50%; background:#dceaff; cursor:crosshair; touch-action:none; }.direction-dial::before { position:absolute; top:50%; left:50%; width:7px; height:7px; border-radius:50%; background:#5d9cf4; content:''; transform:translate(-50%,-50%); }.direction-dial i { position:absolute; top:9px; left:50%; width:1px; height:9px; background:#91add4; transform-origin:50% 60px; }.direction-dial-line { position:absolute; bottom:50%; left:calc(50% - 2px); width:4px; height:48%; border-radius:4px 4px 0 0; background:#5d9cf4; transform-origin:50% 100%; }.direction-dial-line::after { position:absolute; top:-7px; left:50%; width:14px; height:14px; border:3px solid #fff; border-radius:50%; background:#5d9cf4; box-shadow:0 0 0 4px rgb(93 156 244 / 22%); content:''; transform:translateX(-50%); }.direction-presets { display:grid; grid-template-columns:repeat(4,1fr); gap:5px; margin-top:11px; }.direction-presets button { padding:5px 0; border:1px solid rgb(61 53 100 / 24%); border-radius:4px; background:#fff; color:#625878; font:inherit; font-size:11px; cursor:pointer; }.direction-presets button:hover { border-color:var(--purple); background:#f0edff; color:var(--ink); }
-.task-goal { position:absolute; z-index:2; display:grid; width:39px; height:39px; place-items:center; border:2px solid var(--ink); border-radius:50%; background:var(--yellow); box-shadow:3px 4px 0 rgb(61 53 100 / 24%); color:#d77ba5; font-size:24px; transform:translate(-50%,-50%); }.task-status { position:absolute; z-index:3; bottom:11px; left:11px; padding:5px 8px; border:1px solid var(--ink); border-radius:4px; background:#fff; box-shadow:2px 3px 0 rgb(61 53 100 / 18%); font-size:11px; font-weight:900; }.task-config { display:grid; gap:7px; padding:10px; border:1px solid rgb(61 53 100 / 30%); border-radius:6px; background:#f7f5ff; }.task-config > div { display:flex; align-items:center; justify-content:space-between; gap:10px; }.task-config strong { font-size:13px; }.task-config > div span { color:#756a94; font-size:10px; font-weight:700; }.task-config button { display:flex; align-items:center; justify-content:space-between; padding:7px 8px; border:1px solid rgb(61 53 100 / 20%); border-radius:4px; background:#fff; color:#625878; font-size:11px; font-weight:800; cursor:pointer; }.task-config button.active { border-color:var(--purple); background:#e8e4ff; color:var(--ink); }.task-config button small { color:var(--purple); font-weight:900; }
-.maze-board { position:absolute; z-index:2; display:grid; box-sizing:border-box; inset:14px; overflow:hidden; border:2px solid #4e4473; border-radius:5px; background:#fffdf3; box-shadow:inset 0 0 0 1px rgb(255 255 255 / 80%); pointer-events:none; }.maze-cell { position:relative; display:grid; min-width:0; min-height:0; place-items:center; border:1px solid rgb(78 68 115 / 12%); background:#fffdf7; }.maze-cell.wall { background:repeating-linear-gradient(135deg,#776bb4 0 8px,#665a9d 8px 16px); box-shadow:inset 0 0 0 2px rgb(255 255 255 / 20%); }.maze-cell.goal { background:#fff3a8; color:#e76c49; font-size:clamp(18px,3vw,31px); text-shadow:1px 2px 0 #fff; }.maze-player { position:relative; z-index:2; display:grid; width:58%; height:58%; place-items:center; border:2px solid #3d3564; border-radius:50%; background:#62bd86; box-shadow:2px 3px 0 rgb(61 53 100 / 28%); color:#fff; font-size:clamp(15px,2.4vw,27px); line-height:1; transition:transform .18s ease; }.task-status { max-width:calc(100% - 22px); color:#403960; line-height:1.35; }.task-status small { display:block; margin-top:2px; color:#756a94; font-size:10px; font-weight:700; }.task-status.completed { border-color:#3f9b63; background:#ebfff0; color:#237642; }.task-status.failed { border-color:#d85c58; background:#fff1ef; color:#b74a47; }
+.task-goal { position:absolute; z-index:2; display:grid; width:39px; height:39px; place-items:center; border:2px solid var(--ink); border-radius:50%; background:var(--yellow); box-shadow:3px 4px 0 rgb(61 53 100 / 24%); color:#d77ba5; font-size:24px; transform:translate(-50%,-50%); }.task-status { box-sizing:border-box; width:100%; padding:5px 8px; border:1px solid var(--ink); border-radius:4px; background:#fff; box-shadow:2px 3px 0 rgb(61 53 100 / 18%); font-size:11px; font-weight:900; }.task-config { display:grid; gap:7px; padding:10px; border:1px solid rgb(61 53 100 / 30%); border-radius:6px; background:#f7f5ff; }.task-config > div { display:flex; align-items:center; justify-content:space-between; gap:10px; }.task-config strong { font-size:13px; }.task-config > div span { color:#756a94; font-size:10px; font-weight:700; }.task-config button { display:flex; align-items:center; justify-content:space-between; padding:7px 8px; border:1px solid rgb(61 53 100 / 20%); border-radius:4px; background:#fff; color:#625878; font-size:11px; font-weight:800; cursor:pointer; }.task-config button.active { border-color:var(--purple); background:#e8e4ff; color:var(--ink); }.task-config button small { color:var(--purple); font-weight:900; }
+.maze-board { position:absolute; z-index:2; display:grid; box-sizing:border-box; inset:14px; overflow:hidden; border:2px solid #4e4473; border-radius:5px; background:#fffdf3; box-shadow:inset 0 0 0 1px rgb(255 255 255 / 80%); pointer-events:none; }.maze-cell { position:relative; display:grid; min-width:0; min-height:0; place-items:center; border:1px solid rgb(78 68 115 / 12%); background:#fffdf7; }.maze-cell.wall { background:repeating-linear-gradient(135deg,#776bb4 0 8px,#665a9d 8px 16px); box-shadow:inset 0 0 0 2px rgb(255 255 255 / 20%); }.maze-cell.goal { background:#fff3a8; color:#e76c49; font-size:clamp(18px,3vw,31px); text-shadow:1px 2px 0 #fff; }.maze-player { position:relative; z-index:2; display:grid; width:58%; height:58%; place-items:center; border:2px solid #3d3564; border-radius:50%; background:#62bd86; box-shadow:2px 3px 0 rgb(61 53 100 / 28%); color:#fff; font-size:clamp(15px,2.4vw,27px); line-height:1; transition:transform .18s ease; }.task-status { max-width:100%; color:#403960; line-height:1.35; }.task-status small { display:block; margin-top:2px; color:#756a94; font-size:10px; font-weight:700; }.task-status.completed { border-color:#3f9b63; background:#ebfff0; color:#237642; }.task-status.failed { border-color:#d85c58; background:#fff1ef; color:#b74a47; }
 .maze-board.editing { pointer-events:auto; }.maze-cell { padding:0; appearance:none; cursor:default; }.maze-board.editing .maze-cell { cursor:crosshair; }.maze-cell:disabled { cursor:default; }.maze-cell:focus-visible { z-index:3; outline:3px solid var(--pink); outline-offset:-3px; }.task-config > label { display:flex; align-items:center; justify-content:space-between; gap:8px; color:#625878; font-size:11px; font-weight:800; }.task-config input { min-width:0; width:88px; box-sizing:border-box; padding:5px 6px; border:1px solid rgb(61 53 100 / 28%); border-radius:4px; background:#fff; color:var(--ink); font:inherit; text-align:center; }.task-grid-size { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:5px; }.task-grid-size label { display:grid; gap:3px; color:#756a94; font-size:10px; font-weight:800; }.task-grid-size input { width:100%; }.task-editor-tools { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:5px; }.task-editor-tools button { min-width:0; }.task-editor-tools button:last-child { grid-column:1 / -1; }
-.stage-scene.maze-stage { aspect-ratio:4 / 3; background:#f4f1e8; }
+.canvas-data-monitors { position:absolute; z-index:5; grid-column:2; grid-row:1; inset:0; pointer-events:none; }.canvas-variable-monitor,.canvas-list-monitor,.array-canvas-monitor,.array-stage-monitor { position:absolute; display:grid; width:min(242px,calc(100% - 20px)); gap:7px; padding:9px; border:1px solid var(--ink); border-radius:6px; background:rgb(255 255 255 / 94%); box-shadow:3px 4px 0 rgb(61 53 100 / 22%); cursor:grab; touch-action:none; pointer-events:auto; }.canvas-variable-monitor:active,.canvas-list-monitor:active,.array-canvas-monitor:active,.array-stage-monitor:active { cursor:grabbing; }.canvas-variable-monitor { display:flex; width:auto; align-items:center; gap:6px; padding:5px 8px; color:var(--ink); font-size:12px; font-weight:800; }.canvas-variable-monitor b { min-width:28px; padding:2px 5px; border-radius:10px; background:#ef6687; color:#fff; text-align:center; }.canvas-list-monitor { width:min(170px,calc(100% - 20px)); gap:4px; padding:7px; }.canvas-list-monitor header { color:var(--ink); font-size:11px; font-weight:900; }.canvas-list-monitor ol { display:grid; gap:2px; max-height:88px; margin:0; padding:0; overflow:auto; list-style:none; }.canvas-list-monitor li { display:grid; grid-template-columns:18px minmax(0,1fr); gap:4px; color:#4e4473; font-size:10px; word-break:break-all; }.canvas-list-monitor li span { color:#756a94; text-align:right; }.canvas-list-monitor p { margin:0; color:#756a94; font-size:10px; }.array-canvas-monitor header,.array-stage-monitor header { display:flex; align-items:center; justify-content:space-between; gap:8px; color:var(--ink); font-size:12px; }.array-canvas-monitor header span,.array-canvas-monitor small,.array-stage-monitor header span { color:#756a94; font-size:10px; font-weight:800; }.array-canvas-grid,.array-stage-grid { display:grid; gap:2px; }.array-canvas-value,.array-stage-value { display:grid; min-width:0; aspect-ratio:1; place-items:center; border:1px solid rgb(61 53 100 / 18%); border-radius:2px; background:#f7f5ff; color:#4e4473; font:800 clamp(8px,1vw,11px)/1 Arial,sans-serif; }.array-canvas-value.wall,.array-stage-value.wall { background:#776bb4; color:#fff; }.array-stage-monitors { position:absolute; z-index:4; inset:0; pointer-events:none; }.array-stage-monitor { width:min(186px,calc(100% - 20px)); gap:5px; padding:7px; }.array-stage-monitor header { font-size:10px; }.array-stage-value { font-size:9px; }
+.stage-scene.maze-stage { aspect-ratio:10 / 7; background:#f4f1e8; }
 .base-dialog-backdrop { position:fixed; z-index:50; display:grid; inset:0; place-items:center; padding:18px; background:rgb(61 53 100 / 25%); }.base-dialog { width:min(860px,100%); padding:25px; border:2px solid var(--ink); border-radius:9px; background:#fbfbff; box-shadow:8px 9px 0 rgb(61 53 100 / 50%); }.base-dialog-heading { display:flex; align-items:start; justify-content:space-between; gap:16px; }.base-dialog-heading h2 { margin:11px 0 0; font-family:'Trebuchet MS','Microsoft YaHei',sans-serif; font-size:28px; font-weight:900; }.base-dialog-heading > button { display:grid; width:34px; height:34px; place-items:center; border:1px solid var(--ink); border-radius:5px; background:#fff; color:var(--ink); font-size:24px; cursor:pointer; }.base-options { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; margin-top:22px; }.base-option { display:flex; min-height:236px; flex-direction:column; padding:16px; border:2px solid var(--ink); border-radius:7px; background:#fff; box-shadow:4px 5px 0 rgb(61 53 100 / 20%); }.base-option.interactive { background:#e8e4ff; }.base-option.ai { background:#e4faf9; }.base-option > span { align-self:start; padding:4px 6px; border:1px solid var(--ink); border-radius:3px; background:var(--yellow); font-family:'Trebuchet MS',sans-serif; font-size:10px; font-weight:900; transform:rotate(-2deg); }.base-option h3 { margin:15px 0 0; font-family:'Trebuchet MS','Microsoft YaHei',sans-serif; font-size:19px; font-weight:900; }.base-option p { margin:10px 0 0; color:#625878; font-size:13px; line-height:1.65; }.base-option button { margin-top:auto; padding:9px 8px; border:1px solid #4e4473; border-radius:5px; background:var(--purple); box-shadow:2px 3px 0 rgb(61 53 100 / 25%); color:#fff; font-weight:900; white-space:nowrap; cursor:pointer; }
 .costume-editor { width:100%; justify-items:stretch; grid-template-rows:auto minmax(0,1fr); }.costume-editor-body { display:grid; width:100%; min-height:0; grid-template-columns:128px minmax(0,1fr); gap:12px; }.costume-list { display:flex; min-height:0; flex-direction:column; gap:8px; overflow-y:auto; padding:8px; border:1px solid rgb(61 53 100 / 24%); border-radius:6px; background:#eef1fb; }.costume-list > button { display:grid; justify-items:center; gap:5px; padding:7px 4px; border:1px solid transparent; border-radius:5px; background:#fff; color:var(--ink); cursor:pointer; }.costume-list > button.active { border-color:#4d8df0; background:#e3efff; box-shadow:inset 0 0 0 1px #77aaf5; }.costume-list strong { max-width:100%; overflow:hidden; font-size:11px; text-overflow:ellipsis; white-space:nowrap; }.costume-list-preview { display:grid; width:82px; height:58px; place-items:center; overflow:hidden; border:1px solid rgb(61 53 100 / 24%); border-radius:5px; color:#fff; font-size:27px; }.costume-list-preview.bot { border-radius:10px; }.costume-list-preview.dot { width:58px; border-radius:50%; }.costume-list-preview.custom { border:0; border-radius:0; background:transparent!important; }.costume-list-preview img { width:100%; height:100%; object-fit:contain; }.costume-list .add-costume { display:grid; width:100%; min-height:43px; margin-top:auto; place-items:center; border:1px dashed var(--purple); background:transparent; color:var(--purple); }.costume-main { display:grid; min-width:0; min-height:0; grid-template-rows:auto minmax(0,1fr) auto; gap:12px; }
 .costume-canvas-shell { position:relative; display:grid; min-height:0; padding:0; overflow:hidden; place-items:stretch; }.costume-canvas { width:100%; height:100%; margin:0; }.costume-canvas.eraser-active { cursor:none; }.eraser-range { position:absolute; z-index:2; box-sizing:border-box; border:2px solid #4d8df0; border-radius:50%; background:rgb(255 255 255 / 24%); box-shadow:0 0 0 1px rgb(255 255 255 / 90%),0 1px 4px rgb(61 53 100 / 25%); pointer-events:none; transform:translate(-50%,-50%); }
 .block-workshop-page { display:flex; height:100dvh; min-height:0; flex-direction:column; overflow:hidden; }.workshop-header { flex:0 0 66px; box-sizing:border-box; }.workshop-layout { height:auto; min-height:0; flex:1; overflow:hidden; }.workspace-panel { min-height:0; overflow:hidden; }.block-editor,.blockly-host,.asset-editor { height:100%; min-height:0; box-sizing:border-box; }.stage-panel { grid-template-rows:auto auto auto auto auto; align-content:start; min-height:0; overflow:hidden; box-sizing:border-box; padding:10px; gap:8px; }.stage-scene { width:100%; min-height:0; aspect-ratio:16 / 9; height:auto; align-self:start; }.sprite-inspector { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:6px 9px; padding:8px; }.inspector-heading,.sprite-name { grid-column:1 / -1; }.sprite-name,.sprite-fields,.direction-setting,.sprite-visibility { margin-top:0; }.sprite-fields { align-self:start; }.sprite-visibility { align-self:end; }.asset-tray { gap:8px; padding:8px; }.asset-list,.backdrop-list { gap:5px; }.sprite-tile { padding:4px; }.backdrop-list button { width:24px; height:24px; }.upload-backdrop { border-style:dashed!important; background:#fff!important; color:var(--purple); }.backdrop-upload-input { display:none; }
-@media (max-width:1120px) { .workshop-layout { grid-template-columns:1fr; }.stage-panel { grid-template-columns:minmax(0,1fr) minmax(230px,.8fr); align-items:start; border-top:1px solid rgb(61 53 100 / 30%); border-left:0; }.stage-toolbar { grid-column:1 / -1; }.stage-scene { height:260px; }.runner-actions,.sketch-panel,.description-field { grid-column:2; }.runner-actions { grid-row:2; }.sketch-panel { grid-row:3; }.description-field { grid-row:4; } }
+@media (max-width:1120px) { .workshop-layout { grid-template-columns:1fr; }.stage-panel { grid-template-columns:minmax(0,1fr) minmax(230px,.8fr); align-items:start; border-top:1px solid rgb(61 53 100 / 30%); border-left:0; }.stage-toolbar { grid-column:1 / -1; }.stage-scene { grid-column:1 / -1; height:260px; }.runner-actions,.sketch-panel,.description-field { grid-column:2; }.runner-actions { grid-column:1 / -1; grid-row:auto; }.sketch-panel { grid-row:3; }.description-field { grid-row:4; } }
 @media (max-width:720px) { .workshop-header { height:auto; min-height:65px; flex-wrap:wrap; padding:11px 14px; }.project-title { flex:1; }.project-title input { width:100%; font-size:17px; }.header-actions { width:100%; margin-left:0; }.header-actions :deep(.el-button) { flex:1; margin-left:0!important; padding:8px 7px; }.workshop-layout { display:flex; min-height:0; flex-direction:column; }.workspace-panel { min-height:544px; padding:10px; }.workbench-tabs { padding-left:0; }.workbench-tabs button { flex:1; min-width:0; padding:10px 7px; }.block-editor { min-height:480px; }.blockly-host,.asset-editor { min-height:480px; }.asset-editor { padding:30px; }.stage-panel { display:grid; grid-template-columns:1fr; }.stage-toolbar,.stage-scene,.runner-actions,.sketch-panel,.description-field { grid-column:auto; grid-row:auto; }.stage-scene { height:240px; } }
 @media (max-width:720px) { .costume-editor { min-height:480px; padding:12px; }.costume-editor-heading input { width:96px; }.costume-editor-body { grid-template-columns:88px minmax(0,1fr); gap:8px; }.costume-list { padding:5px; }.costume-list-preview { width:65px; height:47px; }.costume-list-preview.dot { width:47px; }.costume-commandbar { flex-wrap:wrap; gap:7px; }.costume-commandbar input[type='range'] { width:76px; }.costume-command-spacer { display:none; }.costume-workspace { grid-template-columns:42px minmax(0,1fr); }.costume-palette { display:none; }.costume-tools { padding:8px 5px; }.costume-footer { gap:8px; flex-direction:column; } }
 .stage-tile { width:58px!important; height:58px!important; background-size:cover!important; background-position:center!important; }.stage-inspector-summary { display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:8px; margin-top:10px; color:#756a94; font-size:12px; font-weight:800; }.stage-inspector-summary strong { overflow:hidden; color:var(--ink); text-overflow:ellipsis; white-space:nowrap; }.stage-inspector-summary button { padding:6px 8px; border:1px solid var(--ink); border-radius:4px; background:var(--yellow); color:var(--ink); font:inherit; font-size:11px; font-weight:800; cursor:pointer; }.blockly-host :deep(.block-workshop-toolbox-notice) { fill:#756a94; font-family:'Microsoft YaHei',sans-serif; font-size:12px!important; font-weight:700; }
@@ -3817,4 +5444,17 @@ onBeforeUnmount(() => {
 .list-monitor footer > button { display:grid; width:21px; height:21px; padding:0; place-items:center; border:1px solid rgb(229 111 10 / 45%); border-radius:3px; background:#fff; color:#e56f0a; cursor:pointer; font-size:18px; font-weight:900; line-height:1; }
 .list-monitor footer > button:hover,.list-monitor footer > button:focus-visible { border-color:#e56f0a; background:#ff8a18; color:#fff; outline:none; }
 @media (prefers-reduced-motion: reduce) { *,*::before,*::after { animation-duration:.01ms!important; animation-iteration-count:1!important; transition-duration:.01ms!important; } }
+.list-advanced-settings { display:grid; gap:9px; margin:0; padding:12px; border:1px solid rgb(61 53 100 / 28%); border-radius:6px; background:#fff; }
+.list-advanced-settings legend { padding:0 4px; color:#625878; font-size:13px; font-weight:900; }
+.list-advanced-settings label { display:flex; align-items:center; gap:7px; color:var(--ink); font-size:13px; font-weight:800; cursor:pointer; }
+.list-advanced-settings input { width:auto; accent-color:var(--purple); }
+.record-field-editor { display:grid; gap:7px; margin-top:2px; }
+.record-field-row { display:grid; grid-template-columns:minmax(0,1fr) 110px 30px; gap:6px; align-items:center; }
+.record-field-row input,.record-field-row select { width:100%; box-sizing:border-box; padding:7px 8px; border:1px solid rgb(61 53 100 / 30%); border-radius:4px; background:#fff; color:var(--ink); font:inherit; font-size:12px; }
+.record-field-row button { width:30px; height:30px; border:1px solid rgb(61 53 100 / 30%); border-radius:4px; background:#fff; color:#c34f63; cursor:pointer; }
+.record-field-row button:disabled { cursor:not-allowed; opacity:.4; }
+.record-add-field { justify-self:start; padding:6px 8px; border:1px dashed var(--purple); border-radius:4px; background:#f5f2ff; color:var(--purple); font:inherit; font-size:12px; font-weight:800; cursor:pointer; }
+.record-add-field:disabled { cursor:not-allowed; opacity:.45; }
+.toolbox-collapse-button { position:absolute; z-index:8; bottom:8px; left:8px; display:grid; width:36px; height:36px; place-items:center; padding:0; border:1px solid var(--ink); border-radius:5px; background:var(--yellow); box-shadow:2px 3px 0 rgb(61 53 100 / 24%); color:var(--ink); cursor:pointer; }.toolbox-collapse-button:hover { transform:translateY(-1px); }.toolbox-collapse-button :deep(.el-icon) { font-size:18px; }.toolbox-collapsed { grid-template-columns:0 minmax(0,1fr); }.toolbox-collapsed .block-category-rail { width:0; padding:0; border-right-color:transparent; pointer-events:none; }.toolbox-collapsed :deep(.blocklyToolboxDiv),.toolbox-collapsed :deep(.blocklyFlyout) { display:none!important; }
+.blockly-host :deep(.variable-persistence-control) { cursor:pointer; outline:none; }.blockly-host :deep(.variable-persistence-control rect) { fill:#fff9e6; stroke:#d89b32; stroke-width:2; filter:drop-shadow(1px 1px 0 rgb(64 57 96 / 22%)); }.blockly-host :deep(.variable-persistence-control path) { display:none; }.blockly-host :deep(.variable-persistence-control.checked rect) { fill:#d89b32; }.blockly-host :deep(.variable-persistence-control.checked path) { display:block; }.blockly-host :deep(.variable-persistence-control:hover rect),.blockly-host :deep(.variable-persistence-control:focus rect) { stroke:#403960; stroke-width:3; }
 </style>
