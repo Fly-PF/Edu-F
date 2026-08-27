@@ -303,6 +303,12 @@ const govRoutes = [
     meta: { title: '考公资讯与公告' },
   },
   {
+    path: 'gov/news/:newsId',
+    name: 'gov-news-detail',
+    component: () => import('@/views/gov/GovNewsDetailView.vue'),
+    meta: { title: '资讯详情' },
+  },
+  {
     path: 'gov/knowledge',
     name: 'gov-knowledge',
     component: () => import('@/views/gov/GovKnowledgePlaceholder.vue'),
