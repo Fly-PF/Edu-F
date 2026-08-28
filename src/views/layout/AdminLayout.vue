@@ -29,6 +29,19 @@ const personnelMenus = [
   },
 ]
 
+const govMaterialMenus = [
+  {
+    label: '资料分类管理',
+    path: '/main/admin/gov-material/categories',
+    roles: ['ADMIN', 'SUPERADMIN'],
+  },
+  {
+    label: '资料内容管理',
+    path: '/main/admin/gov-material/materials',
+    roles: ['ADMIN', 'SUPERADMIN'],
+  },
+]
+
 const utilityMenus = [
   {
     label: '安全治理',
@@ -50,8 +63,16 @@ const visibleUtilityMenus = computed(() => {
   return utilityMenus.filter((item) => userStore.hasAnyRole(item.roles))
 })
 
+const visibleGovMaterialMenus = computed(() => {
+  return govMaterialMenus.filter((item) => userStore.hasAnyRole(item.roles))
+})
+
 const activeMenu = computed(() => {
   if (route.path.startsWith('/main/admin/personnel/')) {
+    return route.path
+  }
+
+  if (route.path.startsWith('/main/admin/gov-material/')) {
     return route.path
   }
 
@@ -77,6 +98,12 @@ watch(
       return
     }
 
+    if (path.startsWith('/main/admin/gov-material/')) {
+      shellStore.openMenu('gov-material')
+      shellStore.setActiveMenu(path)
+      return
+    }
+
     if (path.startsWith('/main/admin/safety')) {
       shellStore.openMenu('utility')
       shellStore.setActiveMenu('/main/admin/safety')
@@ -91,6 +118,7 @@ watch(
 
     shellStore.closeMenu('personnel')
     shellStore.closeMenu('utility')
+    shellStore.closeMenu('gov-material')
     shellStore.setActiveMenu('')
   },
   { immediate: true },
@@ -114,10 +142,14 @@ function handleClose(index) {
 
 function handleSelect(index) {
   if (index.startsWith('/main/admin/personnel/')) {
-    shellStore.openMenu('personnel')
-  }
+      shellStore.openMenu('personnel')
+    }
 
-  if (index.startsWith('/main/admin/safety')) {
+    if (index.startsWith('/main/admin/gov-material/')) {
+      shellStore.openMenu('gov-material')
+    }
+
+    if (index.startsWith('/main/admin/safety')) {
     shellStore.openMenu('utility')
   }
 
@@ -173,6 +205,18 @@ function handleSelect(index) {
               <span>常用入口</span>
             </template>
             <el-menu-item v-for="item in visibleUtilityMenus" :key="item.path" :index="item.path">
+              {{ item.label }}
+            </el-menu-item>
+          </el-sub-menu>
+          <el-sub-menu v-if="visibleGovMaterialMenus.length" index="gov-material">
+            <template #title>
+              <span>考公资料管理</span>
+            </template>
+            <el-menu-item
+              v-for="item in visibleGovMaterialMenus"
+              :key="item.path"
+              :index="item.path"
+            >
               {{ item.label }}
             </el-menu-item>
           </el-sub-menu>

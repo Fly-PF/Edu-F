@@ -45,6 +45,27 @@ const publicRouteNames = new Set([
   'register',
 ])
 
+const govMaterialAdminRoutes = [
+  {
+    path: 'gov-material/categories',
+    name: 'gov-material-categories',
+    component: () => import('@/views/admin/GovMaterialCategoryManage.vue'),
+    meta: {
+      title: '资料分类管理',
+      allowedRoles: ['ADMIN', 'SUPERADMIN'],
+    },
+  },
+  {
+    path: 'gov-material/materials',
+    name: 'gov-material-materials',
+    component: () => import('@/views/admin/GovMaterialManage.vue'),
+    meta: {
+      title: '资料内容管理',
+      allowedRoles: ['ADMIN', 'SUPERADMIN'],
+    },
+  },
+]
+
 const personnelRoutes = [
   {
     path: 'personnel/managers',
@@ -305,6 +326,12 @@ const govRoutes = [
     component: () => import('@/views/gov/GovMaterialPlaceholder.vue'),
     meta: { title: '考公资料下载' },
   },
+  {
+    path: 'gov/materials/preview',
+    name: 'gov-material-preview',
+    component: () => import('@/views/gov/GovMaterialPreview.vue'),
+    meta: { title: '资料预览' },
+  },
 ]
 
 const router = createRouter({
@@ -556,6 +583,7 @@ const router = createRouter({
               },
             },
             ...personnelRoutes,
+            ...govMaterialAdminRoutes,
           ],
         },
       ],
@@ -631,4 +659,4 @@ router.beforeEach((to) => {
 })
 
 export default router
-export { personnelRoutes, studentRoutes, teacherRoutes, toolRoutes, govRoutes }
+export { personnelRoutes, studentRoutes, teacherRoutes, toolRoutes, govRoutes, govMaterialAdminRoutes }
