@@ -1,21 +1,123 @@
 <script setup>
-import { EditPen } from '@element-plus/icons-vue'
-import GovPlaceholderView from './GovPlaceholderView.vue'
+import { computed, ref } from 'vue'
+import { ArrowLeft, ArrowRight, Check, CircleCheck, Clock, DataAnalysis, EditPen, List, RefreshRight, Search, Timer, Trophy, Warning } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { useRouter } from 'vue-router'
 
-const module = {
-  index: '03',
-  eyebrow: 'PRACTICE',
-  title: '智能题库与每日练习',
-  description: '围绕行测六类题型进行普通练习，保存作答记录并支持错题重做。',
-  tone: 'orange',
-  icon: EditPen,
-  footer: '题目 JSON 与答题记录',
-  items: [
-    { label: '单题题库', detail: '每道题一条记录，题干、选项、答案和解析放在 JSON 中。' },
-    { label: '普通练习', detail: '支持专项练习、每日一练和错题重做。' },
-    { label: '错题本', detail: '自动记录答错题目，不做收藏和排名。' },
-  ],
+const router = useRouter()
+const subjects = ['全部科目', '政治理论', '常识判断', '语言理解与表达', '数量关系', '判断推理', '资料分析']
+const modes = [
+  { id: 'SPECIAL', label: '专项练习', detail: '按科目集中训练', icon: List, tone: 'blue' },
+  { id: 'DAILY', label: '每日一练', detail: '今天的精选练习', icon: Timer, tone: 'green' },
+  { id: 'MOCK', label: '随机模拟', detail: '随机抽取题目自测', icon: Trophy, tone: 'purple' },
+  { id: 'WRONG', label: '错题重做', detail: '集中复习错题', icon: RefreshRight, tone: 'orange' },
+]
+const maxQuestionsPerPractice = 5
+const questionBank = [
+  { id: 1, subject: '政治理论', type: 'SINGLE', difficulty: 2, stem: '下列关于坚持以人民为中心的发展思想的表述，正确的是：', options: [['A', '把经济增长速度作为唯一目标'], ['B', '发展成果由人民共享'], ['C', '只关注当前利益，不考虑长远发展'], ['D', '以少数人的评价作为唯一标准']], answer: ['B'], analysis: '以人民为中心要求发展为了人民、依靠人民、发展成果由人民共享。' },
+  { id: 2, subject: '常识判断', type: 'SINGLE', difficulty: 2, stem: '下列生活现象中，主要利用了大气压强的是：', options: [['A', '用吸管吸饮料'], ['B', '用冰袋给食物降温'], ['C', '用电热水壶烧水'], ['D', '用指南针辨别方向']], answer: ['A'], analysis: '吸管内气压降低后，外界大气压将饮料压入吸管。' },
+  { id: 3, subject: '语言理解与表达', type: 'SINGLE', difficulty: 3, stem: '填入横线处最恰当的一项是：真正的阅读，不是简单地获取信息，而是与作者进行思想交流，进而____自己的认识。', options: [['A', '拓展'], ['B', '推辞'], ['C', '阻断'], ['D', '复制']], answer: ['A'], analysis: '“拓展认识”搭配恰当，符合通过阅读扩大认知范围的语境。' },
+  { id: 4, subject: '数量关系', type: 'SINGLE', difficulty: 3, stem: '某单位组织春游，租用同样的客车。若每车坐45人，则有15人没有座位；若每车坐50人，则有1辆车空出10个座位。问共有多少人？', options: [['A', '285人'], ['B', '300人'], ['C', '315人'], ['D', '330人']], answer: ['D'], analysis: '设车辆数为x，则45x+15=50(x-1)-10，解得x=7，共有45×7+15=330人。' },
+  { id: 5, subject: '判断推理', type: 'SINGLE', difficulty: 4, stem: '所有优秀的团队都具有良好的沟通机制。某研发团队具有良好的沟通机制。根据以上条件，以下表述正确的是：', options: [['A', '该团队一定是优秀团队'], ['B', '该团队具有良好的沟通机制'], ['C', '优秀团队都不需要沟通机制'], ['D', '良好沟通机制一定能推出团队优秀']], answer: ['B'], analysis: '题干已明确说明该研发团队具有良好的沟通机制，因此 B 正确；由“优秀团队→良好沟通机制”不能反推出“良好沟通机制→优秀团队”。' },
+  { id: 6, subject: '资料分析', type: 'SINGLE', difficulty: 2, stem: '某市2024年公共预算收入为120亿元，比上年增长20%。该市2023年公共预算收入约为：', options: [['A', '96亿元'], ['B', '100亿元'], ['C', '102亿元'], ['D', '144亿元']], answer: ['B'], analysis: '上年收入=120÷(1+20%)=100亿元。' },
+  { id: 7, subject: '政治理论', type: 'SINGLE', difficulty: 3, stem: '全面依法治国的总目标是：', options: [['A', '建设社会主义法治国家'], ['B', '实现所有问题一次解决'], ['C', '以行政命令代替法律程序'], ['D', '只加强对普通公民的约束']], answer: ['A'], analysis: '全面依法治国的总目标是建设中国特色社会主义法治体系、建设社会主义法治国家。' },
+  { id: 8, subject: '常识判断', type: 'SINGLE', difficulty: 2, stem: '在标准大气压下，水的沸点约为：', options: [['A', '0℃'], ['B', '50℃'], ['C', '100℃'], ['D', '150℃']], answer: ['C'], analysis: '在标准大气压下，纯水的沸点约为100℃；气压变化时沸点也会随之变化。' },
+  { id: 9, subject: '语言理解与表达', type: 'SINGLE', difficulty: 3, stem: '填入横线处最恰当的一项是：公共阅读空间不仅要提供书籍，还要通过多样化活动____人与人之间的交流。', options: [['A', '促进'], ['B', '削弱'], ['C', '回避'], ['D', '阻止']], answer: ['A'], analysis: '“促进交流”搭配恰当，符合公共阅读空间通过活动增强互动的语境。' },
+  { id: 10, subject: '数量关系', type: 'SINGLE', difficulty: 3, stem: '一项工程由甲、乙两人合作完成需要6天，甲单独完成需要10天，乙单独完成需要：', options: [['A', '12天'], ['B', '14天'], ['C', '15天'], ['D', '16天']], answer: ['C'], analysis: '乙的工作效率为1/6-1/10=1/15，因此乙单独完成需要15天。' },
+  { id: 11, subject: '判断推理', type: 'SINGLE', difficulty: 4, stem: '所有参加培训的员工都通过了测试。小李通过了测试。根据以上条件，能够确定的是：', options: [['A', '小李一定参加了培训'], ['B', '小李通过了测试'], ['C', '没有参加培训的员工都未通过测试'], ['D', '参加培训是通过测试的必要条件']], answer: ['B'], analysis: '题干直接给出小李通过测试；由“参加培训→通过测试”不能反推出“通过测试→参加培训”。' },
+  { id: 12, subject: '资料分析', type: 'SINGLE', difficulty: 2, stem: '某地2023年公共服务支出为80亿元，2024年为100亿元。2024年比2023年增长：', options: [['A', '20%'], ['B', '25%'], ['C', '30%'], ['D', '80%']], answer: ['B'], analysis: '增长率=(100-80)÷80×100%=25%。' },
+  { id: 13, subject: '政治理论', type: 'SINGLE', difficulty: 2, stem: '中国特色社会主义最本质的特征是：', options: [['A', '中国共产党的领导'], ['B', '单纯追求经济增速'], ['C', '完全照搬外国制度'], ['D', '取消市场作用']], answer: ['A'], analysis: '中国共产党的领导是中国特色社会主义最本质的特征，也是中国特色社会主义制度的最大优势。' },
+  { id: 14, subject: '常识判断', type: 'SINGLE', difficulty: 3, stem: '下列现象中，属于光的反射现象的是：', options: [['A', '雨后出现彩虹'], ['B', '水中筷子看起来弯曲'], ['C', '平面镜中看到自己的像'], ['D', '冬天玻璃上出现水雾']], answer: ['C'], analysis: '平面镜成像是光线在镜面发生反射形成的；彩虹主要与光的色散有关，筷子弯曲属于折射现象。' },
+  { id: 15, subject: '语言理解与表达', type: 'SINGLE', difficulty: 3, stem: '基层治理不仅要解决眼前问题，____要建立长期有效的制度机制。', options: [['A', '或者'], ['B', '还'], ['C', '却'], ['D', '因而']], answer: ['B'], analysis: '“不仅……还……”构成递进关系，表达基层治理既要解决当前问题，也要完善长效机制。' },
+]
+
+const selectedSubject = ref('全部科目')
+const selectedMode = ref('SPECIAL')
+const selectedDifficulty = ref('全部难度')
+const started = ref(false)
+const submitted = ref(false)
+const currentIndex = ref(0)
+const selectedAnswers = ref({})
+const report = ref(null)
+const showFilters = ref(true)
+const startedAt = ref(0)
+const currentMode = computed(() => modes.find((item) => item.id === selectedMode.value) || modes[0])
+const availableQuestions = computed(() => {
+  let list = [...questionBank]
+  if (selectedSubject.value !== '全部科目') list = list.filter((item) => item.subject === selectedSubject.value)
+  if (selectedDifficulty.value !== '全部难度') list = list.filter((item) => item.difficulty === Number(selectedDifficulty.value))
+  if (selectedMode.value === 'DAILY') list = list.slice(0, 4)
+  if (selectedMode.value === 'MOCK') list = list.sort(() => 0.5 - Math.random()).slice(0, 5)
+  if (selectedMode.value === 'WRONG') list = list.filter((item) => [2, 4].includes(item.id))
+  if (selectedMode.value !== 'MOCK') list = list.slice(0, maxQuestionsPerPractice)
+  return list.length ? list : questionBank.slice(0, 2)
+})
+const currentQuestion = computed(() => availableQuestions.value[currentIndex.value] || availableQuestions.value[0])
+const answeredCount = computed(() => availableQuestions.value.filter((item) => (selectedAnswers.value[item.id] || []).length).length)
+const progressPercent = computed(() => Math.round((answeredCount.value / availableQuestions.value.length) * 100))
+const isLastQuestion = computed(() => currentIndex.value === availableQuestions.value.length - 1)
+
+function answerFor(question) { return selectedAnswers.value[question.id] || [] }
+function goBack() { router.push('/main/gov') }
+function setMode(mode) { if (!started.value) selectedMode.value = mode }
+function chooseAnswer(question, key) {
+  if (submitted.value) return
+  const current = answerFor(question)
+  selectedAnswers.value[question.id] = question.type === 'MULTIPLE'
+    ? current.includes(key) ? current.filter((item) => item !== key) : [...current, key].sort()
+    : [key]
 }
+function beginPractice() {
+  selectedAnswers.value = {}; report.value = null; submitted.value = false; currentIndex.value = 0; started.value = true; startedAt.value = Date.now()
+}
+function startWrongPractice() {
+  selectedMode.value = 'WRONG'
+  selectedSubject.value = '全部科目'
+  selectedDifficulty.value = '全部难度'
+  beginPractice()
+}
+async function submitPractice() {
+  if (answeredCount.value < availableQuestions.value.length) {
+    try { await ElMessageBox.confirm(`还有 ${availableQuestions.value.length - answeredCount.value} 道题未作答，确定现在提交吗？`, '提交确认', { confirmButtonText: '确认提交', cancelButtonText: '继续作答', type: 'warning' }) } catch { return }
+  }
+  const results = availableQuestions.value.map((question) => { const selected = answerFor(question); const correct = selected.length === question.answer.length && selected.every((item) => question.answer.includes(item)); return { question, selected, correct } })
+  const correctCount = results.filter((item) => item.correct).length
+  report.value = { results, correctCount, total: results.length, score: Math.round((correctCount / results.length) * 100), duration: Math.max(1, Math.round((Date.now() - startedAt.value) / 1000)), subjectStats: subjects.slice(1).map((subject) => { const items = results.filter((item) => item.question.subject === subject); return items.length ? { subject, correct: items.filter((item) => item.correct).length, total: items.length } : null }).filter(Boolean) }
+  submitted.value = true
+  ElMessage.success('练习已完成，结果和解析已生成')
+}
+function resetPractice() { started.value = false; submitted.value = false; report.value = null; selectedAnswers.value = {}; currentIndex.value = 0 }
+function difficultyText(value) { return '★'.repeat(value) + '☆'.repeat(5 - value) }
 </script>
 
-<template><GovPlaceholderView :module="module" /></template>
+<template>
+  <main class="gov-practice-page"><section class="practice-shell">
+    <header class="practice-header"><button class="back-button" type="button" @click="goBack"><el-icon><ArrowLeft /></el-icon><span>返回考公专题</span></button><div class="module-label"><span>03</span><span>智能题库与每日练习</span></div></header>
+
+    <template v-if="!started">
+      <section class="practice-hero"><div><p class="eyebrow">QUESTION BANK / DAILY PRACTICE</p><h1>把今天的练习，变成明天的底气</h1><p>按行测六科选择训练方式，完成后立即查看得分、正确率与逐题解析。</p></div><div class="hero-stats"><div><strong>{{ questionBank.length }}</strong><span>题库总量</span></div><div><strong>42</strong><span>累计练习题</span></div><div><strong>78%</strong><span>近期开题正确率</span></div><div><strong>3</strong><span>连续学习天数</span></div></div></section>
+      <section class="selection-panel"><div class="section-heading"><div><span class="section-kicker">STEP 01</span><h2>选择练习方式</h2></div><span class="data-note"><el-icon><DataAnalysis /></el-icon>本页使用模拟数据</span></div>
+        <div class="mode-grid"><button v-for="mode in modes" :key="mode.id" class="mode-card" :class="[{ active: selectedMode === mode.id }, `tone-${mode.tone}`]" type="button" @click="setMode(mode.id)"><span class="mode-icon"><el-icon><component :is="mode.icon" /></el-icon></span><span><strong>{{ mode.label }}</strong><small>{{ mode.detail }}</small></span><el-icon class="mode-check"><CircleCheck /></el-icon></button></div>
+        <div class="filter-heading"><div><span class="section-kicker">STEP 02</span><h2>设置练习范围</h2></div><button class="filter-toggle" type="button" @click="showFilters = !showFilters"><el-icon><Search /></el-icon>{{ showFilters ? '收起筛选' : '展开筛选' }}</button></div>
+        <div class="filter-bar" :class="{ expanded: showFilters }"><label><span>科目</span><select v-model="selectedSubject"><option v-for="subject in subjects" :key="subject">{{ subject }}</option></select></label><label><span>难度</span><select v-model="selectedDifficulty"><option>全部难度</option><option value="1">1 星</option><option value="2">2 星</option><option value="3">3 星</option><option value="4">4 星</option><option value="5">5 星</option></select></label><div class="range-summary"><strong>{{ availableQuestions.length }} 道题</strong><span>{{ currentMode.label }} · 提交后查看解析</span></div></div>
+        <div class="start-row"><div><strong>今日建议</strong><span>先完成 {{ currentMode.label }}，本次最多练习 5 道题，再根据错题解析进行复盘。</span></div><el-button type="primary" size="large" @click="beginPractice">开始练习<el-icon><ArrowRight /></el-icon></el-button></div>
+      </section>
+      <section class="quick-links"><div><el-icon><Warning /></el-icon><span><strong>错题待复习</strong><small>2 道题等待重新作答</small></span><button type="button" @click="startWrongPractice">去复习<el-icon><ArrowRight /></el-icon></button></div><div><el-icon><Clock /></el-icon><span><strong>最近练习</strong><small>常识判断 · 5 道题 · 正确率 80%</small></span><button type="button" @click="beginPractice">继续练习<el-icon><ArrowRight /></el-icon></button></div></section>
+    </template>
+
+    <template v-else-if="!submitted">
+      <section class="quiz-topbar"><div><p class="eyebrow">{{ currentMode.label }}</p><h1>{{ selectedSubject === '全部科目' ? '行测综合训练' : selectedSubject }}</h1></div><div class="quiz-meta"><span><el-icon><List /></el-icon>{{ currentIndex + 1 }} / {{ availableQuestions.length }}</span><span><el-icon><Check /></el-icon>已答 {{ answeredCount }} 题</span></div></section><div class="progress-track"><span :style="{ width: `${Math.max(progressPercent, 3)}%` }" /></div>
+      <section class="quiz-layout"><article class="question-panel"><div class="question-meta"><span>第 {{ currentIndex + 1 }} 题</span><span>{{ currentQuestion.subject }}</span><span>{{ currentQuestion.type === 'MULTIPLE' ? '多选题' : '单选题' }}</span><span class="difficulty">{{ difficultyText(currentQuestion.difficulty) }}</span></div><h2>{{ currentQuestion.stem }}</h2><p v-if="currentQuestion.type === 'MULTIPLE'" class="answer-tip">本题为多选题，请选择所有正确选项</p><div class="options-list"><button v-for="option in currentQuestion.options" :key="option[0]" class="option-button" :class="{ selected: answerFor(currentQuestion).includes(option[0]) }" type="button" @click="chooseAnswer(currentQuestion, option[0])"><span class="option-key">{{ option[0] }}</span><span>{{ option[1] }}</span><el-icon v-if="answerFor(currentQuestion).includes(option[0])"><Check /></el-icon></button></div><div class="question-actions"><el-button plain :disabled="currentIndex === 0" @click="currentIndex -= 1"><el-icon><ArrowLeft /></el-icon>上一题</el-button><el-button v-if="!isLastQuestion" type="primary" @click="currentIndex += 1">下一题<el-icon><ArrowRight /></el-icon></el-button><el-button v-else type="primary" @click="submitPractice">提交本次练习</el-button></div></article><aside class="answer-sheet"><div class="sheet-header"><strong>答题卡</strong><small>{{ answeredCount }}/{{ availableQuestions.length }}</small></div><div class="sheet-grid"><button v-for="(question, index) in availableQuestions" :key="question.id" type="button" :class="{ answered: answerFor(question).length, current: index === currentIndex }" @click="currentIndex = index">{{ index + 1 }}</button></div><div class="sheet-legend"><span><i class="dot answered" />已作答</span><span><i class="dot" />未作答</span></div><el-button class="sheet-submit" type="primary" plain @click="submitPractice">提交练习</el-button></aside></section>
+    </template>
+
+    <template v-else><section class="report-hero"><div><p class="eyebrow">PRACTICE REPORT</p><h1>练习完成，来看看结果</h1><p>本次{{ currentMode.label }}已提交，下面是答题表现和逐题解析。</p></div><div class="score-ring"><strong>{{ report.score }}</strong><span>本次得分</span></div></section><section class="report-summary"><div><span>答对题数</span><strong>{{ report.correctCount }} / {{ report.total }}</strong></div><div><span>正确率</span><strong>{{ report.score }}%</strong></div><div><span>用时</span><strong>{{ report.duration }} 秒</strong></div><div><span>需要复习</span><strong>{{ report.total - report.correctCount }} 题</strong></div></section><section v-if="report.subjectStats.length" class="subject-report"><div class="section-heading"><div><span class="section-kicker">PERFORMANCE</span><h2>分科表现</h2></div><span class="data-note">根据本次答题结果统计</span></div><div class="subject-bars"><div v-for="item in report.subjectStats" :key="item.subject"><span>{{ item.subject }}</span><div class="bar"><i :style="{ width: `${Math.round((item.correct / item.total) * 100)}%` }" /></div><strong>{{ item.correct }}/{{ item.total }}</strong></div></div></section><section class="review-list"><div class="section-heading"><div><span class="section-kicker">REVIEW</span><h2>逐题解析</h2></div><span class="data-note">错误题目可在下一次错题重做中复习</span></div><article v-for="(item, index) in report.results" :key="item.question.id" class="review-card" :class="{ wrong: !item.correct }"><div class="review-title"><span class="result-icon"><el-icon><component :is="item.correct ? Check : Warning" /></el-icon></span><strong>第 {{ index + 1 }} 题 · {{ item.question.subject }}</strong><span class="result-label">{{ item.correct ? '回答正确' : '需要复习' }}</span></div><p class="review-stem">{{ item.question.stem }}</p><p><b>你的答案：</b>{{ item.selected.length ? item.selected.join('、') : '未作答' }}　<b>正确答案：</b>{{ item.question.answer.join('、') }}</p><p class="analysis"><b>解析：</b>{{ item.question.analysis }}</p></article></section><div class="report-actions"><el-button plain @click="resetPractice">返回重新选择</el-button><el-button type="primary" @click="beginPractice">再练一次<el-icon><RefreshRight /></el-icon></el-button></div></template>
+    <footer class="practice-footer"><span>Edu-F · 考公学习专题</span><span>题目、答题记录与结果报告模块</span></footer>
+  </section></main>
+</template>
+
+<style scoped>
+.gov-practice-page{min-height:100%;padding:28px 34px;background:#f5f7fb;color:#1f2937}.practice-shell{width:min(1180px,100%);min-height:calc(100vh - 112px);margin:0 auto;padding:0 42px 26px;border:1px solid #e2e8f0;border-radius:12px;background:#fff;box-shadow:0 18px 45px rgb(28 45 76 / 9%)}.practice-header{display:flex;align-items:center;justify-content:space-between;padding:20px 0;border-bottom:1px solid #edf0f5}.back-button,.filter-toggle{display:inline-flex;align-items:center;gap:7px;border:0;background:transparent;color:#52627a;cursor:pointer;font:inherit;font-size:13px;font-weight:700}.back-button:hover,.filter-toggle:hover{color:#2f80ed}.module-label{display:flex;gap:8px;color:#7b879a;font-size:12px;font-weight:800}.module-label span:first-child{color:#d8891e}.practice-hero,.report-hero{display:flex;align-items:end;justify-content:space-between;gap:30px;padding:48px 0 32px}.eyebrow,.section-kicker{margin:0;color:#d8891e;font-size:11px;font-weight:900;letter-spacing:.12em}h1{margin:9px 0 0;color:#172033;font-size:clamp(28px,4vw,44px);line-height:1.16}.practice-hero p:last-child,.report-hero p:last-child{max-width:630px;margin:15px 0 0;color:#718096;font-size:15px;line-height:1.7}.hero-stats{display:flex;flex:0 0 auto;gap:26px;padding:17px 0 5px}.hero-stats div{display:grid;gap:3px;min-width:68px}.hero-stats strong{color:#27354a;font-size:25px}.hero-stats span{color:#8a96a8;font-size:11px;white-space:nowrap}.selection-panel,.subject-report,.review-list{padding:25px 26px;border:1px solid #e3e8f1;border-radius:9px;background:#fbfcfe}.section-heading,.filter-heading{display:flex;align-items:center;justify-content:space-between;gap:20px}.section-heading h2,.filter-heading h2{margin:5px 0 0;color:#27354a;font-size:20px}.data-note{display:inline-flex;align-items:center;gap:6px;color:#8b96a7;font-size:12px}.mode-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:17px}.mode-card{display:flex;min-height:100px;align-items:center;gap:10px;padding:14px;border:1px solid #e3e8f1;border-radius:8px;background:#fff;color:inherit;cursor:pointer;text-align:left;transition:.2s ease}.mode-card:hover,.mode-card.active{border-color:#9fc3ef;box-shadow:0 7px 15px rgb(31 74 125 / 9%);transform:translateY(-1px)}.mode-card.active{outline:2px solid rgb(47 128 237 / 14%)}.mode-icon{display:grid;width:36px;height:36px;flex:0 0 auto;place-items:center;border-radius:9px}.mode-card strong,.mode-card small{display:block}.mode-card strong{color:#27354a;font-size:13px}.mode-card small{margin-top:5px;color:#7b879a;font-size:11px}.mode-check{margin-left:auto;color:#d8e0ec}.mode-card.active .mode-check{color:#2f80ed}.tone-blue .mode-icon{background:#eaf3ff;color:#2f80ed}.tone-green .mode-icon{background:#e9f8f0;color:#18a66a}.tone-purple .mode-icon{background:#f1edff;color:#7258d8}.tone-orange .mode-icon{background:#fff4e5;color:#d8891e}.filter-heading{margin-top:29px;padding-top:23px;border-top:1px solid #edf0f5}.filter-bar{display:grid;grid-template-columns:1fr 1fr 1.4fr;gap:14px;margin-top:15px}.filter-bar label{display:grid;gap:6px;color:#718096;font-size:12px}.filter-bar select{height:38px;padding:0 11px;border:1px solid #dfe6ef;border-radius:6px;background:#fff;color:#27354a;font:inherit;outline:none}.range-summary{display:grid;align-content:center;padding:9px 13px;border-left:3px solid #d8891e;background:#fff8ed}.range-summary strong{color:#83551c;font-size:14px}.range-summary span{margin-top:3px;color:#9a7a4a;font-size:12px}.start-row{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-top:23px;padding-top:17px;border-top:1px solid #edf0f5}.start-row strong,.start-row span{display:block}.start-row strong{color:#27354a;font-size:13px}.start-row span{margin-top:4px;color:#8a96a8;font-size:12px}.start-row :deep(.el-button),.question-actions :deep(.el-button),.report-actions :deep(.el-button),.sheet-submit{border-radius:6px;font-weight:800}.quick-links{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}.quick-links>div{display:flex;align-items:center;gap:11px;padding:14px 16px;border:1px solid #e8edf3;border-radius:8px}.quick-links>div>.el-icon{color:#d8891e;font-size:20px}.quick-links span{flex:1}.quick-links strong,.quick-links small{display:block}.quick-links strong{color:#475569;font-size:13px}.quick-links small{margin-top:3px;color:#8a96a8;font-size:11px}.quick-links button{display:inline-flex;align-items:center;gap:3px;border:0;background:transparent;color:#2f80ed;cursor:pointer;font:inherit;font-size:12px;font-weight:800}.quiz-topbar{display:flex;align-items:end;justify-content:space-between;padding:45px 0 20px}.quiz-topbar h1{font-size:30px}.quiz-meta{display:flex;gap:18px;color:#718096;font-size:12px}.quiz-meta span{display:inline-flex;align-items:center;gap:5px}.progress-track{height:5px;overflow:hidden;border-radius:5px;background:#edf1f6}.progress-track span{display:block;height:100%;border-radius:inherit;background:#2f80ed;transition:width .2s ease}.quiz-layout{display:grid;grid-template-columns:minmax(0,1fr) 235px;gap:18px;margin-top:20px}.question-panel,.answer-sheet{padding:25px;border:1px solid #e3e8f1;border-radius:9px}.question-panel{min-height:495px}.question-meta{display:flex;align-items:center;gap:8px;color:#7b879a;font-size:12px}.question-meta span{padding:4px 8px;border-radius:4px;background:#f4f6fa}.question-meta span:first-child{background:#eaf3ff;color:#2f80ed;font-weight:800}.question-meta .difficulty{margin-left:auto;padding:0;background:transparent;color:#e0a14a;letter-spacing:1px}.question-panel h2{max-width:770px;margin:22px 0 0;color:#27354a;font-size:20px;line-height:1.7}.answer-tip{margin:10px 0 0;color:#9a6a25;font-size:12px}.options-list{display:grid;gap:10px;margin-top:25px}.option-button{display:flex;min-height:52px;align-items:center;gap:11px;padding:12px 14px;border:1px solid #e1e7ef;border-radius:7px;background:#fff;color:#52627a;cursor:pointer;font:inherit;font-size:14px;text-align:left;transition:.15s ease}.option-button:hover{border-color:#a7c8ef;background:#f8fbff}.option-button.selected{border-color:#2f80ed;background:#eef6ff;color:#27354a}.option-key{display:grid;width:27px;height:27px;flex:0 0 auto;place-items:center;border:1px solid #dbe3ee;border-radius:50%;color:#7b879a;font-weight:800}.selected .option-key{border-color:#2f80ed;background:#2f80ed;color:#fff}.option-button>.el-icon{margin-left:auto;color:#2f80ed}.question-actions{display:flex;justify-content:space-between;margin-top:27px}.answer-sheet{align-self:start;background:#fbfcfe}.sheet-header{display:flex;align-items:baseline;justify-content:space-between;color:#27354a}.sheet-header small{color:#8a96a8}.sheet-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:20px}.sheet-grid button{height:32px;border:1px solid #dfe6ef;border-radius:5px;background:#fff;color:#718096;cursor:pointer}.sheet-grid button.current{border-color:#2f80ed;color:#2f80ed;box-shadow:0 0 0 2px rgb(47 128 237 / 12%)}.sheet-grid button.answered{border-color:#a8d1bc;background:#eef9f2;color:#16814f}.sheet-grid button.answered.current{border-color:#2f80ed;color:#2f80ed}.sheet-legend{display:flex;gap:10px;margin-top:20px;color:#8a96a8;font-size:11px}.sheet-legend span{display:inline-flex;align-items:center;gap:5px}.dot{display:inline-block;width:7px;height:7px;border:1px solid #dfe6ef;border-radius:50%;background:#fff}.dot.answered{border-color:#a8d1bc;background:#a8d1bc}.sheet-submit{width:100%;margin-top:25px}.score-ring{display:grid;width:128px;height:128px;flex:0 0 auto;place-content:center;border:9px solid #dcecff;border-top-color:#2f80ed;border-radius:50%;text-align:center;transform:rotate(20deg)}.score-ring strong,.score-ring span{display:block;transform:rotate(-20deg)}.score-ring strong{color:#2f80ed;font-size:35px}.score-ring span{margin-top:3px;color:#718096;font-size:11px}.report-summary{display:grid;grid-template-columns:repeat(4,1fr);overflow:hidden;border:1px solid #e3e8f1;border-radius:9px}.report-summary div{display:grid;gap:6px;padding:18px 20px;border-right:1px solid #edf0f5}.report-summary div:last-child{border-right:0}.report-summary span{color:#8a96a8;font-size:12px}.report-summary strong{color:#27354a;font-size:21px}.subject-report{margin-top:14px}.subject-bars{display:grid;gap:13px;margin-top:20px}.subject-bars>div{display:grid;grid-template-columns:145px 1fr 45px;align-items:center;gap:10px;color:#52627a;font-size:12px}.subject-bars strong{color:#27354a;text-align:right}.bar{height:8px;overflow:hidden;border-radius:6px;background:#eaf0f6}.bar i{display:block;height:100%;border-radius:inherit;background:#2f80ed}.review-list{margin-top:14px}.review-card{margin-top:13px;padding:17px;border:1px solid #dfe8f5;border-radius:7px;background:#fff}.review-card.wrong{border-color:#f1d8a9;background:#fffaf0}.review-title{display:flex;align-items:center;gap:8px}.result-icon{display:grid;width:24px;height:24px;place-items:center;border-radius:50%;background:#eaf8f0;color:#18a66a}.wrong .result-icon{background:#fff0d7;color:#d8891e}.review-title strong{color:#27354a;font-size:13px}.result-label{margin-left:auto;color:#18a66a;font-size:12px;font-weight:800}.wrong .result-label{color:#b8791b}.review-card p{margin:10px 0 0;color:#64748b;font-size:13px;line-height:1.7}.review-stem{color:#27354a!important;font-weight:700}.analysis{padding:10px 12px;border-left:3px solid #8dbcf0;background:#f8fbff}.review-card b{color:#475569}.report-actions{display:flex;justify-content:center;gap:10px;margin-top:20px}.practice-footer{display:flex;justify-content:space-between;gap:15px;margin-top:42px;padding-top:18px;border-top:1px solid #edf0f5;color:#a0aaba;font-size:11px}
+@media(max-width:850px){.gov-practice-page{padding:14px}.practice-shell{padding:0 20px 22px}.practice-hero,.report-hero{align-items:flex-start;flex-direction:column;padding-top:35px}.hero-stats{width:100%;justify-content:space-between}.mode-grid{grid-template-columns:repeat(2,1fr)}.quiz-layout{grid-template-columns:1fr}.answer-sheet{order:-1}.sheet-grid{grid-template-columns:repeat(8,1fr)}.report-summary{grid-template-columns:repeat(2,1fr)}.report-summary div:nth-child(2){border-right:0}.report-summary div:nth-child(-n+2){border-bottom:1px solid #edf0f5}.subject-bars>div{grid-template-columns:125px 1fr 42px}}
+@media(max-width:560px){.practice-header,.practice-footer,.start-row,.quiz-topbar{align-items:flex-start;flex-direction:column}.module-label{align-self:flex-end}.selection-panel,.subject-report,.review-list{padding:19px 16px}.mode-grid,.quick-links{grid-template-columns:1fr}.filter-bar{display:none;grid-template-columns:1fr}.filter-bar.expanded{display:grid}.question-panel{padding:18px 15px}.question-meta{flex-wrap:wrap}.question-meta .difficulty{margin-left:0}.question-panel h2{font-size:17px}.sheet-grid{grid-template-columns:repeat(5,1fr)}.subject-bars>div{grid-template-columns:1fr 1fr 38px}.report-summary strong{font-size:17px}.score-ring{width:108px;height:108px}.practice-footer{gap:7px}}
+.filter-bar:not(.expanded){display:none}
+</style>
