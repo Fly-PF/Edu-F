@@ -128,6 +128,21 @@ const fallbackCards = [
     motif: 'face',
   },
   {
+    id: 'local-gewu',
+    projectCode: 'gewu',
+    projectName: '格物',
+    caseSummary: '在交互式实验中探索知识与规律',
+    gradeBand: '全学段',
+    subjectDirection: '综合实践',
+    practiceType: 'interactive',
+    aiCapability: 'learning',
+    badge: '探索空间',
+    theme: 'purple',
+    heat: '-',
+    learners: '-',
+    motif: 'orbit',
+  },
+  {
     id: 'local-gesture',
     projectCode: 'gesture_classification',
     projectName: '手势分类',
@@ -178,8 +193,9 @@ const exhibitCards = computed(() => {
       ...item,
       coverImage: resolveCoverImage(item.projectCode, item.coverImage),
     }))
+  const visibleProjectCodes = new Set(['draw_guess', 'face_recognition', 'gewu'])
   const allCards = [...priorityCards, ...remoteCards, ...otherFallbackCards].filter(
-    (item) => item.projectCode !== 'doodle_recognition',
+    (item) => visibleProjectCodes.has(item.projectCode),
   )
   const seenKeys = new Set()
   const uniqueCards = allCards.filter((item) => {
@@ -243,6 +259,11 @@ async function loadCases() {
 }
 
 function openExperience(item) {
+  if (item.projectCode === 'gewu') {
+    router.push({ name: 'gewu' })
+    return
+  }
+
   if (item.projectCode === 'draw_guess') {
     router.push({ name: 'ai-draw-guess' })
     return
