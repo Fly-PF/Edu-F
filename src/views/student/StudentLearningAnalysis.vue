@@ -85,14 +85,14 @@ const practiceSummary = computed(() => ({
 const navigation = computed(() => [
   { id: 'overview', label: '学习总览', hint: '今天先做什么', icon: HomeFilled },
   { id: 'ability', label: '能力画像', hint: '看见成长变化', icon: DataAnalysis },
-  { id: 'wrong-books', label: 'AI 错题本', hint: '整理与复盘', icon: Collection, badge: wrongQuestions.value.length },
+  { id: 'wrong-books', label: '错题本', hint: '整理与复盘', icon: Collection, badge: wrongQuestions.value.length },
   { id: 'courses', label: '课程记录', hint: '进度与推荐', icon: Reading },
 ])
 
 const sectionMeta = computed(() => ({
   overview: { eyebrow: 'LEARNING HOME', title: '我的学习总览', description: '先看重点，再决定今天的学习方向。' },
   ability: { eyebrow: 'ABILITY PROFILE', title: '我的能力画像', description: '课程进度、学习投入和练习反馈共同形成这份画像。' },
-  'wrong-books': { eyebrow: 'SMART REVIEW', title: 'AI 错题本', description: '把真实错题分门别类，复盘时更快找到重点。' },
+  'wrong-books': { eyebrow: 'SMART REVIEW', title: '错题本', description: '把真实错题分门别类，复盘时更快找到重点。' },
   courses: { eyebrow: 'COURSE JOURNEY', title: '课程记录与推荐', description: '继续上次的课程，也可以探索下一门适合自己的课。' },
 })[activeSection.value])
 
@@ -357,7 +357,7 @@ onMounted(loadOverview)
                 <div v-else class="practice-empty"><DocumentChecked /><span>获得老师反馈后，这里会出现练习记录。</span></div>
                 <button class="wrong-book-shortcut" type="button" @click="switchSection('wrong-books')">
                   <span><Collection /></span>
-                  <div><strong>整理 AI 错题本</strong><small>{{ wrongQuestions.length ? `${wrongQuestions.length} 道题等待分类复盘` : '当前没有需要整理的错题' }}</small></div>
+                  <div><strong>整理错题本</strong><small>{{ wrongQuestions.length ? `${wrongQuestions.length} 道题等待分类复盘` : '当前没有需要整理的错题' }}</small></div>
                   <el-icon><ArrowRight /></el-icon>
                 </button>
               </article>

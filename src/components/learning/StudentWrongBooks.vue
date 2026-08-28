@@ -178,7 +178,7 @@ onMounted(loadBooks)
 </script>
 
 <template>
-  <section v-loading="loading" class="wrong-book-shell" aria-label="AI 错题本">
+  <section v-loading="loading" class="wrong-book-shell" aria-label="错题本">
     <aside class="book-rail">
       <div class="rail-heading">
         <span class="rail-icon"><Collection /></span>
