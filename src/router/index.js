@@ -64,6 +64,15 @@ const govMaterialAdminRoutes = [
       allowedRoles: ['ADMIN', 'SUPERADMIN'],
     },
   },
+  {
+    path: 'gov-material/questions',
+    name: 'gov-question-manage',
+    component: () => import('@/views/admin/GovQuestionManage.vue'),
+    meta: {
+      title: '题库管理',
+      allowedRoles: ['ADMIN', 'SUPERADMIN'],
+    },
+  },
 ]
 
 const personnelRoutes = [

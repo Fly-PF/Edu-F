@@ -40,6 +40,11 @@ const govMaterialMenus = [
     path: '/main/admin/gov-material/materials',
     roles: ['ADMIN', 'SUPERADMIN'],
   },
+  {
+    label: '题库管理',
+    path: '/main/admin/gov-material/questions',
+    roles: ['ADMIN', 'SUPERADMIN'],
+  },
 ]
 
 const utilityMenus = [
