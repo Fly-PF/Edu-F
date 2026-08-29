@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   ArrowLeft,
@@ -26,7 +27,7 @@ import {
 } from '@/api/govAssessment'
 
 const SUBJECTS = [
-  { value: '', label: '综合' },
+  { value: 'ALL', label: '综合' },
   { value: '政治理论', label: '政治理论' },
   { value: '常识判断', label: '常识判断' },
   { value: '语言理解与表达', label: '语言理解与表达' },
@@ -39,6 +40,7 @@ const QUESTION_COUNTS = [10, 20, 30]
 const DURATION_OPTIONS = [30, 60, 90, 120]
 
 const view = ref('setup')
+const router = useRouter()
 const records = ref([])
 const loadingRecords = ref(false)
 const creating = ref(false)
@@ -51,7 +53,7 @@ const remainingSeconds = ref(0)
 const activeQuestionId = ref(null)
 
 const form = reactive({
-  subject: '',
+  subject: 'ALL',
   questionCount: 20,
   difficulty: null,
   durationMinutes: 60,
@@ -144,6 +146,7 @@ function formatDuration(value) {
 }
 
 function subjectLabel(subject) {
+  if (subject === 'ALL') return '综合'
   return SUBJECTS.find((item) => item.value === subject)?.label || subject || '综合'
 }
 
@@ -194,7 +197,7 @@ async function startExam() {
   creating.value = true
   try {
     const data = await createGovMockExam({
-      subject: form.subject || null,
+      subject: form.subject === 'ALL' ? null : form.subject,
       questionCount: Number(form.questionCount),
       difficulty: form.difficulty ? Number(form.difficulty) : null,
       durationLimitSeconds: Number(form.durationMinutes) * 60,
@@ -296,6 +299,14 @@ function backToSetup() {
   loadRecords()
 }
 
+function goBack() {
+  if (view.value !== 'setup') {
+    backToSetup()
+    return
+  }
+  router.back()
+}
+
 function selectedClass(question, key) {
   const selected = getSelectedAnswers(question)
   if (question.type === 'MULTIPLE') return selected.includes(key) ? 'is-selected' : ''
@@ -312,6 +323,10 @@ onBeforeUnmount(clearTimer)
       <section class="assessment-shell">
         <header class="page-header">
           <div>
+            <el-button text class="header-back-button" @click="goBack">
+              <el-icon><ArrowLeft /></el-icon>
+              返回上一级
+            </el-button>
             <p class="eyebrow">GOVERNMENT EXAM ASSESSMENT</p>
             <h1>模拟考试与测评</h1>
             <span>随机抽题、限时作答、自动评分与错题复盘</span>
@@ -634,6 +649,16 @@ onBeforeUnmount(clearTimer)
   border: 1px solid #dce4ef;
   border-radius: 8px;
   background: linear-gradient(118deg, #ffffff 0%, #eef6f4 100%);
+}
+
+.header-back-button {
+  margin: 0 0 12px -10px;
+  color: #5e6d82;
+  font-weight: 700;
+}
+
+.header-back-button:hover {
+  color: #2f80ed;
 }
 
 .eyebrow {
@@ -1396,4 +1421,3 @@ onBeforeUnmount(clearTimer)
   }
 }
 </style>
-
