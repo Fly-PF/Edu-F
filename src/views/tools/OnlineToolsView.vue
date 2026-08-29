@@ -1,4 +1,5 @@
 <script setup>
+import { computed } from 'vue'
 import { Collection, Cpu, MagicStick, Tools } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 
@@ -13,6 +14,7 @@ const tools = [
     icon: Cpu,
     tone: 'purple',
     sticker: 'CODE IT',
+    hidden: true,
   },
   {
     title: '人工智能工坊',
@@ -22,6 +24,7 @@ const tools = [
     icon: MagicStick,
     tone: 'mint',
     sticker: 'TRY AI',
+    hidden: true,
   },
   {
     title: '积木工坊',
@@ -33,6 +36,8 @@ const tools = [
     sticker: 'MAKE IT',
   },
 ]
+
+const visibleTools = computed(() => tools.filter((item) => !item.hidden))
 
 function openTool(item) {
   if (!item.disabled && item.path) {
@@ -70,12 +75,12 @@ function openTool(item) {
             <p>READY TO PLAY</p>
             <h2 id="tool-list-title">挑一个，马上开始</h2>
           </div>
-          <span class="tool-count">{{ tools.length }} 个创意工坊</span>
+          <span class="tool-count">{{ visibleTools.length }} 个创意工坊</span>
         </div>
 
         <div class="tool-grid">
           <article
-            v-for="item in tools"
+            v-for="item in visibleTools"
             :key="item.title"
             class="tool-card"
             :class="[`tone-${item.tone}`, { 'is-disabled': item.disabled }]"
