@@ -68,7 +68,7 @@ export function removeQuestionFromWrongBook(bookId, question) {
 }
 
 export function askStudentLearningAssistant(data) {
-  return resolve(request.post('/api/learning-analysis/student/assistant', data, { timeout: 40000 }))
+  return resolve(request.post('/api/learning-analysis/student/assistant', data, { timeout: 400000 }))
 }
 
 export function refreshStudentCourseRecommendations() {
