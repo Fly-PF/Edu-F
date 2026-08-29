@@ -42,6 +42,12 @@ const govMaterialMenus = [
   },
 ]
 
+const govNewsMenus = [{
+  label: '资讯与公告管理',
+  path: '/main/admin/gov-news',
+  roles: ['ADMIN', 'SUPERADMIN'],
+}]
+
 const utilityMenus = [
   {
     label: '安全治理',
@@ -66,6 +72,7 @@ const visibleUtilityMenus = computed(() => {
 const visibleGovMaterialMenus = computed(() => {
   return govMaterialMenus.filter((item) => userStore.hasAnyRole(item.roles))
 })
+const visibleGovNewsMenus = computed(() => govNewsMenus.filter((item) => userStore.hasAnyRole(item.roles)))
 
 const activeMenu = computed(() => {
   if (route.path.startsWith('/main/admin/personnel/')) {
@@ -75,6 +82,7 @@ const activeMenu = computed(() => {
   if (route.path.startsWith('/main/admin/gov-material/')) {
     return route.path
   }
+  if (route.path.startsWith('/main/admin/gov-news')) return '/main/admin/gov-news'
 
   if (route.path.startsWith('/main/admin/safety')) {
     return '/main/admin/safety'
@@ -103,6 +111,11 @@ watch(
       shellStore.setActiveMenu(path)
       return
     }
+    if (path.startsWith('/main/admin/gov-news')) {
+      shellStore.openMenu('gov-news')
+      shellStore.setActiveMenu('/main/admin/gov-news')
+      return
+    }
 
     if (path.startsWith('/main/admin/safety')) {
       shellStore.openMenu('utility')
@@ -119,6 +132,7 @@ watch(
     shellStore.closeMenu('personnel')
     shellStore.closeMenu('utility')
     shellStore.closeMenu('gov-material')
+    shellStore.closeMenu('gov-news')
     shellStore.setActiveMenu('')
   },
   { immediate: true },
@@ -148,6 +162,7 @@ function handleSelect(index) {
     if (index.startsWith('/main/admin/gov-material/')) {
       shellStore.openMenu('gov-material')
     }
+    if (index.startsWith('/main/admin/gov-news')) shellStore.openMenu('gov-news')
 
     if (index.startsWith('/main/admin/safety')) {
     shellStore.openMenu('utility')
@@ -219,6 +234,10 @@ function handleSelect(index) {
             >
               {{ item.label }}
             </el-menu-item>
+          </el-sub-menu>
+          <el-sub-menu v-if="visibleGovNewsMenus.length" index="gov-news">
+            <template #title><span>考公资讯管理</span></template>
+            <el-menu-item v-for="item in visibleGovNewsMenus" :key="item.path" :index="item.path">{{ item.label }}</el-menu-item>
           </el-sub-menu>
         </el-menu>
       </el-scrollbar>

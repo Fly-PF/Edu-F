@@ -80,3 +80,45 @@ export async function getGovNewsDetail(newsId) {
   const data = unwrap(await request.get(`/api/gov/news/${encodeURIComponent(newsId)}`))
   return normalizeGovNewsDetail(data)
 }
+
+export async function getAdminGovNewsCategories() {
+  const data = unwrap(await request.get('/api/admin/gov/news/categories'))
+  return (Array.isArray(data) ? data : []).map(normalizeGovNewsCategory)
+}
+
+export async function createGovNewsCategory(data) {
+  return unwrap(await request.post('/api/admin/gov/news/categories', data))
+}
+
+export async function updateGovNewsCategory(id, data) {
+  return unwrap(await request.patch(`/api/admin/gov/news/categories/${encodeURIComponent(id)}`, data))
+}
+
+export async function updateGovNewsCategoryStatus(id, status) {
+  return unwrap(await request.patch(`/api/admin/gov/news/categories/${encodeURIComponent(id)}/status`, { status }))
+}
+
+export async function getAdminGovNewsList(params = {}) {
+  const data = unwrap(await request.get('/api/admin/gov/news', { params }))
+  return normalizeGovNewsPage(data, params)
+}
+
+export async function getAdminGovNewsDetail(id) {
+  return normalizeGovNewsDetail(unwrap(await request.get(`/api/admin/gov/news/${encodeURIComponent(id)}`)))
+}
+
+export async function createGovNews(data) {
+  return unwrap(await request.post('/api/admin/gov/news', data))
+}
+
+export async function updateGovNews(id, data) {
+  return unwrap(await request.put(`/api/admin/gov/news/${encodeURIComponent(id)}`, data))
+}
+
+export async function publishGovNews(id) {
+  return unwrap(await request.post(`/api/admin/gov/news/${encodeURIComponent(id)}/publish`))
+}
+
+export async function offlineGovNews(id) {
+  return unwrap(await request.post(`/api/admin/gov/news/${encodeURIComponent(id)}/offline`))
+}

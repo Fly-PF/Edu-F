@@ -66,6 +66,15 @@ const govMaterialAdminRoutes = [
   },
 ]
 
+const govNewsAdminRoutes = [
+  {
+    path: 'gov-news',
+    name: 'admin-gov-news',
+    component: () => import('@/views/admin/GovNewsManage.vue'),
+    meta: { title: '考公资讯管理', allowedRoles: ['ADMIN', 'SUPERADMIN'] },
+  },
+]
+
 const personnelRoutes = [
   {
     path: 'personnel/managers',
@@ -590,6 +599,7 @@ const router = createRouter({
             },
             ...personnelRoutes,
             ...govMaterialAdminRoutes,
+            ...govNewsAdminRoutes,
           ],
         },
       ],
@@ -665,4 +675,4 @@ router.beforeEach((to) => {
 })
 
 export default router
-export { personnelRoutes, studentRoutes, teacherRoutes, toolRoutes, govRoutes, govMaterialAdminRoutes }
+export { personnelRoutes, studentRoutes, teacherRoutes, toolRoutes, govRoutes, govMaterialAdminRoutes, govNewsAdminRoutes }

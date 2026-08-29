@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const request = { get: vi.fn() }
+const request = { get: vi.fn(), post: vi.fn(), put: vi.fn(), patch: vi.fn() }
 vi.mock('@/utils/request', () => ({ default: request }))
 
 const api = await import('./govNews')
@@ -88,5 +88,43 @@ describe('gov news API final contract', () => {
   it('surfaces the backend error message', async () => {
     request.get.mockResolvedValue({ code: 500, message: '资讯服务不可用', data: null })
     await expect(api.listGovNews()).rejects.toThrow('资讯服务不可用')
+  })
+})
+
+describe('gov news admin API contract', () => {
+  beforeEach(() => vi.clearAllMocks())
+  const ok = { code: 200, message: '操作成功', data: null }
+
+  it('uses category paths and PATCH methods', async () => {
+    request.get.mockResolvedValue(categoryResponse)
+    request.post.mockResolvedValue(ok); request.patch.mockResolvedValue(ok)
+    await api.getAdminGovNewsCategories()
+    await api.createGovNewsCategory({ name: '公告', sortOrder: 10 })
+    await api.updateGovNewsCategory(3, { name: '招考公告', sortOrder: 20 })
+    await api.updateGovNewsCategoryStatus(3, 0)
+    expect(request.get).toHaveBeenCalledWith('/api/admin/gov/news/categories')
+    expect(request.post).toHaveBeenCalledWith('/api/admin/gov/news/categories', { name: '公告', sortOrder: 10 })
+    expect(request.patch).toHaveBeenCalledWith('/api/admin/gov/news/categories/3', { name: '招考公告', sortOrder: 20 })
+    expect(request.patch).toHaveBeenCalledWith('/api/admin/gov/news/categories/3/status', { status: 0 })
+  })
+
+  it('uses exact news list, detail, create and edit requests', async () => {
+    request.get.mockResolvedValueOnce({ code: 200, data: { records: [], total: 0, pageNum: 1, pageSize: 10 } }).mockResolvedValueOnce({ code: 200, data: { ...listRecord, contentMd: '# 正文' } })
+    request.post.mockResolvedValue(ok); request.put.mockResolvedValue(ok)
+    const payload = { categoryId: 3, title: '标题', summary: '', coverUrl: null, isTop: 1, contentMd: '# 正文' }
+    await api.getAdminGovNewsList({ status: 0, pageNum: 1, pageSize: 10 })
+    await api.getAdminGovNewsDetail(18)
+    await api.createGovNews(payload); await api.updateGovNews(18, payload)
+    expect(request.get).toHaveBeenCalledWith('/api/admin/gov/news', { params: { status: 0, pageNum: 1, pageSize: 10 } })
+    expect(request.get).toHaveBeenCalledWith('/api/admin/gov/news/18')
+    expect(request.post).toHaveBeenCalledWith('/api/admin/gov/news', payload)
+    expect(request.put).toHaveBeenCalledWith('/api/admin/gov/news/18', payload)
+  })
+
+  it('uses POST for publish and offline actions', async () => {
+    request.post.mockResolvedValue(ok)
+    await api.publishGovNews(18); await api.offlineGovNews(18)
+    expect(request.post).toHaveBeenCalledWith('/api/admin/gov/news/18/publish')
+    expect(request.post).toHaveBeenCalledWith('/api/admin/gov/news/18/offline')
   })
 })
