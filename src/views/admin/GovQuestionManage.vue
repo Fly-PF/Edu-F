@@ -163,7 +163,9 @@ function openEditDialog(row) {
     options: (content.options || []).length
       ? content.options.map((item) => ({ key: item.key, content: item.content }))
       : getDefaultForm().options,
-    answers: content.answer || [],
+    answers: row.questionType === 'SINGLE'
+      ? content.answer?.[0] || ''
+      : content.answer || [],
   })
   dialogVisible.value = true
 }
@@ -184,7 +186,7 @@ function removeOption(index) {
   }
   const removedKey = form.options[index]?.key
   form.options.splice(index, 1)
-  form.answers = form.answers.filter((answer) => answer !== removedKey)
+  form.answers = answerList(form.answers).filter((answer) => answer !== removedKey)
 }
 
 function handleQuestionTypeChange() {
@@ -198,7 +200,7 @@ async function handleSubmit() {
     ElMessage.warning('请至少填写两个有效选项')
     return
   }
-  if (!form.answers.length) {
+  if (!answerList(form.answers).length) {
     ElMessage.warning('请选择正确答案')
     return
   }
@@ -219,7 +221,7 @@ async function handleSubmit() {
           key: item.key.trim().toUpperCase(),
           content: item.content.trim(),
         })),
-        answer: form.answers.map((item) => String(item).trim().toUpperCase()),
+        answer: answerList(form.answers).map((item) => String(item).trim().toUpperCase()),
         analysis: form.analysis.trim() || null,
         tags: form.tagsText.split(/[，,]/).map((item) => item.trim()).filter(Boolean),
       },
@@ -326,6 +328,10 @@ function typeLabel(type) {
 
 function sourceLabel(type) {
   return SOURCE_TYPES.find((item) => item.value === type)?.label || type
+}
+
+function answerList(value) {
+  return Array.isArray(value) ? value : value ? [value] : []
 }
 
 function questionPreview(row) {
@@ -694,4 +700,3 @@ onMounted(loadList)
   }
 }
 </style>
-
