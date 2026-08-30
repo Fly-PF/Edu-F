@@ -53,7 +53,18 @@ const selectedResource = computed(() => {
   return resources.find((item) => item.id === selectedResourceId.value) || resources[0] || null
 })
 const videoSubtitleUrl = computed(() => {
-  const url = selectedResource.value?.url || ''
+  const video = selectedResource.value
+  if (!video || Number(video.type) !== 1) return ''
+  const resources = selectedChapter.value?.resources || []
+  const videoBase = baseName(video.name || video.url)
+  const subtitle = resources.find((resource) => {
+    if (!isSubtitleResource(resource)) return false
+    const subtitleBase = baseName(resource.name || resource.url)
+    return subtitleBase === `${videoBase}-zh-cn` || subtitleBase === videoBase
+  }) || (resources.filter(isSubtitleResource).length === 1 ? resources.find(isSubtitleResource) : null)
+  if (subtitle?.url) return subtitle.url
+
+  const url = video.url || ''
   if (!/\/api\/course-files\/course\/\d+\//i.test(url) || !/\.mp4(?:\?.*)?$/i.test(url)) {
     return ''
   }
@@ -98,7 +109,18 @@ function isExternalResource(resource) {
   return /^https?:\/\//i.test(resource?.url || resource?.resourceUrl || '')
 }
 
+function isSubtitleResource(resource) {
+  return /\.vtt(?:$|\?)/i.test(resource?.name || resource?.storedUrl || resource?.url || '')
+}
+
+function baseName(value) {
+  return String(value || '').split(/[\\/]/).pop().replace(/\.[^.?#]+(?:[?#].*)?$/, '').toLowerCase()
+}
+
 function resourceTypeMeta(type, resource) {
+  if (Number(type) === 4 && isSubtitleResource(resource)) {
+    return { label: '字幕文件', icon: Files, tag: 'info' }
+  }
   if (Number(type) === 4 && isExternalResource(resource)) {
     return { label: '官方课程', icon: Link, tag: 'primary' }
   }

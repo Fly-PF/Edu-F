@@ -57,7 +57,8 @@ function resourceIcon(type) {
   return { 1: VideoPlay, 2: Document, 3: Picture, 4: Files }[type] || Files
 }
 
-function resourceTypeText(type) {
+function resourceTypeText(type, resource) {
+  if (Number(type) === 4 && /\.vtt(?:$|\?)/i.test(resource?.name || resource?.url || '')) return '字幕文件'
   return { 1: '视频', 2: 'PDF', 3: '图片', 4: '数据文件' }[type] || '资源'
 }
 
@@ -285,7 +286,7 @@ onMounted(async () => {
                   </span>
                   <div>
                     <strong>{{ resource.name }}</strong>
-                    <small>{{ resourceTypeText(resource.type) }}</small>
+                    <small>{{ resourceTypeText(resource.type, resource) }}</small>
                   </div>
                 </div>
                 <el-empty v-if="!chapter.resources?.length" description="暂无资源" :image-size="50" />

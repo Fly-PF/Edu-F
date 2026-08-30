@@ -120,7 +120,14 @@ const resourceTypes = [
   { label: '数据文件', value: 4 },
 ]
 
-function resourceTypeMeta(type) {
+function isSubtitleResource(resource) {
+  return /\.vtt(?:$|\?)/i.test(resource?.name || resource?.storedUrl || resource?.url || '')
+}
+
+function resourceTypeMeta(type, resource) {
+  if (Number(type) === 4 && isSubtitleResource(resource)) {
+    return { label: '字幕文件', tag: 'info', icon: Files }
+  }
   const map = {
     1: { label: '视频', tag: 'success', icon: VideoPlay },
     2: { label: 'PDF', tag: 'warning', icon: Document },
@@ -758,13 +765,13 @@ onMounted(loadAll)
               <div class="resource-toolbar">
                 <div>
                   <h2>章节资源</h2>
-                  <p>支持视频、PDF、图片和数据文件。</p>
+                  <p>支持视频、PDF、图片、字幕和数据文件。</p>
                 </div>
                 <div>
                   <el-upload
                     :show-file-list="false"
                     :http-request="handleResourceUpload"
-                    accept="video/*,.pdf,application/pdf,image/*,.csv,.xls,.xlsx,.zip"
+                    accept="video/*,.pdf,application/pdf,image/*,.csv,.xls,.xlsx,.zip,.vtt,text/vtt"
                   >
                     <el-button type="primary" :loading="resourceUploading">
                       <el-icon><UploadFilled /></el-icon>
@@ -799,7 +806,7 @@ onMounted(loadAll)
                 <div v-for="resource in selectedChapter.resources || []" :key="resource.id" class="resource-row" role="row">
                   <div class="resource-name">
                     <span class="resource-icon">
-                      <component :is="resourceTypeMeta(resource.type).icon" />
+                      <component :is="resourceTypeMeta(resource.type, resource).icon" />
                     </span>
                     <div>
                       <strong>{{ resource.name }}</strong>
@@ -807,8 +814,8 @@ onMounted(loadAll)
                     </div>
                   </div>
                   <div>
-                    <el-tag size="small" :type="resourceTypeMeta(resource.type).tag" effect="plain">
-                      {{ resourceTypeMeta(resource.type).label }}
+                    <el-tag size="small" :type="resourceTypeMeta(resource.type, resource).tag" effect="plain">
+                      {{ resourceTypeMeta(resource.type, resource).label }}
                     </el-tag>
                   </div>
                   <div class="resource-size">
