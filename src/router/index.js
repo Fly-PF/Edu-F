@@ -2,9 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 
 function getAdminEntryPath(roleCode) {
-  return roleCode === 'SUPERADMIN'
-    ? '/main/admin/personnel/managers'
-    : '/main/admin/personnel/teachers'
+  return '/main/admin/gov/knowledge'
 }
 
 function getTeacherEntryPath() {
@@ -318,7 +316,7 @@ const govRoutes = [
     path: 'gov/news',
     name: 'gov-news',
     component: () => import('@/views/gov/GovNewsPlaceholder.vue'),
-    meta: { title: '考公资讯与公告' },
+    meta: { title: '考公资讯与公告', allowedRoles: ['STUDENT'] },
   },
   {
     path: 'gov/news/:newsId',
@@ -329,26 +327,40 @@ const govRoutes = [
   {
     path: 'gov/knowledge',
     name: 'gov-knowledge',
-    component: () => import('@/views/gov/GovKnowledgePlaceholder.vue'),
-    meta: { title: '知识点学习' },
+    component: () => import('@/views/gov/GovKnowledgeView.vue'),
+    meta: { title: '知识点学习', allowedRoles: ['STUDENT'] },
+  },
+  {
+    path: 'gov/knowledge/collection',
+    name: 'gov-knowledge-collection',
+    component: () => import('@/views/gov/GovKnowledgeOverviewView.vue'),
+    props: { mode: 'favorite' },
+    meta: { title: '我的收藏总览', allowedRoles: ['STUDENT'] },
+  },
+  {
+    path: 'gov/knowledge/notes',
+    name: 'gov-knowledge-notes',
+    component: () => import('@/views/gov/GovKnowledgeOverviewView.vue'),
+    props: { mode: 'note' },
+    meta: { title: '我的笔记总览', allowedRoles: ['STUDENT'] },
   },
   {
     path: 'gov/practice',
     name: 'gov-practice',
     component: () => import('@/views/gov/GovPracticePlaceholder.vue'),
-    meta: { title: '智能题库与每日练习' },
+    meta: { title: '智能题库与每日练习', allowedRoles: ['STUDENT'] },
   },
   {
     path: 'gov/assessment',
     name: 'gov-assessment',
     component: () => import('@/views/gov/GovAssessmentPlaceholder.vue'),
-    meta: { title: '模拟考试与测评' },
+    meta: { title: '模拟考试与测评', allowedRoles: ['STUDENT'] },
   },
   {
     path: 'gov/materials',
     name: 'gov-materials',
     component: () => import('@/views/gov/GovMaterialPlaceholder.vue'),
-    meta: { title: '考公资料下载' },
+    meta: { title: '考公资料下载', allowedRoles: ['STUDENT'] },
   },
   {
     path: 'gov/materials/preview',
@@ -357,7 +369,6 @@ const govRoutes = [
     meta: { title: '资料预览' },
   },
 ]
-
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
@@ -603,6 +614,15 @@ const router = createRouter({
               component: () => import('@/views/safety/SafetyCockpitView.vue'),
               meta: {
                 title: 'AI安全治理',
+                allowedRoles: ['ADMIN', 'SUPERADMIN'],
+              },
+            },
+            {
+              path: 'gov/knowledge',
+              name: 'admin-gov-knowledge',
+              component: () => import('@/views/gov/GovKnowledgeManageView.vue'),
+              meta: {
+                title: '考公知识库',
                 allowedRoles: ['ADMIN', 'SUPERADMIN'],
               },
             },

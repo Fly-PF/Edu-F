@@ -60,6 +60,11 @@ const utilityMenus = [
     roles: ['ADMIN', 'SUPERADMIN'],
   },
   {
+    label: '考公知识库',
+    path: '/main/admin/gov/knowledge',
+    roles: ['ADMIN', 'SUPERADMIN'],
+  },
+  {
     label: '知识库问答',
     path: '/main/knowledge-qa/chat',
     roles: ['ADMIN', 'SUPERADMIN'],
@@ -91,6 +96,10 @@ const activeMenu = computed(() => {
 
   if (route.path.startsWith('/main/admin/safety')) {
     return '/main/admin/safety'
+  }
+
+  if (route.path.startsWith('/main/admin/gov/knowledge')) {
+    return '/main/admin/gov/knowledge'
   }
 
   if (route.path.startsWith('/main/knowledge-qa')) {
@@ -125,6 +134,12 @@ watch(
     if (path.startsWith('/main/admin/safety')) {
       shellStore.openMenu('utility')
       shellStore.setActiveMenu('/main/admin/safety')
+      return
+    }
+
+    if (path.startsWith('/main/admin/gov/knowledge')) {
+      shellStore.openMenu('utility')
+      shellStore.setActiveMenu('/main/admin/gov/knowledge')
       return
     }
 
@@ -170,6 +185,10 @@ function handleSelect(index) {
     if (index.startsWith('/main/admin/gov-news')) shellStore.openMenu('gov-news')
 
     if (index.startsWith('/main/admin/safety')) {
+    shellStore.openMenu('utility')
+  }
+
+  if (index.startsWith('/main/admin/gov/knowledge')) {
     shellStore.openMenu('utility')
   }
 
@@ -317,7 +336,8 @@ function handleSelect(index) {
 .content-area {
   min-height: 0;
   padding: 0;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 :deep(.el-menu-item.is-active) {

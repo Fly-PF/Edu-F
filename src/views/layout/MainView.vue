@@ -93,7 +93,7 @@ const visibleTopNavItems = computed(() => {
   }
 
   return navItems.value.filter(
-    (item) => !['/main/knowledge-qa/show'].includes(item.path),
+    (item) => !['/main/knowledge-qa/show', '/main/gov'].includes(item.path),
   )
 })
 
@@ -168,14 +168,14 @@ const headerUserType = computed(() => {
 })
 
 function getAdminEntryPath() {
-  return userStore.roleCode === 'SUPERADMIN'
-    ? '/main/admin/personnel/managers'
-    : '/main/admin/personnel/teachers'
+  return '/main/admin/gov/knowledge'
 }
+
 
 function handleSelect(path) {
   router.push(path)
 }
+
 
 function handleUserCommand(command) {
   if (command === 'profile') {
@@ -285,6 +285,7 @@ onMounted(() => {
 <style scoped>
 .main-shell {
   height: 100vh;
+  min-height: 0;
   overflow: hidden;
   background: #f4f6f9;
 }
@@ -329,6 +330,7 @@ onMounted(() => {
   min-width: 0;
   border-bottom: 0;
 }
+
 
 .user-box {
   display: flex;
@@ -416,6 +418,7 @@ onMounted(() => {
 
 .main-content {
   height: calc(100vh - 64px);
+  min-height: 0;
   padding: 0;
   overflow: auto;
 }
@@ -457,3 +460,5 @@ onMounted(() => {
   }
 }
 </style>
+
+
