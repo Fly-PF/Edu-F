@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Delete } from '@element-plus/icons-vue'
+import { Delete, FolderOpened, Plus, RefreshRight, Search } from '@element-plus/icons-vue'
 import {
   createGovMaterial,
   deleteGovMaterial,
@@ -370,69 +370,86 @@ onMounted(() => {
 
 <template>
   <main class="material-manage-page">
-    <section class="toolbar-section">
-      <div class="title-block">
-        <h1>资料内容管理</h1>
-      </div>
-      <div class="toolbar-actions">
-        <el-select v-model="query.categoryId" class="filter-select" placeholder="全部分类" clearable @change="handleSearch">
-          <el-option
-            v-for="item in categoryOptions"
-            :key="item.value"
-            :label="item.label"
-            :value="item.value"
+    <section class="material-shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">GOV MATERIALS ADMIN</p>
+          <h1>资料内容管理</h1>
+          <p class="lead">维护考公资料的标题、分类、网盘链接与发布状态。</p>
+        </div>
+        <div class="hero-badge">
+          <el-icon><FolderOpened /></el-icon>
+          <div><span>当前模块</span><strong>资料内容</strong></div>
+        </div>
+      </header>
+
+      <section class="toolbar-shell">
+        <div class="filter-heading"><strong>资料筛选</strong><span>按分类与状态快速定位资料</span></div>
+        <div class="toolbar-actions">
+          <el-select v-model="query.categoryId" class="filter-select" placeholder="全部分类" clearable @change="handleSearch">
+            <el-option
+              v-for="item in categoryOptions"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
+            />
+          </el-select>
+          <el-select v-model="query.status" class="filter-select" placeholder="全部状态" clearable @change="handleSearch">
+            <el-option v-for="item in statusOptions" :key="String(item.value)" :label="item.label" :value="item.value" />
+          </el-select>
+          <el-button :icon="Search" type="primary" :loading="listLoading" @click="handleSearch">搜索</el-button>
+          <el-button :icon="RefreshRight" plain :disabled="listLoading" @click="resetQuery(); loadList()">刷新</el-button>
+          <el-button type="primary" :icon="Plus" :disabled="listLoading" @click="openCreateDialog">新增资料</el-button>
+        </div>
+      </section>
+
+      <section class="table-card">
+        <header class="card-head"><div><strong>资料列表</strong><span>仅展示当前管理员可维护的资料记录</span></div><span>{{ total ? `共 ${total} 条资料` : '暂无资料' }}</span></header>
+        <div class="table-section">
+          <el-table v-loading="listLoading" :data="tableData" border height="100%">
+            <el-table-column prop="title" label="资料标题" min-width="180" show-overflow-tooltip />
+            <el-table-column label="所属分类" min-width="120" show-overflow-tooltip>
+              <template #default="{ row }">{{ getCategoryName(row.categoryId) }}</template>
+            </el-table-column>
+            <el-table-column label="资料类型" width="110" align="center">
+              <template #default="{ row }">{{ Number(row.materialType) === 0 ? '网盘链接' : '文件' }}</template>
+            </el-table-column>
+            <el-table-column prop="sortOrder" label="排序" width="80" align="center" />
+            <el-table-column label="状态" width="100" align="center">
+              <template #default="{ row }">
+                <el-tag :type="getStatusType(row.status)" effect="light">{{ formatStatus(row) }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="createTime" label="创建时间" min-width="170" show-overflow-tooltip />
+            <el-table-column label="操作" width="260" fixed="right" align="center">
+              <template #default="{ row }">
+                <el-button link type="primary" :disabled="listLoading" @click="openEditDialog(row)">编辑</el-button>
+                <el-button v-if="row.status !== 1" link type="success" :disabled="listLoading" @click="handlePublish(row)">发布</el-button>
+                <el-button v-if="row.status === 1" link type="warning" :disabled="listLoading" @click="handleWithdraw(row)">下架</el-button>
+                <el-button link type="danger" :disabled="listLoading" @click="handleDelete(row)">删除</el-button>
+              </template>
+            </el-table-column>
+            <template #empty>
+              <div class="table-empty-state"><el-empty description="暂无资料数据" :image-size="118" /></div>
+            </template>
+          </el-table>
+        </div>
+        <div v-if="total" class="pagination-bar">
+          <el-pagination
+            v-model:current-page="query.pageNum"
+            v-model:page-size="query.pageSize"
+            :page-sizes="[10, 20, 50]"
+            :total="total"
+            layout="total, sizes, prev, pager, next, jumper"
+            background
+            :disabled="listLoading"
+            @size-change="handleSizeChange"
+            @current-change="handleCurrentChange"
           />
-        </el-select>
-        <el-select v-model="query.status" class="filter-select" placeholder="全部状态" clearable @change="handleSearch">
-          <el-option v-for="item in statusOptions" :key="String(item.value)" :label="item.label" :value="item.value" />
-        </el-select>
-        <el-button type="primary" :loading="listLoading" @click="handleSearch">搜索</el-button>
-        <el-button type="primary" :disabled="listLoading" @click="openCreateDialog">新增资料</el-button>
-      </div>
-    </section>
+        </div>
+      </section>
 
-    <section class="table-section">
-      <el-table v-loading="listLoading" :data="tableData" border height="100%">
-        <el-table-column prop="title" label="资料标题" min-width="180" show-overflow-tooltip />
-        <el-table-column label="所属分类" min-width="120" show-overflow-tooltip>
-          <template #default="{ row }">{{ getCategoryName(row.categoryId) }}</template>
-        </el-table-column>
-        <el-table-column prop="sortOrder" label="排序" width="80" align="center" />
-        <el-table-column label="状态" width="100" align="center">
-          <template #default="{ row }">
-            <el-tag :type="getStatusType(row.status)" effect="light">{{ formatStatus(row) }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="createTime" label="创建时间" min-width="170" show-overflow-tooltip />
-        <el-table-column label="操作" width="260" fixed="right" align="center">
-          <template #default="{ row }">
-            <el-button link type="primary" :disabled="listLoading" @click="openEditDialog(row)">编辑</el-button>
-            <el-button v-if="row.status !== 1" link type="success" :disabled="listLoading" @click="handlePublish(row)">发布</el-button>
-            <el-button v-if="row.status === 1" link type="warning" :disabled="listLoading" @click="handleWithdraw(row)">下架</el-button>
-            <el-button link type="danger" :disabled="listLoading" @click="handleDelete(row)">删除</el-button>
-          </template>
-        </el-table-column>
-        <template #empty>
-          <div class="table-empty-state">
-            <el-empty description="暂无资料数据" :image-size="118" />
-          </div>
-        </template>
-      </el-table>
     </section>
-
-    <div v-if="total" class="pagination-bar">
-      <el-pagination
-        v-model:current-page="query.pageNum"
-        v-model:page-size="query.pageSize"
-        :page-sizes="[10, 20, 50]"
-        :total="total"
-        layout="total, sizes, prev, pager, next, jumper"
-        background
-        :disabled="listLoading"
-        @size-change="handleSizeChange"
-        @current-change="handleCurrentChange"
-      />
-    </div>
 
     <el-dialog
       v-model="dialogVisible"
@@ -524,131 +541,70 @@ onMounted(() => {
 
 <style scoped>
 .material-manage-page {
-  display: flex;
-  height: 100%;
-  min-height: 0;
+  --gov-primary: #786ce8;
+  --gov-primary-deep: #6354d8;
+  --gov-border: #cfc7f8;
+  --gov-ink: #2e314e;
+  --gov-subtle: #747996;
+  min-height: 100%;
   box-sizing: border-box;
+  overflow-y: auto;
+  padding: 24px;
+  background: linear-gradient(90deg, rgb(120 108 232 / 8%) 1px, transparent 1px), linear-gradient(rgb(120 108 232 / 8%) 1px, transparent 1px), linear-gradient(180deg, #fffeff 0%, #f7f6ef 100%);
+  background-size: 48px 48px, 48px 48px, auto;
+}
+.material-shell {
+  display: flex;
+  width: min(1500px, 100%);
+  min-height: calc(100vh - 120px);
+  box-sizing: border-box;
+  margin: 0 auto;
   flex-direction: column;
   padding: 24px;
-  overflow: hidden;
+  border: 2px solid var(--gov-border);
+  border-radius: 20px;
+  background: rgb(255 255 255 / 95%);
+  box-shadow: 0 18px 0 rgb(103 94 186 / 8%), 0 22px 46px rgb(76 83 130 / 10%);
 }
-.toolbar-section {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
-}
-.title-block h1 {
-  margin: 0;
-  color: #111827;
-  font-size: 24px;
-  font-weight: 700;
-}
-.toolbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-.filter-select {
-  width: 160px;
-}
-.table-section {
-  min-height: 0;
-  flex: 1 1 auto;
-  overflow: hidden;
-  border-radius: 8px;
-  background: #ffffff;
-}
-.table-empty-state {
-  display: flex;
-  width: 100%;
-  min-height: calc(100vh - 254px);
-  align-items: center;
-  justify-content: center;
-  padding: 48px 0;
-}
-.pagination-bar {
-  display: flex;
-  justify-content: flex-end;
-  padding-top: 16px;
-}
-.dialog-error {
-  margin-bottom: 16px;
-}
-.full-width {
-  width: 100%;
-}
-:deep(.el-dialog__body) {
-  overflow-x: hidden;
-}
-.pdf-upload,
-:deep(.pdf-upload .el-upload),
-:deep(.pdf-upload .el-upload-dragger),
-:deep(.pdf-upload .el-upload-list) {
-  width: 100%;
-  max-width: 100%;
-  box-sizing: border-box;
-}
-:deep(.pdf-upload .el-upload-list) {
-  overflow: hidden;
-}
-:deep(.pdf-upload .el-upload-list__item) {
-  max-width: 100%;
-  box-sizing: border-box;
-}
-:deep(.pdf-upload .el-upload-list__item-name) {
-  display: block;
-  min-width: 0;
-  max-width: calc(100% - 36px);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.links-list {
-  display: flex;
-  width: 100%;
-  flex-direction: column;
-  gap: 10px;
-}
-.link-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.link-platform {
-  width: 140px;
-  flex-shrink: 0;
-}
-.link-url {
-  flex: 1;
-  min-width: 0;
-}
-.link-code {
-  width: 140px;
-  flex-shrink: 0;
-}
-.upload-placeholder {
-  color: #606266;
-  font-size: 14px;
-}
-@media (max-width: 680px) {
-  .toolbar-section {
-    align-items: stretch;
-    flex-direction: column;
-  }
-  .toolbar-actions {
-    flex-wrap: wrap;
-  }
-  .filter-select {
-    width: 100%;
-  }
-  .link-row {
-    flex-wrap: wrap;
-  }
-  .link-url {
-    width: 100%;
-  }
-}
+.hero,.toolbar-shell,.card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.hero-copy { min-width: 0; }
+.eyebrow { margin: 0; color: var(--gov-primary); font-size: 11px; font-weight: 800; letter-spacing: .12em; }
+h1 { margin: 8px 0 0; color: var(--gov-ink); font-size: 34px; line-height: 1.1; }
+.lead { margin: 8px 0 0; color: var(--gov-subtle); font-size: 14px; }
+.hero-badge { display: flex; min-width: 210px; align-items: center; gap: 10px; padding: 12px 16px; border: 2px solid #d8d1fa; border-radius: 16px; background: linear-gradient(180deg, #fffdf7 0%, #f7f3ff 100%); box-shadow: 0 10px 22px rgb(102 111 144 / 8%); }
+.hero-badge .el-icon { color: #5a6885; font-size: 22px; }
+.hero-badge span,.hero-badge strong { display: block; }
+.hero-badge span { color: #7f8799; font-size: 11px; font-weight: 800; }
+.hero-badge strong { margin-top: 3px; color: #2b3348; font-size: 17px; }
+.toolbar-shell { align-items: center; margin-top: 18px; padding: 12px 14px; border: 2px solid var(--gov-primary-deep); border-radius: 16px; background: linear-gradient(180deg, #fffdfa 0%, #ffffff 100%); box-shadow: 6px 6px 0 rgb(103 94 186 / 10%); }
+.filter-heading { display: flex; align-items: baseline; gap: 12px; }
+.filter-heading strong { color: #2c2d48; font-size: 17px; }
+.filter-heading span { color: #8a8fb0; font-size: 11px; }
+.toolbar-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+.filter-select { width: 160px; }
+.table-card { display: flex; min-height: 0; flex: 1; flex-direction: column; margin-top: 18px; border: 2px solid var(--gov-primary-deep); border-radius: 16px; background: linear-gradient(180deg, #fff 0%, #fffdfc 100%); box-shadow: 6px 6px 0 rgb(103 94 186 / 12%); }
+.card-head { padding: 14px 16px 12px; border-bottom: 1px dashed rgb(114 102 193 / 22%); }
+.card-head strong,.card-head span { display: block; }
+.card-head strong { color: #2c2d48; font-size: 17px; }
+.card-head span { margin-top: 4px; color: #8a8fb0; font-size: 11px; }
+.table-section { min-height: 300px; flex: 1; overflow: hidden; padding: 10px; }
+.table-empty-state { display: flex; width: 100%; min-height: 260px; align-items: center; justify-content: center; padding: 48px 0; }
+.pagination-bar { display: flex; justify-content: flex-end; padding: 12px 16px 16px; border-top: 1px dashed rgb(114 102 193 / 22%); }
+.dialog-error { margin-bottom: 16px; }
+.full-width { width: 100%; }
+:deep(.el-table) { --el-table-border-color: #e0dcfb; --el-table-header-bg-color: #f7f4ff; --el-table-row-hover-bg-color: #faf8ff; color: #47496a; }
+:deep(.el-table th.el-table__cell) { color: #5f5a8f; font-weight: 800; }
+:deep(.el-dialog__body) { overflow-x: hidden; }
+.pdf-upload,:deep(.pdf-upload .el-upload),:deep(.pdf-upload .el-upload-dragger),:deep(.pdf-upload .el-upload-list) { width: 100%; max-width: 100%; box-sizing: border-box; }
+:deep(.pdf-upload .el-upload-list) { overflow: hidden; }
+:deep(.pdf-upload .el-upload-list__item) { max-width: 100%; box-sizing: border-box; }
+:deep(.pdf-upload .el-upload-list__item-name) { display: block; min-width: 0; max-width: calc(100% - 36px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.links-list { display: flex; width: 100%; flex-direction: column; gap: 10px; }
+.link-row { display: flex; align-items: center; gap: 10px; }
+.link-platform { width: 140px; flex-shrink: 0; }
+.link-url { flex: 1; min-width: 0; }
+.link-code { width: 140px; flex-shrink: 0; }
+.upload-placeholder { color: #606266; font-size: 14px; }
+@media (max-width: 860px) { .toolbar-shell { align-items: stretch; flex-direction: column; } .toolbar-actions { justify-content: flex-start; } }
+@media (max-width: 680px) { .material-manage-page { padding: 14px; } .material-shell { padding: 18px; } .hero { align-items: stretch; flex-direction: column; } .hero-badge { min-width: 0; } .toolbar-actions { align-items: stretch; flex-direction: column; } .filter-select,.toolbar-actions :deep(.el-button) { width: 100%; } .table-section { overflow-x: auto; } .link-row { flex-wrap: wrap; } .link-url { width: 100%; } }
 </style>

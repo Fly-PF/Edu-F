@@ -1,6 +1,7 @@
 <script setup>
 import { nextTick, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { FolderOpened, Plus } from '@element-plus/icons-vue'
 import {
   createGovMaterialCategory,
   deleteGovMaterialCategory,
@@ -221,49 +222,62 @@ loadList()
 
 <template>
   <main class="category-manage-page">
-    <section class="toolbar-section">
-      <div class="title-block">
-        <h1>资料分类管理</h1>
-      </div>
-      <div class="toolbar-actions">
-        <el-button type="primary" :disabled="listLoading" @click="openCreateDialog">新增分类</el-button>
-      </div>
-    </section>
+    <section class="category-shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">GOV MATERIALS ADMIN</p>
+          <h1>资料分类管理</h1>
+          <p class="lead">维护考公资料的分类目录、展示排序与启停状态。</p>
+        </div>
+        <div class="hero-badge">
+          <el-icon><FolderOpened /></el-icon>
+          <div><span>当前模块</span><strong>资料分类</strong></div>
+        </div>
+      </header>
 
-    <section class="table-section">
-      <el-table
-        v-loading="listLoading"
-        :data="tableData"
-        :row-class-name="getRowClassName"
-        border
-        height="100%"
-      >
-        <el-table-column prop="name" label="分类名称" min-width="160" show-overflow-tooltip />
-        <el-table-column prop="sortOrder" label="排序" width="100" align="center" />
-        <el-table-column label="状态" width="110" align="center">
-          <template #default="{ row }">
-            <el-tag :type="row.status === 0 ? 'info' : 'success'" effect="light">
-              {{ formatStatus(row) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="createTime" label="创建时间" min-width="170" show-overflow-tooltip />
-        <el-table-column prop="updateTime" label="更新时间" min-width="170" show-overflow-tooltip />
-        <el-table-column label="操作" width="240" fixed="right" align="center">
-          <template #default="{ row }">
-            <el-button link type="primary" :disabled="listLoading" @click="openEditDialog(row)">编辑</el-button>
-            <el-button link type="warning" :disabled="listLoading" @click="handleStatusToggle(row)">
-              {{ row.status === 0 ? '启用' : '停用' }}
-            </el-button>
-            <el-button link type="danger" :disabled="listLoading" @click="handleDelete(row)">删除</el-button>
-          </template>
-        </el-table-column>
-        <template #empty>
-          <div class="table-empty-state">
-            <el-empty description="暂无分类数据" :image-size="118" />
-          </div>
-        </template>
-      </el-table>
+      <section class="toolbar-shell">
+        <div class="section-title"><strong>分类目录</strong><span>分类状态会影响用户端资料展示</span></div>
+        <div class="toolbar-actions">
+          <el-button type="primary" :icon="Plus" :disabled="listLoading" @click="openCreateDialog">新增分类</el-button>
+        </div>
+      </section>
+
+      <section class="table-card">
+        <header class="card-head"><div><strong>分类列表</strong><span>按排序值查看当前资料分类</span></div></header>
+        <div class="table-section">
+          <el-table
+            v-loading="listLoading"
+            :data="tableData"
+            :row-class-name="getRowClassName"
+            border
+            height="100%"
+          >
+            <el-table-column prop="name" label="分类名称" min-width="160" show-overflow-tooltip />
+            <el-table-column prop="sortOrder" label="排序" width="100" align="center" />
+            <el-table-column label="状态" width="110" align="center">
+              <template #default="{ row }">
+                <el-tag :type="row.status === 0 ? 'info' : 'success'" effect="light">
+                  {{ formatStatus(row) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="createTime" label="创建时间" min-width="170" show-overflow-tooltip />
+            <el-table-column prop="updateTime" label="更新时间" min-width="170" show-overflow-tooltip />
+            <el-table-column label="操作" width="240" fixed="right" align="center">
+              <template #default="{ row }">
+                <el-button link type="primary" :disabled="listLoading" @click="openEditDialog(row)">编辑</el-button>
+                <el-button link type="warning" :disabled="listLoading" @click="handleStatusToggle(row)">
+                  {{ row.status === 0 ? '启用' : '停用' }}
+                </el-button>
+                <el-button link type="danger" :disabled="listLoading" @click="handleDelete(row)">删除</el-button>
+              </template>
+            </el-table-column>
+            <template #empty>
+              <div class="table-empty-state"><el-empty description="暂无分类数据" :image-size="118" /></div>
+            </template>
+          </el-table>
+        </div>
+      </section>
     </section>
 
     <el-dialog
@@ -299,61 +313,56 @@ loadList()
 
 <style scoped>
 .category-manage-page {
-  display: flex;
-  height: 100%;
-  min-height: 0;
+  --gov-primary: #786ce8;
+  --gov-primary-deep: #6354d8;
+  --gov-border: #cfc7f8;
+  --gov-ink: #2e314e;
+  --gov-subtle: #747996;
+  min-height: 100%;
   box-sizing: border-box;
+  overflow-y: auto;
+  padding: 24px;
+  background: linear-gradient(90deg, rgb(120 108 232 / 8%) 1px, transparent 1px), linear-gradient(rgb(120 108 232 / 8%) 1px, transparent 1px), linear-gradient(180deg, #fffeff 0%, #f7f6ef 100%);
+  background-size: 48px 48px, 48px 48px, auto;
+}
+.category-shell {
+  display: flex;
+  width: min(1500px, 100%);
+  min-height: calc(100vh - 120px);
+  box-sizing: border-box;
+  margin: 0 auto;
   flex-direction: column;
   padding: 24px;
-  overflow: hidden;
+  border: 2px solid var(--gov-border);
+  border-radius: 20px;
+  background: rgb(255 255 255 / 95%);
+  box-shadow: 0 18px 0 rgb(103 94 186 / 8%), 0 22px 46px rgb(76 83 130 / 10%);
 }
-.toolbar-section {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
-}
-.title-block h1 {
-  margin: 0;
-  color: #111827;
-  font-size: 24px;
-  font-weight: 700;
-}
-.toolbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.table-section {
-  min-height: 0;
-  flex: 1 1 auto;
-  overflow: hidden;
-  border-radius: 8px;
-  background: #ffffff;
-}
-.table-empty-state {
-  display: flex;
-  width: 100%;
-  min-height: calc(100vh - 254px);
-  align-items: center;
-  justify-content: center;
-  padding: 48px 0;
-}
-.dialog-error {
-  margin-bottom: 16px;
-}
-:deep(.disabled-category-row) {
-  color: #9ca3af;
-  background: #f3f4f6;
-}
-:deep(.disabled-category-row td.el-table__cell) {
-  background: #f3f4f6;
-}
-@media (max-width: 680px) {
-  .toolbar-section {
-    align-items: stretch;
-    flex-direction: column;
-  }
-}
+.hero,.toolbar-shell,.card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.hero-copy { min-width: 0; }
+.eyebrow { margin: 0; color: var(--gov-primary); font-size: 11px; font-weight: 800; letter-spacing: .12em; }
+h1 { margin: 8px 0 0; color: var(--gov-ink); font-size: 34px; line-height: 1.1; }
+.lead { margin: 8px 0 0; color: var(--gov-subtle); font-size: 14px; }
+.hero-badge { display: flex; min-width: 210px; align-items: center; gap: 10px; padding: 12px 16px; border: 2px solid #d8d1fa; border-radius: 16px; background: linear-gradient(180deg, #fffdf7 0%, #f7f3ff 100%); box-shadow: 0 10px 22px rgb(102 111 144 / 8%); }
+.hero-badge .el-icon { color: #5a6885; font-size: 22px; }
+.hero-badge span,.hero-badge strong { display: block; }
+.hero-badge span { color: #7f8799; font-size: 11px; font-weight: 800; }
+.hero-badge strong { margin-top: 3px; color: #2b3348; font-size: 17px; }
+.toolbar-shell { align-items: center; margin-top: 18px; padding: 12px 14px; border: 2px solid var(--gov-primary-deep); border-radius: 16px; background: linear-gradient(180deg, #fffdfa 0%, #ffffff 100%); box-shadow: 6px 6px 0 rgb(103 94 186 / 10%); }
+.section-title { display: flex; align-items: baseline; gap: 12px; }
+.section-title strong { color: #2c2d48; font-size: 17px; }
+.section-title span { color: #8a8fb0; font-size: 11px; }
+.toolbar-actions { display: flex; align-items: center; gap: 10px; }
+.table-card { display: flex; min-height: 0; flex: 1; flex-direction: column; margin-top: 18px; border: 2px solid var(--gov-primary-deep); border-radius: 16px; background: linear-gradient(180deg, #fff 0%, #fffdfc 100%); box-shadow: 6px 6px 0 rgb(103 94 186 / 12%); }
+.card-head { padding: 14px 16px 12px; border-bottom: 1px dashed rgb(114 102 193 / 22%); }
+.card-head strong,.card-head span { display: block; }
+.card-head strong { color: #2c2d48; font-size: 17px; }
+.card-head span { margin-top: 4px; color: #8a8fb0; font-size: 11px; }
+.table-section { min-height: 320px; flex: 1; overflow: hidden; padding: 10px; }
+.table-empty-state { display: flex; width: 100%; min-height: 260px; align-items: center; justify-content: center; padding: 48px 0; }
+.dialog-error { margin-bottom: 16px; }
+:deep(.el-table) { --el-table-border-color: #e0dcfb; --el-table-header-bg-color: #f7f4ff; --el-table-row-hover-bg-color: #faf8ff; color: #47496a; }
+:deep(.el-table th.el-table__cell) { color: #5f5a8f; font-weight: 800; }
+:deep(.disabled-category-row),:deep(.disabled-category-row td.el-table__cell) { color: #999bb2; background: #f7f5fb; }
+@media (max-width: 680px) { .category-manage-page { padding: 14px; } .category-shell { padding: 18px; } .hero,.toolbar-shell { align-items: stretch; flex-direction: column; } .hero-badge { min-width: 0; } .toolbar-actions :deep(.el-button) { width: 100%; } .table-section { overflow-x: auto; } }
 </style>

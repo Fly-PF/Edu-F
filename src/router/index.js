@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 
 function getAdminEntryPath(roleCode) {
@@ -697,6 +698,9 @@ router.beforeEach((to) => {
   }
 
   if (to.meta.allowedRoles && !userStore.hasAnyRole(to.meta.allowedRoles)) {
+    if (userStore.roleCode === 'TEACHER' && to.path.startsWith('/main/gov/')) {
+      ElMessage.warning('老师无法访问考公专题')
+    }
     return getMainEntryPath(userStore)
   }
 

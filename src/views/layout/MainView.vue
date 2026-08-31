@@ -63,7 +63,7 @@ const navItems = computed(() => {
     {
       label: '考公专题',
       path: '/main/gov',
-      roles: [],
+      roles: ['STUDENT'],
     },
     {
       label: '在线工具',
@@ -88,11 +88,15 @@ const navItems = computed(() => {
 })
 
 const visibleTopNavItems = computed(() => {
+  const roleVisibleItems = navItems.value.filter(
+    (item) => !item.roles.length || userStore.hasAnyRole(item.roles),
+  )
+
   if (!userStore.hasAnyRole(['ADMIN', 'SUPERADMIN'])) {
-    return navItems.value
+    return roleVisibleItems
   }
 
-  return navItems.value.filter(
+  return roleVisibleItems.filter(
     (item) => !['/main/knowledge-qa/show', '/main/gov'].includes(item.path),
   )
 })
