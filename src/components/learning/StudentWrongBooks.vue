@@ -11,6 +11,8 @@ import {
   MoreFilled,
   Plus,
   Search,
+  RefreshRight,
+  View,
 } from '@element-plus/icons-vue'
 import {
   addQuestionToWrongBook,
@@ -19,6 +21,7 @@ import {
   getStudentWrongBooks,
   removeQuestionFromWrongBook,
   renameStudentWrongBook,
+  submitWrongQuestionRetrain,
 } from '@/api/learningAnalysis'
 
 const props = defineProps({
@@ -31,6 +34,16 @@ const actionLoading = ref(false)
 const books = ref([])
 const selectedBookId = ref('all')
 const keyword = ref('')
+const courseFilter = ref('all')
+const typeFilter = ref('all')
+const reasonFilter = ref('all')
+const masteryFilter = ref('all')
+const detailVisible = ref(false)
+const detailQuestion = ref(null)
+const retrainVisible = ref(false)
+const retrainQuestion = ref(null)
+const retrainAnswer = ref('')
+const retrainResult = ref(null)
 
 const selectedBook = computed(() => {
   if (selectedBookId.value === 'all') return null
@@ -38,16 +51,35 @@ const selectedBook = computed(() => {
 })
 
 const sourceQuestions = computed(() => selectedBook.value?.questions || props.wrongQuestions || [])
+const normalizedQuestions = computed(() => sourceQuestions.value.map((item) => {
+  const source = props.wrongQuestions.find(question => questionKey(question) === questionKey(item))
+  return {
+    ...item,
+    options: item.options?.length ? item.options : (source?.options || []),
+    questionType: item.questionType || 'SHORT',
+    wrongReason: item.wrongReason || inferWrongReason(item),
+    mastered: Boolean(item.mastered),
+  }
+}))
+const courseOptions = computed(() => [...new Set(normalizedQuestions.value.map(item => item.courseName).filter(Boolean))])
+const reasonOptions = computed(() => [...new Set(normalizedQuestions.value.map(item => item.wrongReason).filter(Boolean))])
 const visibleQuestions = computed(() => {
   const value = keyword.value.trim().toLowerCase()
-  if (!value) return sourceQuestions.value
-  return sourceQuestions.value.filter((item) => [
-    item.content,
-    item.courseName,
-    item.practiceTitle,
-    item.referenceAnswer,
-  ].some(text => String(text || '').toLowerCase().includes(value)))
+  return normalizedQuestions.value.filter((item) => {
+    if (courseFilter.value !== 'all' && item.courseName !== courseFilter.value) return false
+    if (typeFilter.value !== 'all' && item.questionType !== typeFilter.value) return false
+    if (reasonFilter.value !== 'all' && item.wrongReason !== reasonFilter.value) return false
+    if (masteryFilter.value === 'mastered' && !item.mastered) return false
+    if (masteryFilter.value === 'review' && item.mastered) return false
+    return !value || [item.content, item.courseName, item.practiceTitle, item.referenceAnswer, item.wrongReason]
+      .some(text => String(text || '').toLowerCase().includes(value))
+  })
 })
+
+function inferWrongReason(item) {
+  if (item.teacherFeedback) return '答题方法需要改进'
+  return item.questionType === 'SINGLE' ? '知识点未掌握' : '审题或表达不完整'
+}
 
 function questionKey(item) {
   return `${item.practiceId}-${item.questionId}`
@@ -174,6 +206,60 @@ async function removeQuestion(question) {
   }
 }
 
+function openRetrain(question) {
+  if (!selectedBook.value || !question.id) {
+    ElMessage.info('请先将题目收入一个自定义错题本，再开始重练')
+    return
+  }
+  retrainQuestion.value = question
+  retrainAnswer.value = ''
+  retrainResult.value = null
+  retrainVisible.value = true
+}
+
+function openDetail(question) {
+  detailQuestion.value = question
+  detailVisible.value = true
+}
+
+function closeRetrain() {
+  retrainVisible.value = false
+  retrainQuestion.value = null
+  retrainAnswer.value = ''
+  retrainResult.value = null
+}
+
+async function submitRetrain() {
+  if (!retrainAnswer.value.trim()) {
+    ElMessage.warning('请先填写重练答案')
+    return
+  }
+  try {
+    actionLoading.value = true
+    const updated = await submitWrongQuestionRetrain(selectedBook.value.id, retrainQuestion.value.id, retrainAnswer.value.trim())
+    retrainResult.value = updated
+    const book = selectedBook.value
+    replaceBook({
+      ...book,
+      questions: book.questions.map(item => item.id === updated.id ? updated : item),
+    })
+    retrainQuestion.value = updated
+    ElMessage.success(updated.mastered ? '回答正确，这道题已标记为掌握' : '答案已保存，请结合解析继续复习')
+  } catch (error) {
+    ElMessage.error(error.message || '重练提交失败')
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+function resetFilters() {
+  keyword.value = ''
+  courseFilter.value = 'all'
+  typeFilter.value = 'all'
+  reasonFilter.value = 'all'
+  masteryFilter.value = 'all'
+}
+
 onMounted(loadBooks)
 </script>
 
@@ -231,6 +317,14 @@ onMounted(loadBooks)
         <span><strong>{{ visibleQuestions.length }}</strong> 道题</span>
       </div>
 
+      <div class="advanced-filters">
+        <select v-model="courseFilter" aria-label="按课程筛选"><option value="all">全部课程</option><option v-for="course in courseOptions" :key="course" :value="course">{{ course }}</option></select>
+        <select v-model="typeFilter" aria-label="按题型筛选"><option value="all">全部题型</option><option value="SINGLE">单选题</option><option value="SHORT">开放题</option></select>
+        <select v-model="reasonFilter" aria-label="按错因筛选"><option value="all">全部错因</option><option v-for="reason in reasonOptions" :key="reason" :value="reason">{{ reason }}</option></select>
+        <select v-model="masteryFilter" aria-label="按掌握状态筛选"><option value="all">全部状态</option><option value="review">待复习</option><option value="mastered">已掌握</option></select>
+        <el-button @click="resetFilters">重置</el-button>
+      </div>
+
       <div v-if="visibleQuestions.length" class="wrong-card-list">
         <article v-for="(item, index) in visibleQuestions" :key="questionKey(item)" class="wrong-card">
           <header>
@@ -242,7 +336,15 @@ onMounted(loadBooks)
             <span class="question-score">得分 {{ item.awardedScore ?? 0 }}/{{ item.score ?? 0 }}</span>
           </header>
 
+          <div class="question-tags"><span>{{ item.questionType === 'SINGLE' ? '单选题' : '开放题' }}</span><span>{{ item.wrongReason }}</span><span :class="{ mastered: item.mastered }">{{ item.mastered ? '已掌握' : '待复习' }}</span></div>
+
           <h3>{{ item.content }}</h3>
+
+          <div v-if="item.questionType === 'SINGLE' && item.options?.length" class="choice-options compact">
+            <div v-for="(option, optionIndex) in item.options" :key="`${questionKey(item)}-${optionIndex}`">
+              <b>{{ String.fromCharCode(65 + optionIndex) }}</b><span>{{ option.replace(/^[A-D][.、：:]\s*/, '') }}</span>
+            </div>
+          </div>
 
           <details class="answer-sheet">
             <summary>查看答案与讲解 <el-icon><ArrowRight /></el-icon></summary>
@@ -254,6 +356,8 @@ onMounted(loadBooks)
 
           <footer>
             <el-button text @click="emit('open-practice', item)">回到原练习 <el-icon><ArrowRight /></el-icon></el-button>
+            <el-button @click="openDetail(item)"><el-icon><View /></el-icon>查看详情</el-button>
+            <el-button class="retrain-question" @click="openRetrain(item)"><el-icon><RefreshRight /></el-icon>错题重练</el-button>
             <template v-if="selectedBook">
               <el-button class="remove-question" :loading="actionLoading" @click="removeQuestion(item)">移出当前本</el-button>
             </template>
@@ -288,6 +392,40 @@ onMounted(loadBooks)
         <el-button v-if="keyword" @click="keyword = ''">清除搜索</el-button>
       </div>
     </div>
+
+    <el-drawer v-model="detailVisible" title="错题详情" size="min(620px, 94vw)" @closed="detailQuestion = null">
+      <div v-if="detailQuestion" class="question-detail">
+        <div class="detail-tags"><span>{{ detailQuestion.courseName || '课程练习' }}</span><span>{{ detailQuestion.questionType === 'SINGLE' ? '单选题' : '开放题' }}</span><span>{{ detailQuestion.wrongReason }}</span></div>
+        <h3>{{ detailQuestion.content }}</h3>
+        <div v-if="detailQuestion.questionType === 'SINGLE' && detailQuestion.options?.length" class="choice-options">
+          <div v-for="(option, optionIndex) in detailQuestion.options" :key="`detail-${optionIndex}`">
+            <b>{{ String.fromCharCode(65 + optionIndex) }}</b><span>{{ option.replace(/^[A-D][.、：:]\s*/, '') }}</span>
+          </div>
+        </div>
+        <section><b>你的答案</b><p>{{ detailQuestion.studentAnswer || '未作答' }}</p></section>
+        <section><b>参考答案</b><p>{{ detailQuestion.referenceAnswer || '暂无参考答案' }}</p></section>
+        <section><b>题目解析</b><p>{{ detailQuestion.explanation || '暂无解析' }}</p></section>
+        <section><b>教师反馈</b><p>{{ detailQuestion.teacherFeedback || '老师暂未补充逐题反馈' }}</p></section>
+      </div>
+    </el-drawer>
+
+    <el-dialog v-model="retrainVisible" title="错题重练" width="min(620px, 94vw)" destroy-on-close @closed="closeRetrain">
+      <div v-if="retrainQuestion" class="retrain-dialog">
+        <h3>{{ retrainQuestion.content }}</h3>
+        <el-radio-group v-if="retrainQuestion.questionType === 'SINGLE'" v-model="retrainAnswer" class="retrain-options" :disabled="Boolean(retrainResult)">
+          <el-radio v-for="(option, optionIndex) in retrainQuestion.options || []" :key="`retrain-${optionIndex}`" :value="String.fromCharCode(65 + optionIndex)" border>
+            <b>{{ String.fromCharCode(65 + optionIndex) }}</b> {{ option.replace(/^[A-D][.、：:]\s*/, '') }}
+          </el-radio>
+        </el-radio-group>
+        <el-input v-else v-model="retrainAnswer" type="textarea" :rows="4" maxlength="5000" show-word-limit placeholder="写下这次的答案" :disabled="Boolean(retrainResult)" />
+        <div v-if="retrainResult" class="retrain-feedback" :class="{ mastered: retrainResult.mastered }">
+          <strong>{{ retrainResult.mastered ? '回答正确，已经掌握' : '还需要继续复习' }}</strong>
+          <p><b>参考答案：</b>{{ retrainResult.referenceAnswer || '暂无参考答案' }}</p>
+          <p><b>解析：</b>{{ retrainResult.explanation || '暂无解析' }}</p>
+        </div>
+      </div>
+      <template #footer><el-button @click="closeRetrain">关闭</el-button><el-button v-if="!retrainResult" type="primary" :loading="actionLoading" @click="submitRetrain">提交重练</el-button></template>
+    </el-dialog>
   </section>
 </template>
 
@@ -403,6 +541,8 @@ onMounted(loadBooks)
 .book-filter-row label:focus-within { border-color: #8178cf; box-shadow: 0 0 0 2px rgb(129 120 207 / 18%); }
 .book-filter-row input { width: 100%; min-width: 0; border: 0; outline: 0; color: #3d3564; font: inherit; }
 .book-filter-row > span { flex: 0 0 auto; padding: 6px 9px; border: 1px solid rgb(61 53 100 / 24%); border-radius: 4px; background: #fff1a8; color: #3d3564; font-size: 11px; transform: rotate(1deg); }
+.advanced-filters{display:grid;grid-template-columns:repeat(4,minmax(0,1fr)) auto;gap:8px;margin:-4px 0 15px}.advanced-filters select{min-width:0;height:36px;padding:0 9px;border:1px solid rgb(61 53 100 / 24%);border-radius:5px;background:#fff;color:#615a80}.question-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}.question-tags span,.detail-tags span{padding:3px 7px;border-radius:4px;background:#f1effb;color:#655c8c;font-size:10px;font-weight:800}.question-tags span.mastered{background:#e8f7ef;color:#16814f}.retrain-question{border-color:#8178cf;color:#6157a8}.question-detail h3,.retrain-dialog h3{color:#3d3564;line-height:1.7}.detail-tags{display:flex;flex-wrap:wrap;gap:7px}.question-detail section{margin-top:12px;padding:12px;border-radius:6px;background:#f7f8fb}.question-detail section b{color:#4e4473;font-size:12px}.question-detail section p{margin:6px 0 0;color:#615a80;line-height:1.7;white-space:pre-wrap}.retrain-feedback{margin-top:14px;padding:13px;border-left:4px solid #d8891e;background:#fff8ed;color:#75511f}.retrain-feedback.mastered{border-left-color:#18a66a;background:#eef9f2;color:#146941}.retrain-feedback p{margin:7px 0 0;line-height:1.6}
+.choice-options{display:grid;gap:8px;margin:12px 0}.choice-options>div{display:flex;min-height:38px;align-items:center;gap:10px;padding:8px 11px;border:1px solid #e1e5ed;border-radius:5px;background:#fafbfe;color:#615a80}.choice-options b{display:grid;width:25px;height:25px;flex:0 0 auto;place-items:center;border:1px solid #8178cf;border-radius:50%;color:#5d53a4;font-size:11px}.choice-options.compact{grid-template-columns:repeat(2,minmax(0,1fr));margin-top:0}.retrain-options{display:grid;gap:9px}.retrain-options :deep(.el-radio){box-sizing:border-box;width:100%;height:auto;min-height:44px;margin:0;padding:9px 12px}.retrain-options :deep(.el-radio__label){min-width:0;white-space:normal;line-height:1.5}
 
 .wrong-card-list { display: grid; gap: 14px; }
 .wrong-card { min-width: 0; padding: 17px 18px 13px; border: 1px solid rgb(61 53 100 / 25%); border-left: 4px solid #ee91bb; border-radius: 7px; background: #fff; box-shadow: 3px 4px 0 rgb(61 53 100 / 10%); }
@@ -451,6 +591,7 @@ onMounted(loadBooks)
   .book-list button { min-width: 190px; }
   .create-book-button { align-self: flex-start; margin-top: 12px; padding: 0 14px; }
   .book-workspace { box-sizing: border-box; width: 100%; max-width: 100%; }
+  .advanced-filters{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 
 @media (max-width: 540px) {
@@ -464,6 +605,7 @@ onMounted(loadBooks)
   .wrong-card > header { grid-template-columns: 31px minmax(0, 1fr); }
   .question-score { grid-column: 2; justify-self: start; }
   .answer-sheet > div { grid-template-columns: 1fr; }
+  .choice-options.compact { grid-template-columns: 1fr; }
   .wrong-card footer { align-items: stretch; flex-direction: column; }
   .wrong-card footer :deep(.el-button--text) { align-self: flex-start; margin-right: 0; }
   .wrong-card footer :deep(.el-dropdown),

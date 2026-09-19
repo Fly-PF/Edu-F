@@ -34,4 +34,17 @@ describe('learning analysis API', () => {
       questionId: 19,
     })
   })
+
+  it('submits a wrong-question retrain answer', async () => {
+    request.post.mockResolvedValue({ code: 200, data: { id: 12, mastered: true, retrainCount: 1 } })
+    await expect(api.submitWrongQuestionRetrain(3, 12, 'B')).resolves.toEqual({
+      id: 12,
+      mastered: true,
+      retrainCount: 1,
+    })
+    expect(request.post).toHaveBeenCalledWith(
+      '/api/learning-analysis/student/wrong-books/3/items/12/retrain',
+      { answer: 'B' },
+    )
+  })
 })

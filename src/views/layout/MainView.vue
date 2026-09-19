@@ -23,6 +23,7 @@ const userTypeMap = {
 
 const studentNavItems = [
   { label: '学习练习', path: '/main/practice', roles: ['STUDENT'] },
+  { label: '错题本', path: '/main/student/wrong-books', roles: ['STUDENT'] },
   { label: '班级', path: '/main/student/classes', roles: ['STUDENT'] },
   { label: '我的学情', path: '/main/student/learning-analysis', roles: ['STUDENT'] },
   { label: 'AI展馆', path: '/main/ai-exhibit', roles: ['STUDENT'] },
@@ -136,6 +137,10 @@ const activePath = computed(() => {
 
   if (route.name === 'student-learning-analysis') {
     return '/main/student/learning-analysis'
+  }
+
+  if (route.name === 'student-wrong-books') {
+    return '/main/student/wrong-books'
   }
 
   if (route.path.startsWith('/main/ai-exhibit')) {

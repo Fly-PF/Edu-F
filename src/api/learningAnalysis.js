@@ -67,6 +67,13 @@ export function removeQuestionFromWrongBook(bookId, question) {
   ))
 }
 
+export function submitWrongQuestionRetrain(bookId, itemId, answer) {
+  return resolve(request.post(
+    `/api/learning-analysis/student/wrong-books/${bookId}/items/${itemId}/retrain`,
+    { answer },
+  ))
+}
+
 export function askStudentLearningAssistant(data) {
   return resolve(request.post('/api/learning-analysis/student/assistant', data, { timeout: 400000 }))
 }

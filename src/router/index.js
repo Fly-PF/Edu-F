@@ -198,6 +198,15 @@ const teacherRoutes = [
 
 const studentRoutes = [
   {
+    path: 'student/wrong-books',
+    name: 'student-wrong-books',
+    component: () => import('@/views/student/StudentWrongBookPage.vue'),
+    meta: {
+      title: '学生错题本',
+      allowedRoles: ['STUDENT'],
+    },
+  },
+  {
     path: 'student/learning-analysis',
     name: 'student-learning-analysis',
     component: () => import('@/views/student/StudentLearningAnalysis.vue'),
