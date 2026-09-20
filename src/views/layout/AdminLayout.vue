@@ -69,6 +69,11 @@ const utilityMenus = [
     path: '/main/knowledge-qa/chat',
     roles: ['ADMIN', 'SUPERADMIN'],
   },
+  {
+    label: 'Skill 分类管理',
+    path: '/main/admin/ai-skill-categories',
+    roles: ['ADMIN', 'SUPERADMIN'],
+  },
 ]
 
 const visiblePersonnelMenus = computed(() => {
@@ -100,6 +105,10 @@ const activeMenu = computed(() => {
 
   if (route.path.startsWith('/main/admin/gov/knowledge')) {
     return '/main/admin/gov/knowledge'
+  }
+
+  if (route.path.startsWith('/main/admin/ai-skill-categories')) {
+    return '/main/admin/ai-skill-categories'
   }
 
   if (route.path.startsWith('/main/knowledge-qa')) {
@@ -140,6 +149,12 @@ watch(
     if (path.startsWith('/main/admin/gov/knowledge')) {
       shellStore.openMenu('utility')
       shellStore.setActiveMenu('/main/admin/gov/knowledge')
+      return
+    }
+
+    if (path.startsWith('/main/admin/ai-skill-categories')) {
+      shellStore.openMenu('utility')
+      shellStore.setActiveMenu('/main/admin/ai-skill-categories')
       return
     }
 
@@ -189,6 +204,10 @@ function handleSelect(index) {
   }
 
   if (index.startsWith('/main/admin/gov/knowledge')) {
+    shellStore.openMenu('utility')
+  }
+
+  if (index.startsWith('/main/admin/ai-skill-categories')) {
     shellStore.openMenu('utility')
   }
 
@@ -349,3 +368,5 @@ function handleSelect(index) {
   background: #22304a;
 }
 </style>
+
+

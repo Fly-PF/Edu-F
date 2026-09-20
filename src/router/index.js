@@ -271,6 +271,45 @@ const studentRoutes = [
   },
 ]
 
+const aiSkillRoutes = [
+  {
+    path: 'ai-skills',
+    name: 'ai-skill-market',
+    component: () => import('@/views/aiSkill/AiSkillCenterView.vue'),
+    meta: {
+      title: '技能市场',
+      allowedRoles: ['STUDENT', 'TEACHER', 'ADMIN', 'SUPERADMIN'],
+    },
+  },
+  {
+    path: 'ai-skills/mine',
+    name: 'ai-skill-mine',
+    component: () => import('@/views/aiSkill/AiSkillCenterView.vue'),
+    meta: {
+      title: '我的 Skill',
+      allowedRoles: ['STUDENT', 'TEACHER', 'ADMIN', 'SUPERADMIN'],
+    },
+  },
+  {
+    path: 'ai-skills/editor',
+    name: 'ai-skill-editor-create',
+    component: () => import('@/views/aiSkill/AiSkillEditorView.vue'),
+    meta: {
+      title: '创建 Skill',
+      allowedRoles: ['STUDENT', 'TEACHER', 'ADMIN', 'SUPERADMIN'],
+    },
+  },
+  {
+    path: 'ai-skills/editor/:id',
+    name: 'ai-skill-editor-edit',
+    component: () => import('@/views/aiSkill/AiSkillEditorView.vue'),
+    meta: {
+      title: '编辑 Skill',
+      allowedRoles: ['STUDENT', 'TEACHER', 'ADMIN', 'SUPERADMIN'],
+    },
+  },
+]
+
 const toolRoutes = [
   {
     path: '',
@@ -543,6 +582,8 @@ const router = createRouter({
             title: '项目中心',
           },
         },
+        ...aiSkillRoutes,
+
         {
           path: 'gov',
           name: 'gov-topic',
@@ -636,6 +677,15 @@ const router = createRouter({
                 allowedRoles: ['ADMIN', 'SUPERADMIN'],
               },
             },
+            {
+              path: 'ai-skill-categories',
+              name: 'admin-ai-skill-categories',
+              component: () => import('@/views/admin/AiSkillCategoryManage.vue'),
+              meta: {
+                title: 'Skill 分类管理',
+                allowedRoles: ['ADMIN', 'SUPERADMIN'],
+              },
+            },
             ...personnelRoutes,
             ...govMaterialAdminRoutes,
             ...govNewsAdminRoutes,
@@ -689,6 +739,22 @@ const router = createRouter({
       redirect: '/main/admin/personnel/students',
     },
     {
+      path: '/ai-skills',
+      redirect: '/main/ai-skills',
+    },
+    {
+      path: '/ai-skills/mine',
+      redirect: '/main/ai-skills/mine',
+    },
+    {
+      path: '/ai-skills/editor',
+      redirect: '/main/ai-skills/editor',
+    },
+    {
+      path: '/admin/ai-skill-categories',
+      redirect: '/main/admin/ai-skill-categories',
+    },
+    {
       path: '/:pathMatch(.*)*',
       redirect: '/main/home',
     },
@@ -717,4 +783,6 @@ router.beforeEach((to) => {
 })
 
 export default router
-export { personnelRoutes, studentRoutes, teacherRoutes, toolRoutes, govRoutes, govMaterialAdminRoutes, govNewsAdminRoutes }
+export { personnelRoutes, studentRoutes, teacherRoutes, toolRoutes, aiSkillRoutes, govRoutes, govMaterialAdminRoutes, govNewsAdminRoutes }
+
+

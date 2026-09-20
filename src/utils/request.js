@@ -108,6 +108,10 @@ instance.interceptors.request.use(
 
 instance.interceptors.response.use(
   function (response) {
+    if (response.config?.rawResponse) {
+      return response
+    }
+
     const res = response.data
 
     if (authExpiredCodes.includes(Number(res?.code))) {
@@ -131,3 +135,4 @@ instance.interceptors.response.use(
 )
 
 export default instance
+

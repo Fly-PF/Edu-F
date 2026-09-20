@@ -62,6 +62,11 @@ const navItems = computed(() => {
       roles: [],
     },
     {
+      label: 'AI Skill',
+      path: '/main/ai-skills',
+      roles: ['STUDENT', 'TEACHER', 'ADMIN', 'SUPERADMIN'],
+    },
+    {
       label: '考公专题',
       path: '/main/gov',
       roles: ['STUDENT'],
@@ -143,6 +148,10 @@ const activePath = computed(() => {
     return '/main/student/wrong-books'
   }
 
+  if (route.path.startsWith('/main/ai-skills')) {
+    return '/main/ai-skills'
+  }
+
   if (route.path.startsWith('/main/ai-exhibit')) {
     return '/main/ai-exhibit'
   }
@@ -180,11 +189,9 @@ function getAdminEntryPath() {
   return '/main/admin/gov/knowledge'
 }
 
-
 function handleSelect(path) {
   router.push(path)
 }
-
 
 function handleUserCommand(command) {
   if (command === 'profile') {
@@ -339,7 +346,6 @@ onMounted(() => {
   min-width: 0;
   border-bottom: 0;
 }
-
 
 .user-box {
   display: flex;
