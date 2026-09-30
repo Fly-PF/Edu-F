@@ -23,6 +23,7 @@ const userTypeMap = {
 
 const studentNavItems = [
   { label: '学习练习', path: '/main/practice', roles: ['STUDENT'] },
+  { label: '讲题', path: '/main/problem-solving', roles: ['STUDENT'] },
   { label: '错题本', path: '/main/student/wrong-books', roles: ['STUDENT'] },
   { label: '班级', path: '/main/student/classes', roles: ['STUDENT'] },
   { label: '我的学情', path: '/main/student/learning-analysis', roles: ['STUDENT'] },
@@ -31,6 +32,7 @@ const studentNavItems = [
 
 const teacherNavItems = [
   { label: '学习练习', path: '/main/practice', roles: ['TEACHER'] },
+  { label: '讲题题库', path: '/main/problem-solving', roles: ['TEACHER'] },
   { label: '班级管理', path: '/main/teacher/classes', roles: ['TEACHER'] },
   { label: '课程管理', path: '/main/teacher/courses', roles: ['TEACHER'] },
   { label: '班级学情', path: '/main/teacher/learning-analysis', roles: ['TEACHER'] },
@@ -122,6 +124,10 @@ const activePath = computed(() => {
 
   if (['learning-practice', 'student-practices', 'student-practice-take', 'teacher-practice-review'].includes(route.name)) {
     return '/main/practice'
+  }
+
+  if (route.path.startsWith('/main/problem-solving')) {
+    return '/main/problem-solving'
   }
 
   if (route.name === 'teacher-class-detail') {

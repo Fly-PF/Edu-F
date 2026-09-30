@@ -53,6 +53,12 @@ const govNewsMenus = [{
   roles: ['ADMIN', 'SUPERADMIN'],
 }]
 
+const problemSolvingMenus = [
+  { label: '题目分类', path: '/main/admin/problem-solving/categories', roles: ['ADMIN', 'SUPERADMIN'] },
+  { label: '新增题目', path: '/main/admin/problem-solving/problems', roles: ['ADMIN', 'SUPERADMIN'] },
+  { label: '题目管理', path: '/main/admin/problem-solving/problems/manage', roles: ['ADMIN', 'SUPERADMIN'] },
+]
+
 const utilityMenus = [
   {
     label: '安全治理',
@@ -83,6 +89,7 @@ const visiblePersonnelMenus = computed(() => {
 const visibleUtilityMenus = computed(() => {
   return utilityMenus.filter((item) => userStore.hasAnyRole(item.roles))
 })
+const visibleProblemSolvingMenus = computed(() => problemSolvingMenus.filter((item) => userStore.hasAnyRole(item.roles)))
 
 const visibleGovMaterialMenus = computed(() => {
   return govMaterialMenus.filter((item) => userStore.hasAnyRole(item.roles))
@@ -110,6 +117,8 @@ const activeMenu = computed(() => {
   if (route.path.startsWith('/main/admin/ai-skill-categories')) {
     return '/main/admin/ai-skill-categories'
   }
+
+  if (route.path.startsWith('/main/admin/problem-solving/')) return route.path
 
   if (route.path.startsWith('/main/knowledge-qa')) {
     return '/main/knowledge-qa/chat'
@@ -157,6 +166,11 @@ watch(
       shellStore.setActiveMenu('/main/admin/ai-skill-categories')
       return
     }
+    if (path.startsWith('/main/admin/problem-solving/')) {
+      shellStore.openMenu('problem-solving')
+      shellStore.setActiveMenu(path)
+      return
+    }
 
     if (path.startsWith('/main/knowledge-qa')) {
       shellStore.openMenu('utility')
@@ -166,6 +180,7 @@ watch(
 
     shellStore.closeMenu('personnel')
     shellStore.closeMenu('utility')
+    shellStore.closeMenu('problem-solving')
     shellStore.closeMenu('gov-material')
     shellStore.closeMenu('gov-news')
     shellStore.setActiveMenu('')
@@ -210,6 +225,7 @@ function handleSelect(index) {
   if (index.startsWith('/main/admin/ai-skill-categories')) {
     shellStore.openMenu('utility')
   }
+  if (index.startsWith('/main/admin/problem-solving/')) shellStore.openMenu('problem-solving')
 
   if (index.startsWith('/main/knowledge-qa')) {
     shellStore.openMenu('utility')
@@ -265,6 +281,10 @@ function handleSelect(index) {
             <el-menu-item v-for="item in visibleUtilityMenus" :key="item.path" :index="item.path">
               {{ item.label }}
             </el-menu-item>
+          </el-sub-menu>
+          <el-sub-menu v-if="visibleProblemSolvingMenus.length" index="problem-solving">
+            <template #title><span>讲题管理</span></template>
+            <el-menu-item v-for="item in visibleProblemSolvingMenus" :key="item.path" :index="item.path">{{ item.label }}</el-menu-item>
           </el-sub-menu>
           <el-sub-menu v-if="visibleGovMaterialMenus.length" index="gov-material">
             <template #title>

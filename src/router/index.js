@@ -118,6 +118,13 @@ const personnelRoutes = [
 
 const teacherRoutes = [
   {
+    path: 'teacher/problem-solving',
+    name: 'teacher-problem-solving-manage',
+    component: () => import('@/views/problemSolving/ProblemManage.vue'),
+    props: { ownOnly: true },
+    meta: { title: '题目管理', allowedRoles: ['TEACHER'] },
+  },
+  {
     path: 'teacher/learning-analysis',
     name: 'teacher-learning-analysis',
     component: () => import('@/views/teacher/TeacherLearningAnalysis.vue'),
@@ -546,6 +553,24 @@ const router = createRouter({
           },
         },
         {
+          path: 'problem-solving',
+          name: 'problem-solving-catalog',
+          component: () => import('@/views/problemSolving/ProblemSolvingCatalog.vue'),
+          meta: {
+            title: '讲题题库',
+            allowedRoles: ['STUDENT', 'TEACHER'],
+          },
+        },
+        {
+          path: 'problem-solving/:problemId',
+          name: 'problem-solving-detail',
+          component: () => import('@/views/problemSolving/ProblemSolvingDetail.vue'),
+          meta: {
+            title: '讲题详情',
+            allowedRoles: ['STUDENT', 'TEACHER'],
+          },
+        },
+        {
           path: 'profile',
           name: 'main-profile',
           component: () => import('@/views/common/ProfileView.vue'),
@@ -685,6 +710,30 @@ const router = createRouter({
                 title: 'Skill 分类管理',
                 allowedRoles: ['ADMIN', 'SUPERADMIN'],
               },
+            },
+            {
+              path: 'problem-solving',
+              name: 'admin-problem-solving',
+              redirect: '/main/admin/problem-solving/problems',
+              meta: { allowedRoles: ['ADMIN', 'SUPERADMIN'] },
+            },
+            {
+              path: 'problem-solving/problems',
+              name: 'admin-problem-solving-problems',
+              component: () => import('@/views/problemSolving/ProblemAuthoringManage.vue'),
+              meta: { title: '新增题目', allowedRoles: ['ADMIN', 'SUPERADMIN'] },
+            },
+            {
+              path: 'problem-solving/problems/manage',
+              name: 'admin-problem-solving-problem-manage',
+              component: () => import('@/views/problemSolving/ProblemManage.vue'),
+              meta: { title: '题目管理', allowedRoles: ['ADMIN', 'SUPERADMIN'] },
+            },
+            {
+              path: 'problem-solving/categories',
+              name: 'admin-problem-solving-categories',
+              component: () => import('@/views/problemSolving/ProblemCategoryManage.vue'),
+              meta: { title: '题目分类', allowedRoles: ['ADMIN', 'SUPERADMIN'] },
             },
             ...personnelRoutes,
             ...govMaterialAdminRoutes,
